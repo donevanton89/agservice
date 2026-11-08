@@ -120,8 +120,8 @@ button:disabled { opacity:.5; cursor:default; }
   $('#logout').onclick = () => { LS.del('ag.token'); LS.del('ag.tokenExp'); paintWho(); };
 
   function fakeBase(kb) {
-    const rows = []; let n = 0;
-    while (JSON.stringify(rows).length < kb * 1024) rows.push({ id: 'p' + n, date: '2026-11-0' + (n % 9 + 1), name: 'Тестовая запчасть номер ' + n, art: 'ART' + (n * 7919 % 100000), sum: (n * 37) % 5000 + 0.5, client: 'Клиент ' + (n % 200) }), n++;
+    const rows = []; let n = 0, len = 0;
+    while (len < kb * 1024) { const r = { id: 'p' + n, date: '2026-11-0' + (n % 9 + 1), name: 'Тестовая запчасть номер ' + n, art: 'ART' + (n * 7919 % 100000), sum: (n * 37) % 5000 + 0.5, client: 'Клиент ' + (n % 200) }; rows.push(r); len += JSON.stringify(r).length + 1; n++; }
     return { test: true, made: new Date().toISOString(), device: navigator.userAgent, rows };
   }
   async function gzip(text) {
