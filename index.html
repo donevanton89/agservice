@@ -91,12 +91,21 @@ button:disabled { opacity:.5; cursor:default; }
     if (!r.ok) throw new Error('HTTP ' + r.status + (j && j.message ? ' — ' + j.message : ''));
     return j;
   }
+  /* у программы доступ только к своей папке: проверяем её (создаём, если ещё нет) */
+  async function appFolder() {
+    try { return await api('/resources?path=' + encodeURIComponent('app:/') + '&limit=5'); }
+    catch (e) {
+      if (!/HTTP 404/.test(e.message)) throw e;
+      await api('/resources?path=' + encodeURIComponent('app:/'), { method: 'PUT' });
+      return await api('/resources?path=' + encodeURIComponent('app:/') + '&limit=5');
+    }
+  }
   async function paintWho() {
     if (!token()) { $('#who').textContent = 'Не выполнен'; $('#run').disabled = true; return; }
     try {
-      const d = await api('/');
+      await appFolder();
       const exp = +LS.get('ag.tokenExp');
-      $('#who').innerHTML = '<span class="who">Вход выполнен: ' + (d.user && (d.user.display_name || d.user.login) || 'аккаунт Яндекса') + '</span>' + (exp ? ' · доступ до ' + new Date(exp).toLocaleDateString('ru-RU') : '');
+      $('#who').innerHTML = '<span class="who">Вход выполнен, папка программы на Диске доступна</span>' + (exp ? ' · доступ до ' + new Date(exp).toLocaleDateString('ru-RU') : '');
       $('#run').disabled = false;
     } catch (e) { $('#who').textContent = 'Вход не работает: ' + e.message; $('#run').disabled = true; }
   }
@@ -130,10 +139,9 @@ button:disabled { opacity:.5; cursor:default; }
     const t0 = performance.now(), ms = () => Math.round(performance.now() - t0) + ' мс';
     log('info', 'Устройство: ' + navigator.userAgent);
     try {
-      const d = await api('/');
-      log('ok', 'Доступ к Диску есть. Свободно: ' + Math.round((d.total_space - d.used_space) / 1073741824) + ' ГБ');
-    } catch (e) { log('bad', 'Нет доступа к Диску: ' + e.message); $('#run').disabled = false; return; }
-    try { await api('/resources?path=' + encodeURIComponent('app:/'), { method: 'PUT' }).catch(() => {}); } catch (e) {}
+      const f = await appFolder();
+      log('ok', 'Папка программы на Диске доступна: ' + (f.path || '').replace('disk:/', ''));
+    } catch (e) { log('bad', 'Нет доступа к папке программы: ' + e.message); $('#run').disabled = false; return; }
 
     const base = fakeBase(4000), text = JSON.stringify(base);
     log('info', 'Тестовые данные: ' + (text.length / 1048576).toFixed(1) + ' МБ');
