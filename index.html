@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AGservice — проверка Яндекс Диска</title>
+<style>
+:root { --bg:#f3eee7; --surface:#fffdf8; --line:#e2d8ca; --ink:#2b241d; --muted:#7a6d5f; --accent:#b8470f; --ok:#2f7d3a; --bad:#b3261e; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+.wrap { max-width:720px; margin:0 auto; padding:16px; display:grid; gap:14px; }
+h1 { font-size:22px; margin:6px 0 0; } h1 span { color:var(--accent); }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; display:grid; gap:10px; }
+.card h2 { font-size:16px; margin:0; }
+label { display:grid; gap:4px; font-size:13px; color:var(--muted); font-weight:600; }
+input { font:inherit; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); width:100%; }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+button { font:inherit; font-weight:600; padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+button:disabled { opacity:.5; cursor:default; }
+.muted { color:var(--muted); font-size:14px; }
+#log { list-style:none; margin:0; padding:0; display:grid; gap:4px; font-size:14px; }
+#log li { padding:6px 8px; border-radius:6px; background:#f7f2ea; overflow-wrap:anywhere; }
+#log li.ok::before { content:"✔ "; color:var(--ok); font-weight:700; }
+#log li.bad::before { content:"✘ "; color:var(--bad); font-weight:700; }
+#log li.info::before { content:"• "; color:var(--muted); }
+.who { font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AG<span>service</span> — проверка Яндекс Диска</h1>
+  <p class="muted">Это только проверка: запишет и прочитает тестовый файл в папке «Приложения» на твоём Яндекс Диске. Твоя база здесь не используется.</p>
+
+  <div class="card">
+    <h2>1. ClientID приложения</h2>
+    <label>ClientID (из кабинета oauth.yandex.ru)<input id="cid" autocomplete="off" placeholder="например 3f2a…"></label>
+    <div class="row"><button id="saveCid">Запомнить</button><span class="muted" id="cidState"></span></div>
+  </div>
+
+  <div class="card">
+    <h2>2. Вход</h2>
+    <div id="who" class="muted">Не выполнен</div>
+    <div class="row"><button class="primary" id="login">Войти через Яндекс</button><button id="logout">Выйти</button></div>
+  </div>
+
+  <div class="card">
+    <h2>3. Проверка</h2>
+    <div class="row"><button class="primary" id="run" disabled>Запустить проверку</button><button id="copy">Скопировать результат</button></div>
+    <ul id="log"></ul>
+  </div>
+</div>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const API = 'https://cloud-api.yandex.net/v1/disk';
+  const LS = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
+  const here = location.origin + location.pathname;
+  const lines = [];
+  function log(cls, text) { lines.push((cls === 'ok' ? '✔ ' : cls === 'bad' ? '✘ ' : '• ') + text); const li = document.createElement('li'); li.className = cls; li.textContent = text; $('#log').appendChild(li); }
+
+  /* токен из адреса после возврата с Яндекса */
+  if (location.hash.includes('access_token=')) {
+    const h = new URLSearchParams(location.hash.slice(1));
+    LS.set('ag.token', h.get('access_token'));
+    LS.set('ag.tokenExp', String(Date.now() + (+h.get('expires_in') || 0) * 1000));
+    history.replaceState(null, '', here);
+  } else if (location.hash.includes('error=')) {
+    const h = new URLSearchParams(location.hash.slice(1));
+    log('bad', 'Яндекс не дал доступ: ' + (h.get('error_description') || h.get('error')));
+    history.replaceState(null, '', here);
+  }
+
+  $('#cid').value = LS.get('ag.cid') || '';
+  function paintCid() { $('#cidState').textContent = LS.get('ag.cid') ? 'запомнен' : 'не задан'; }
+  paintCid();
+  $('#saveCid').onclick = () => { LS.set('ag.cid', $('#cid').value.trim()); paintCid(); };
+
+  const token = () => LS.get('ag.token');
+  async function api(path, opt) {
+    const r = await fetch(API + path, Object.assign({ headers: { Authorization: 'OAuth ' + token(), Accept: 'application/json' } }, opt || {}));
+    const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch (e) {}
+    if (!r.ok) throw new Error('HTTP ' + r.status + (j && j.message ? ' — ' + j.message : ''));
+    return j;
+  }
+  async function paintWho() {
+    if (!token()) { $('#who').textContent = 'Не выполнен'; $('#run').disabled = true; return; }
+    try {
+      const d = await api('/');
+      const exp = +LS.get('ag.tokenExp');
+      $('#who').innerHTML = '<span class="who">Вход выполнен: ' + (d.user && (d.user.display_name || d.user.login) || 'аккаунт Яндекса') + '</span>' + (exp ? ' · доступ до ' + new Date(exp).toLocaleDateString('ru-RU') : '');
+      $('#run').disabled = false;
+    } catch (e) { $('#who').textContent = 'Вход не работает: ' + e.message; $('#run').disabled = true; }
+  }
+  paintWho();
+
+  $('#login').onclick = () => {
+    const cid = LS.get('ag.cid') || $('#cid').value.trim();
+    if (!cid) { alert('Сначала впиши ClientID и нажми «Запомнить»'); return; }
+    LS.set('ag.cid', cid);
+    location.href = 'https://oauth.yandex.ru/authorize?response_type=token&client_id=' + encodeURIComponent(cid) + '&redirect_uri=' + encodeURIComponent(here) + '&force_confirm=yes';
+  };
+  $('#logout').onclick = () => { LS.del('ag.token'); LS.del('ag.tokenExp'); paintWho(); };
+
+  function fakeBase(kb) {
+    const rows = []; let n = 0;
+    while (JSON.stringify(rows).length < kb * 1024) rows.push({ id: 'p' + n, date: '2026-11-0' + (n % 9 + 1), name: 'Тестовая запчасть номер ' + n, art: 'ART' + (n * 7919 % 100000), sum: (n * 37) % 5000 + 0.5, client: 'Клиент ' + (n % 200) }), n++;
+    return { test: true, made: new Date().toISOString(), device: navigator.userAgent, rows };
+  }
+  async function gzip(text) {
+    if (!('CompressionStream' in window)) return null;
+    const s = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+    return await new Response(s).blob();
+  }
+  async function gunzip(blob) {
+    const s = blob.stream().pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(s).text();
+  }
+
+  $('#run').onclick = async () => {
+    $('#run').disabled = true; $('#log').innerHTML = ''; lines.length = 0;
+    const t0 = performance.now(), ms = () => Math.round(performance.now() - t0) + ' мс';
+    log('info', 'Устройство: ' + navigator.userAgent);
+    try {
+      const d = await api('/');
+      log('ok', 'Доступ к Диску есть. Свободно: ' + Math.round((d.total_space - d.used_space) / 1073741824) + ' ГБ');
+    } catch (e) { log('bad', 'Нет доступа к Диску: ' + e.message); $('#run').disabled = false; return; }
+    try { await api('/resources?path=' + encodeURIComponent('app:/'), { method: 'PUT' }).catch(() => {}); } catch (e) {}
+
+    const base = fakeBase(4000), text = JSON.stringify(base);
+    log('info', 'Тестовые данные: ' + (text.length / 1048576).toFixed(1) + ' МБ');
+    let body = await gzip(text), name = 'proverka.json.gz';
+    if (body) log('ok', 'Сжатие работает: ' + (body.size / 1048576).toFixed(2) + ' МБ после сжатия');
+    else { body = new Blob([text], { type: 'application/json' }); name = 'proverka.json'; log('bad', 'Сжатие в этом браузере не работает — отправлю без сжатия'); }
+
+    let t1 = performance.now();
+    try {
+      const up = await api('/resources/upload?path=' + encodeURIComponent('app:/' + name) + '&overwrite=true');
+      const r = await fetch(up.href, { method: 'PUT', body });
+      if (!r.ok && r.status !== 201 && r.status !== 202) throw new Error('HTTP ' + r.status);
+      log('ok', 'Запись на Диск: ' + Math.round(performance.now() - t1) + ' мс');
+    } catch (e) { log('bad', 'Запись на Диск не прошла: ' + e.message); $('#run').disabled = false; return; }
+
+    t1 = performance.now();
+    try {
+      const info = await api('/resources?path=' + encodeURIComponent('app:/' + name));
+      log('ok', 'Файл виден на Диске: ' + info.path.replace('disk:/', '') + ', изменён ' + new Date(info.modified).toLocaleString('ru-RU') + ', md5 ' + (info.md5 || '').slice(0, 8));
+    } catch (e) { log('bad', 'Не вижу файл после записи: ' + e.message); }
+
+    try {
+      const dl = await api('/resources/download?path=' + encodeURIComponent('app:/' + name));
+      const r = await fetch(dl.href);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const blob = await r.blob();
+      const back = name.endsWith('.gz') ? await gunzip(blob) : await blob.text();
+      const ok = back === text;
+      log(ok ? 'ok' : 'bad', 'Чтение с Диска: ' + Math.round(performance.now() - t1) + ' мс' + (ok ? ', данные совпали один в один' : ', но данные НЕ совпали'));
+    } catch (e) { log('bad', 'Чтение с Диска не прошло: ' + e.message); }
+
+    try {
+      const db = await new Promise((res, rej) => { const q = indexedDB.open('ag-test', 1); q.onupgradeneeded = () => q.result.createObjectStore('kv'); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+      await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(text, 'base'); t.oncomplete = res; t.onerror = () => rej(t.error); });
+      log('ok', 'Копия на устройстве (на случай без интернета или света) сохраняется');
+    } catch (e) { log('bad', 'Копия на устройстве не сохраняется: ' + e.message); }
+    try { if (navigator.storage && navigator.storage.persist) log('info', 'Браузер разрешил хранить данные надолго: ' + ((await navigator.storage.persist()) ? 'да' : 'нет (не страшно)')); } catch (e) {}
+
+    log('info', 'Всего: ' + ms());
+    $('#run').disabled = false;
+  };
+  $('#copy').onclick = async () => {
+    const t = lines.join('\n') || 'Проверку ещё не запускали';
+    try { await navigator.clipboard.writeText(t); alert('Скопировано. Вставь в чат с Claude.'); }
+    catch (e) { prompt('Скопируй текст:', t); }
+  };
+})();
+</script>
+</body>
+</html>
