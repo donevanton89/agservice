@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
 <title>AGservice — проверка Яндекс Диска</title>
 <style>
 :root { --bg:#f3eee7; --surface:#fffdf8; --line:#e2d8ca; --ink:#2b241d; --muted:#7a6d5f; --accent:#b8470f; --ok:#2f7d3a; --bad:#b3261e; }
@@ -165,7 +166,8 @@ button:disabled { opacity:.5; cursor:default; }
 
     try {
       const dl = await api('/resources/download?path=' + encodeURIComponent('app:/' + name));
-      const r = await fetch(dl.href);
+      /* Яндекс отказывает в скачивании, если браузер сообщает, с какой страницы пришёл запрос — убираем это */
+      const r = await fetch(dl.href, { referrerPolicy: 'no-referrer', credentials: 'omit', cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const blob = await r.blob();
       const back = name.endsWith('.gz') ? await gunzip(blob) : await blob.text();
