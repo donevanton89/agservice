@@ -1,5 +1,5 @@
 /* AGservice: программа открывается и без интернета (берётся последняя скачанная версия) */
-const C = 'ag-v2';
+const C = 'ag-v3';
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(['./', './manifest.webmanifest', './icon-192.png', './icon-512.png']).catch(() => {}))); });
 self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
 self.addEventListener('fetch', e => {
