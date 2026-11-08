@@ -39,6 +39,12 @@ button:disabled { opacity:.5; cursor:default; }
   </div>
 
   <div class="card">
+    <h2>Адрес для Яндекса (Redirect URI)</h2>
+    <p class="muted">В кабинете oauth.yandex.ru в поле «Redirect URI» должен стоять ровно этот адрес — буква в букву, со слешем в конце:</p>
+    <div class="row"><input id="ruri" readonly><button id="copyUri">Скопировать</button></div>
+  </div>
+
+  <div class="card">
     <h2>2. Вход</h2>
     <div id="who" class="muted">Не выполнен</div>
     <div class="row"><button class="primary" id="login">Войти через Яндекс</button><button id="logout">Выйти</button></div>
@@ -55,7 +61,7 @@ button:disabled { opacity:.5; cursor:default; }
   const $ = s => document.querySelector(s);
   const API = 'https://cloud-api.yandex.net/v1/disk';
   const LS = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
-  const here = location.origin + location.pathname;
+  const here = location.origin + location.pathname.replace(/index\.html$/, '').replace(/([^/])$/, '$1/');
   const lines = [];
   function log(cls, text) { lines.push((cls === 'ok' ? '✔ ' : cls === 'bad' ? '✘ ' : '• ') + text); const li = document.createElement('li'); li.className = cls; li.textContent = text; $('#log').appendChild(li); }
 
@@ -72,6 +78,8 @@ button:disabled { opacity:.5; cursor:default; }
   }
 
   $('#cid').value = LS.get('ag.cid') || '';
+  $('#ruri').value = here;
+  $('#copyUri').onclick = async () => { try { await navigator.clipboard.writeText(here); alert('Адрес скопирован'); } catch (e) { $('#ruri').select(); } };
   function paintCid() { $('#cidState').textContent = LS.get('ag.cid') ? 'запомнен' : 'не задан'; }
   paintCid();
   $('#saveCid').onclick = () => { LS.set('ag.cid', $('#cid').value.trim()); paintCid(); };
