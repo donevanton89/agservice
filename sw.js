@@ -1,7 +1,7 @@
 /* AGservice: программа открывается и без интернета (берётся последняя скачанная версия).
    Есть интернет — берём свежую версию, но ждём не больше 4 секунд, иначе открываем сохранённую. */
-const C = 'ag-v8';
-self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(['./', './manifest.webmanifest', './ag-192.png', './ag-512.png', './icon-maskable-192.png', './icon-maskable-512.png', './apple-touch-icon.png']).catch(() => {}))); });
+const C = 'ag-v9';
+self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(['./', './manifest.webmanifest', './agw-192.png', './agw-512.png', './icon-maskable-192.png', './icon-maskable-512.png', './apple-touch-icon.png']).catch(() => {}))); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
