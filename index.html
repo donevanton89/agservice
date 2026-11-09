@@ -474,7 +474,10 @@ ul.plain li.buy { display: block; padding: 8px 12px; }
 .buy-head { display: flex; gap: 12px; align-items: center; }
 .buy-head > span:first-child { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .buy-head > span:nth-child(2) { flex: 1; min-width: 0; }
-.buy-head > .r { margin-right: 46px; text-align: right; }
+.buy-head > .r { text-align: right; }
+.acts { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; flex: none; white-space: nowrap; }
+.acts .link { line-height: 1; padding: 4px 2px; }
+.x-sp { display: inline-block; width: 34px; flex: none; }
 .buy-rows { list-style: none; margin: 6px 0 0 54px; padding: 0 0 0 12px; border-left: 3px solid var(--accent-soft); display: grid; }
 ul.plain .buy-rows li { display: flex; gap: 12px; align-items: center; padding: 2px 0; font-size: 14px; border-bottom: 1px dotted var(--line); }
 ul.plain .buy-rows li:last-child { border-bottom: 0; }
@@ -2021,7 +2024,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       <span class="o-num">${o.num != null ? '№ ' + o.num : 'б/н'}</span>
       <span class="o-main"><b>${esc(orderWho(o) || 'Без имени')}</b><span class="muted">${esc(o.car)}</span>${hp && hp.length ? `<span class="hit small">${hp.slice(0, 3).map(p => esc([p.art, p.name, p.brand].filter(Boolean).join(' · '))).join('; ')}${hp.length > 3 ? ' и ещё ' + (hp.length - 3) : ''}</span>` : ''}</span>
       <span class="o-plate">${plate(o.plate)}</span>
-      <span class="o-meta"><span class="pill ${st[0]}">${st[1]}</span>${t.waiting ? `<span class="pill st-wait">нет запчастей: ${t.waiting}</span>` : ''}<span class="muted small">${date ? tipDate('orders', o.id, date) : ''}</span></span>
+      <span class="o-meta"><span class="pill ${st[0]}">${st[1]}</span>${t.waiting ? `<span class="pill st-wait">нет запчастей: ${t.waiting}</span>` : ''}<span class="muted small">${date || ''}</span></span>
       <span class="o-sum"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 ? `<span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : ''}</span>
     </div>${open ? orderDetail(o, t) : ''}</li>`;
   }
@@ -3014,7 +3017,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     const open = ui.openRows.has('s:' + g.id);
     return `<li class="${open ? 'is-open' : ''}"><div class="sale" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="s:${esc(g.id)}">
       <span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span>
-      <span class="muted small nowrap">${tipDate('parts', g.rows.map(p => p.id), dshort(g.date))}</span>
+      <span class="muted small nowrap">${dshort(g.date)}</span>
       <span class="s-main"><b>${esc(saleWho(g))}</b>${isOwn(g.client) ? ' <span class="pill st-wait">себе</span>' : ''} <span class="muted">${esc(g.car)}</span><span class="muted small s-items">${esc(g.rows.map(p => p.name || p.art).join(', '))}</span></span>
       <span class="s-sum"><b>${rub(g.sum)}</b>${g.debt > 5 ? `<span class="neg small">долг ${rub(g.debt)}</span>` : g.debt < -5 ? `<span class="pos small">переплата ${rub(-g.debt)}</span>` : ''}${g.wait ? `<span class="warn small">нет: ${g.wait}</span>` : ''}</span>
     </div>${open ? saleDetail(g) : ''}</li>`;
@@ -3543,7 +3546,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       <div class="scroll"><table class="tbl pays"><thead><tr><th>Дата</th><th>Назначение</th><th>Примечание</th><th>Тип</th><th>Чек</th><th>Наряд</th><th class="r">Сумма</th><th></th></tr></thead><tbody>
       ${list.map(p => `<tr><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${esc(p.name)}</td><td class="muted">${esc(p.note)}</td><td>${esc(p.type)}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order ?? ''}</td>
         <td class="r ${p.amount < 0 ? 'neg' : 'pos'}"><b>${p.amount > 0 ? '+' : ''}${fmt(p.amount, Math.round(p.amount) === p.amount ? 0 : 2)}</b></td>
-        <td class="r nowrap">${ui.payDel === p.id ? `<button class="btn small danger" data-act="pay-del-yes" data-id="${esc(p.id)}">Удалить</button><button class="btn small ghost" data-act="pay-del-no">Нет</button>` : `<button class="link small" data-act="pay-edit" data-id="${esc(p.id)}">Изменить</button> <button class="x" data-act="pay-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">В этом месяце платежей нет.</td></tr>'}
+        <td class="r nowrap">${ui.payDel === p.id ? `<button class="btn small danger" data-act="pay-del-yes" data-id="${esc(p.id)}">Удалить</button><button class="btn small ghost" data-act="pay-del-no">Нет</button>` : `<span class="acts"><button class="link small" data-act="pay-edit" data-id="${esc(p.id)}">Изменить</button><button class="x" data-act="pay-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">В этом месяце платежей нет.</td></tr>'}
       </tbody></table></div>`;
   }
   function savePay() {
@@ -3781,7 +3784,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
         ${kinds.map(k => `<tr><td>${esc(k)}</td><td class="r">${rub(acc[low(k)] || 0)}</td><td class="r">${r.paidByKind[low(k)] ? rub(r.paidByKind[low(k)]) : '<span class="muted">—</span>'}</td></tr>`).join('')}
         <tr class="sum"><td>Всего</td><td class="r">${rub(r.tax + r.fixedSum)}</td><td class="r">${rub(r.paidFixed)}</td></tr></tbody></table></div>`
         : `<p class="muted">Налоговый учёт начинается с ${esc(S.monthLabel(S.taxStart(D.cfg)) || 'месяца из настроек')}.</p>`}
-      ${fixed.length ? `<ul class="plain">${fixed.map(p => `<li><span>${tipDate('pays', p.id, dshort(p.date))}</span><span>${esc(p.name)} · <span class="pill st-done">${low(p.type) === 'наличные' ? 'касса' : low(p.type) === 'безнал' ? 'карта ИП' : esc(p.type || '—')}</span>${p.note ? ' <span class="muted">· ' + esc(p.note) + '</span>' : ''}</span><b>${rub(-p.amount)}</b><span class="nowrap"><button class="link small" data-act="fx-edit" data-id="${esc(p.id)}">Изменить</button> <button class="x" data-act="xp-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>${ui.fxEdit && ui.fxEdit.id === p.id ? fxEditForm() : ''}</li>`).join('')}</ul>` : ''}
+      ${fixed.length ? `<ul class="plain">${fixed.map(p => `<li><span>${tipDate('pays', p.id, dshort(p.date))}</span><span>${esc(p.name)} · <span class="pill st-done">${low(p.type) === 'наличные' ? 'касса' : low(p.type) === 'безнал' ? 'карта ИП' : esc(p.type || '—')}</span>${p.note ? ' <span class="muted">· ' + esc(p.note) + '</span>' : ''}</span><b>${rub(-p.amount)}</b><span class="acts"><button class="link small" data-act="fx-edit" data-id="${esc(p.id)}">Изменить</button><button class="x" data-act="xp-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>${ui.fxEdit && ui.fxEdit.id === p.id ? fxEditForm() : ''}</li>`).join('')}</ul>` : ''}
       <h3 class="sec">Расходы СТО <span class="muted small">${rub(r.stoExp)} в расходах месяца · из копилки ${rub(r.piggy)} · масло/антифриз ${rub(r.oilBuy)}</span></h3>
       ${sto.length ? stoList(sto) : '<p class="muted">В этом месяце расходов СТО нет.</p>'}`;
   }
@@ -3817,11 +3820,11 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     const ed = key => `<button class="link small" data-act="se-open" data-id="${esc(key)}">Изменить</button>`;
     const form = key => (ui.stoEdit && ui.stoEdit.key === key ? stoEditForm() : '');
     return `<ul class="plain">${groups.map(g => {
-      if (g.rows.length === 1) { const p = g.rows[0]; return `<li class="sto-li"><span>${tipDate('parts', p.id, dshort(p.date))}</span><span>${esc(p.name)}${tag(p)}${p.sup ? ' · <span class="muted">' + esc(p.sup) + '</span>' : ''}</span><b class="nowrap">${rub(p.sum)}</b><span class="nowrap">${ed(p.id)} ${del(p)}</span>${form(p.id)}</li>`; }
+      if (g.rows.length === 1) { const p = g.rows[0]; return `<li class="sto-li"><span>${tipDate('parts', p.id, dshort(p.date))}</span><span>${esc(p.name)}${tag(p)}${p.sup ? ' · <span class="muted">' + esc(p.sup) + '</span>' : ''}</span><b class="nowrap">${rub(p.sum)}</b><span class="acts">${ed(p.id)}${del(p)}</span>${form(p.id)}</li>`; }
       const first = g.rows[0], sum = g.rows.reduce((a, p) => a + (p.ret ? 0 : p.sum || 0), 0), paid = g.rows.reduce((a, p) => a + (p.paid || 0), 0);
       const sups = [...new Set(g.rows.map(p => p.sup).filter(Boolean))].join(', ');
       return `<li class="buy"><div class="buy-head"><span>${tipDate('parts', g.rows.map(p => p.id), dshort(first.date))}</span><span><b>Покупка${sups ? ' · ' + esc(sups) : ''}</b>${tag(first)} <span class="muted small">${g.rows.length} поз.</span></span>
-          <span class="r nowrap"><b>${rub(paid || sum)}</b>${paid && Math.abs(paid - sum) > 0.5 ? `<div class="warn small">по строкам ${rub(sum)}</div>` : ''} ${first.blk ? ed('g:' + first.blk) : ''}</span></div>${first.blk ? form('g:' + first.blk) : ''}
+          <span class="r nowrap"><b>${rub(paid || sum)}</b>${paid && Math.abs(paid - sum) > 0.5 ? `<div class="warn small">по строкам ${rub(sum)}</div>` : ''}</span>${first.blk ? '<span class="acts">' + ed('g:' + first.blk) + '<span class="x-sp"></span></span>' : ''}</div>${first.blk ? form('g:' + first.blk) : ''}
         <ul class="buy-rows">${g.rows.map(p => `<li><span>${esc(p.name)}${p.qty && p.qty !== 1 ? ' <span class="muted small">× ' + fmt(p.qty, p.qty % 1 ? 2 : 0) + '</span>' : ''}</span><span class="nowrap">${rub(p.sum)}</span>${del(p)}</li>`).join('')}</ul></li>`;
     }).join('')}</ul>`;
   }
