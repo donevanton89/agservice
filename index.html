@@ -347,6 +347,15 @@ html, body { margin: 0; }
 .lg-l { min-width: 0; overflow-wrap: anywhere; }
 .lg-s { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .lg-c { font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); white-space: nowrap; }
+.lg-l b { font-weight: 600; } .lg-sum { display: block; color: var(--muted); font-size: 13px; margin-top: 1px; }
+.lg-ents { list-style: none; margin: 0; padding: 0 8px 10px 28px; display: grid; gap: 8px; }
+.lg-ents > li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.lg-ph ul { margin: 0; padding-left: 16px; font-size: 14px; } .lg-ph > ul > li { margin: 1px 0; }
+.lg-acts { margin-top: 4px; }
+.lg-ask { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); font-size: 14px; display: grid; gap: 6px; }
+.lg-rel { display: grid; gap: 4px; } .lg-rel ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.lg-warn { padding: 6px 8px; border-radius: 6px; background: var(--warn-soft, #fdf0d5); font-size: 13px; }
+.lg-ask ul { margin: 0; padding-left: 18px; font-size: 13px; }
 .lg-det { padding: 4px 8px 10px 28px; display: grid; gap: 6px; font-size: 13px; }
 .lg-i ul { margin: 2px 0 0; padding-left: 18px; }
 @media (max-width: 640px) { .lg-row { grid-template-columns: 16px 40px minmax(0, 1fr); } .lg-s { grid-column: 3; justify-content: flex-start; } }
@@ -559,6 +568,12 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 
 /* ===== телефон ===== */
 .tot-bar { display: none; }
+.pct-btn { margin-left: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--card, #fff); color: var(--accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1.4; }
+.pct-m { display: none; }
+@media (max-width: 560px) { .pct-m { display: inline-block; } }
+.pct-btn:hover { background: var(--accent-soft); }
+.oilres-box { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; padding: 10px 12px; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--accent-soft); }
+.oilres-box .f { width: 180px; margin: 0; } .oilres-box p { flex-basis: 100%; margin: 2px 0 0; }
 .tbl.pays td:nth-child(4) { white-space: nowrap; }
 @media (max-width: 620px) {
   .totals .tot-bar { display: flex; grid-column: 1 / -1; align-items: center; gap: 12px; width: 100%; padding: 2px 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
@@ -1200,7 +1215,15 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     return o && o.doneDate ? monthOf(o.doneDate) : 'work';
   }
   STO.partPeriod = partPeriod;
-  const oilCostOf = (p, X) => { const s = X.stockByArt[p.art]; return s && s.oil && s.cost && p.client !== 'СТО (масло/антифриз)' ? s.cost * (p.qty || 0) : 0; };
+  /* себестоимость проданного масла: закупка, запомненная в момент продажи (p.oilCost, с 10.11.2026);
+     если не запомнена — текущая закупка из карточки склада */
+  const oilCostOf = (p, X) => {
+    const s = X.stockByArt[p.art];
+    if (!s || !s.oil || p.client === 'СТО (масло/антифриз)') return 0;
+    const c = p.oilCost != null && p.oilArt === p.art ? p.oilCost : s.cost;
+    return c ? c * (p.qty || 0) : 0;
+  };
+  STO.oilCostOf = oilCostOf;
 
   /* Долг блока запчастей, как столбец V в Excel: оплачено − (сумма − возвраты) */
   function blockDebt(rows) {
@@ -1221,7 +1244,9 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
   function orderTotals(o, X) {
     const works = o.works.reduce((s, w) => s + (w.sum || 0), 0);
     const parts = o.num != null ? X.partsByOrder[o.num] || [] : [];
-    const partsSum = parts.filter(p => !p.no && !p.ret).reduce((s, p) => s + (p.sum || 0), 0);
+    /* запчасти — все заказанные в наряде (и полученные, и «НЕТ»), кроме возвратов (с 10.11.2026) */
+    const partsSum = parts.filter(p => !p.ret).reduce((s, p) => s + (p.sum || 0), 0);
+    const partsWait = parts.filter(p => p.no && !p.ret).reduce((s, p) => s + (p.sum || 0), 0);
     const pays = o.num != null ? X.paysByOrder[o.num] || [] : [];
     const blkIds = [...new Set(parts.map(p => p.blk).filter(Boolean))];
     let debt = worksDebt(o, X) + o.works.reduce((s, w) => s + (w.done ? 0 : w.sum || 0), 0);
@@ -1234,7 +1259,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     parts.filter(p => !p.blk).forEach(p => { if (!p.ret) debt += p.sum || 0; });
     const total = r2(works + partsSum);
     const waiting = parts.filter(p => p.no && !p.ret).length;
-    return { works: r2(works), parts: r2(partsSum), total, paid: r2((o.paid || 0) + partsPaid + appPaid(o, X)), debt: r2(debt), waiting, partsList: parts, paysList: pays };
+    return { works: r2(works), parts: r2(partsSum), partsWait: r2(partsWait), total, paid: r2((o.paid || 0) + partsPaid + appPaid(o, X)), debt: r2(debt), waiting, partsList: parts, paysList: pays };
   }
   STO.orderTotals = orderTotals;
   STO.blockDebt = blockDebt;
@@ -1480,8 +1505,52 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     setHTML.busy = true;
     try { el.innerHTML = html; } finally { setHTML.busy = false; }
   }
+  /* масло: запоминаем закупку в строке продажи, чтобы смена цены в карточке не пересчитывала прошлое */
+  const oilPct = () => (D.cfg.oilReserve == null ? 15 : +D.cfg.oilReserve || 0);
+  const artN = a => String(a || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase();
+  /* покупки бочек этой позиции, от старой к новой: [{date, q, c}] */
+  function oilBuys(st) {
+    const a = artN(st.art);
+    return D.parts.filter(p => low(p.client).startsWith('сто') && !p.ret && (+p.qty || 0) > 0 && (a ? artN(p.art) === a : low(p.name) === low(st.name)))
+      .sort((x, y) => (x.date || '').localeCompare(y.date || '')).map(p => ({ date: p.date, q: +p.qty || 0, c: p.cost || st.cost || 0 }));
+  }
+  /* средняя закупка литров, лежащих в «очереди» на местах [from, from+q), считая от самой новой бочки */
+  function barrelAvg(buys, from, q, fallback) {
+    let pos = 0, sum = 0, got = 0, used = [];
+    for (let k = buys.length - 1; k >= 0 && got < q - 1e-9; k--) {
+      const b = buys[k], lo = Math.max(from, pos), hi = Math.min(from + q, pos + b.q);
+      if (hi > lo) { sum += (hi - lo) * b.c; got += hi - lo; used.push(b); }
+      pos += b.q;
+    }
+    if (got < q - 1e-9) { const c = buys.length ? buys[0].c : fallback; sum += (q - got) * (c || 0); }
+    return { avg: q ? sum / q : (buys.length ? buys[buys.length - 1].c : fallback), used };
+  }
+  /* масло: закупку запоминаем в строке продажи.
+     До 10.11.2026 — по карточке склада; дальше — по бочке, из которой льёшь, + запас (настройка, 15%) */
+  function freezeOil() {
+    const need = p => { const st = X.stockByArt[p.art]; return st && st.oil && p.client !== 'СТО (масло/антифриз)' && (p.oilCost == null || p.oilArt !== p.art) ? st : null; };
+    if (!D.cfg.oilRule2) {
+      D.parts.forEach(p => { const st = need(p); if (st && st.cost) { p.oilCost = st.cost; p.oilArt = p.art; } });
+      D.cfg.oilRule2 = S.todayISO();
+    }
+    const by = {};
+    D.parts.forEach(p => { if (need(p)) (by[p.art] = by[p.art] || []).push(p); });
+    Object.keys(by).forEach(a => {
+      const st = X.stockByArt[a], buys = oilBuys(st), pct = oilPct();
+      let off = Math.max(0, S.stockQty(st, D));
+      by[a].slice().reverse().forEach(p => {
+        const q = +p.qty || 0, r = barrelAvg(buys, off, q || 1, st.cost);
+        if (!p.no && !p.ret && low(p.sup) === 'склад') off += q;
+        if (!r.avg) return;
+        p.oilBase = r2(r.avg); p.oilPct = pct; p.oilCost = r2(r.avg * (1 + pct / 100)); p.oilArt = p.art;
+        p.oilFrom = r.used.map(b => b.date).join(',');
+      });
+    });
+  }
   function reindex() {
     X = S.index(D);
+    try { jLegacyHide(); } catch (er) {}
+    freezeOil();
     X.clientById = {}; X.cstat = {};
     D.clients.forEach(p => { X.clientById[p.id] = p; X.cstat[p.id] = { count: 0, last: '', lastCar: {}, orders: [] }; });
     D.orders.forEach(o => {
@@ -1628,10 +1697,18 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     if (!from.length) return;
     if (ui.editor || ui.sale) { toast('Сначала закрой наряд или продажу'); return; }
     const e = from.pop();
-    to.push({ json: hist.cur, label: e.label });
     const L = D.log, prev = hist.cur;
     D = normalize(JSON.parse(e.json)); D.log = L; hist.cur = snap();
-    logStep(prev, (dir < 0 ? 'Отменено (↶): ' : 'Повторено (↷): ') + (e.label.length > 60 ? e.label.slice(0, 58) + '…' : e.label));
+    /* журнал: отмена убирает само действие (а не пишет «Отменено»), повтор возвращает его */
+    const unhide = x => (x.hides || []).forEach(id => { const y = L.find(z => z.id === id); if (y) y.hid = false; });
+    const rehide = x => (x.hides || []).forEach(id => { const y = L.find(z => z.id === id); if (y) y.hid = true; });
+    if (dir < 0) {
+      if (e.lid && L.length && L[L.length - 1].id === e.lid) { const pe = L.pop(); unhide(pe); to.push({ json: prev, label: e.label, popped: pe }); }
+      else { const n0 = L.length; logStep(prev, 'Отменено: ' + e.label); if (L.length > n0) L[L.length - 1].hid = true; const o = e.lid && L.find(z => z.id === e.lid); if (o) { o.hid = true; unhide(o); } to.push({ json: prev, label: e.label }); }
+    } else {
+      if (e.popped) { L.push(e.popped); rehide(e.popped); to.push({ json: prev, label: e.label, lid: e.popped.id }); }
+      else { const n0 = L.length; logStep(prev, e.label); to.push({ json: prev, label: e.label, lid: L.length > n0 ? L[L.length - 1].id : null }); }
+    }
     dirty = true; reindex();
     /* открытая карточка клиента — показать её из восстановленной базы, а не старый черновик */
     if (ui.cdraft) { const c = ui.cdraft.id && D.clients.find(x => x.id === ui.cdraft.id); ui.cdraft = c ? clone(c) : null; ui.cmove = null; ui.cpick = null; ui.cmvSale = null; ui.cmvSaleOpen = null; ui.cerr = ''; ui.cdelAsk = false; }
@@ -1641,12 +1718,28 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     toast((dir < 0 ? 'Отменено: ' : 'Повторено: ') + e.label);
   }
   function changed(forceLabel) {
+    /* замок: правки в закрытом месяце не принимаем */
+    if (hist.cur != null) {
+      let bad = [];
+      try { reindex(); bad = lockCheck(JSON.parse(hist.cur)); } catch (er) { bad = []; }
+      if (bad.length) {
+        const L = D.log; D = normalize(JSON.parse(hist.cur)); D.log = L; reindex();
+        const ms = [...new Set(bad.map(v => v.m))].sort().map(m => S.monthLabel(m).toLowerCase());
+        const msg = `Не сохранено: ${lockWhat(bad[0])}${bad.length > 1 ? ` и ещё ${bad.length - 1}` : ''} — ${ms.join(', ')} ${ms.length > 1 ? 'закрыты' : 'закрыт'}. Чтобы исправить, открой месяц: «Отчёт» → «Открыть для правки».`;
+        if (ui.stash) { if (ui.stash.editor) { ui.editor = ui.stash.editor; ui.editor.err = msg; ui.editor.confirmDelete = false; } if (ui.stash.sale) { ui.sale = ui.stash.sale; ui.sale.err = msg; } }
+        ui.stash = null; ui.jAsk = null;
+        render(); paintEditor(); if (typeof paintSale === 'function') paintSale(true);
+        toast(msg); return false;
+      }
+    }
+    ui.stash = null;
     dirty = true; reindex();
     const json = snap();
     if (hist.cur != null && json !== hist.cur) {
       const label = forceLabel || histLabel();
-      logStep(hist.cur, label);
-      hist.undo.push({ json: hist.cur, label });
+      const n0 = D.log.length; logStep(hist.cur, label);
+      const lid = D.log.length > n0 ? D.log[D.log.length - 1].id : null;
+      hist.undo.push({ json: hist.cur, label, lid });
       if (hist.undo.length > HIST_MAX) hist.undo.shift();
       hist.redo = [];
     }
@@ -1657,10 +1750,44 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
   }
   function persist() { if (cloud) cloudQueue(); else if (handle && !ui.conflict) schedule(); }
 
+  /* ---------- Закрытый месяц на замке (10.11.2026) ---------- */
+  const isLockedM = m => { const c = D.cfg.closed && D.cfg.closed[m]; return !!(c && !c.unlocked); };
+  function lockMonthOf(k, r) {
+    if (!r) return null;
+    if (k === 'orders') return r.doneDate ? S.monthOf(r.doneDate) : null;
+    if (k === 'parts') { const m = S.partPeriod(r, X); return m && m !== 'work' ? m : null; }
+    if (k === 'pays') return r.date ? S.monthOf(r.date) : null;
+    return null;
+  }
+  const LOCK_F = { orders: ['works', 'doneDate', 'num', 'adj', 'paid'], parts: ['sum', 'price', 'cost', 'qty', 'no', 'ret', 'retDone', 'order', 'month', 'keepMonth', 'paid', 'sup'], pays: ['amount', 'type', 'receipt', 'date', 'order'] };
+  function lockSpecial(n) { n = low((n || '').trim()); return ['антон', 'глеб', 'копилка', 'масло/антифриз', 'ип карта (антон)', 'личные расходы', 'никита', 'подрядчик', 'сто'].includes(n) || (D.cfg.fixedNames || []).some(x => low(x) === n) || (D.cfg.balanceSuppliers || []).some(x => low(x) === n); }
+  /* поменялось ли что-то, что влияет на деньги месяца */
+  function lockMoneyDiff(k, a, b) {
+    if (!a || !b) return true;
+    if (LOCK_F[k].some(f => JSON.stringify(a[f]) !== JSON.stringify(b[f]))) return true;
+    if (k === 'parts') { if (low(a.client || '').startsWith('сто') !== low(b.client || '').startsWith('сто')) return true; if (a.oilCost != null && JSON.stringify(a.oilCost) !== JSON.stringify(b.oilCost)) return true; }
+    if (k === 'pays' && a.name !== b.name && (lockSpecial(a.name) || lockSpecial(b.name))) return true;
+    return false;
+  }
+  function lockCheck(prev) {
+    const out = [];
+    ['orders', 'parts', 'pays'].forEach(k => {
+      const am = new Map((prev[k] || []).map(x => [x.id, x])), bm = new Map((D[k] || []).map(x => [x.id, x]));
+      new Set([...am.keys(), ...bm.keys()]).forEach(id => {
+        const a = am.get(id), b = bm.get(id);
+        if (a && b && JSON.stringify(a) === JSON.stringify(b)) return;
+        if (!lockMoneyDiff(k, a, b)) return;
+        [lockMonthOf(k, a), lockMonthOf(k, b)].forEach(m => { if (m && isLockedM(m)) out.push({ k, r: b || a, m }); });
+      });
+    });
+    return out;
+  }
+  function lockWhat(v) { const r = v.r; return v.k === 'orders' ? 'наряд № ' + (r.num != null ? r.num : 'б/н') : v.k === 'parts' ? (r.order != null ? 'запчасть в наряде № ' + r.order : low(r.client || '').startsWith('сто') ? 'расход «' + (r.name || '') + '»' : 'продажа «' + (r.name || '') + '»') : 'оплата ' + rub(r.amount) + ' от ' + dshort(r.date); }
+
   /* ---------- Журнал: каждое действие хранится в базе как «что было до него» ---------- */
   const LOG_DAYS = 60, LOG_MAX = 3000, LOG_BIG = 1500000;
   const LOG_COLL = { orders: 'Наряд', parts: 'Запчасть', pays: 'Оплата', clients: 'Клиент', stock: 'Склад', schedule: 'Запись', workTypes: 'Прайс работ', cfg: 'Настройки' };
-  const LOG_F = { name: 'название', client: 'клиент', note: 'прозвище', nick: 'прозвище', phone: 'телефон', car: 'машина', plate: 'гос. номер', vin: 'VIN', mileage: 'пробег', start: 'дата', doneDate: 'дата закрытия', date: 'дата', sum: 'сумма', price: 'цена', cost: 'закупка', qty: 'кол-во', amount: 'сумма', paid: 'оплачено', no: 'не получено', ret: 'возврат', receipt: 'чек', order: 'наряд', memo: 'примечание', advice: 'рекомендации', reason: 'причина', sup: 'поставщик', art: 'артикул', brand: 'бренд', who: 'кто', how: 'как', type: 'тип', cars: 'машины', works: 'работы', cid: 'клиент (связь)', carId: 'машина (связь)', num: 'номер', what: 'что' };
+  const LOG_F = { name: 'название', client: 'клиент', note: 'прозвище', nick: 'прозвище', phone: 'телефон', car: 'машина', plate: 'гос. номер', vin: 'VIN', mileage: 'пробег', start: 'дата', doneDate: 'дата закрытия', date: 'дата', sum: 'сумма', price: 'цена', cost: 'закупка', qty: 'кол-во', amount: 'сумма', paid: 'оплачено', no: 'не получено', ret: 'возврат', receipt: 'чек', order: 'наряд', memo: 'примечание', advice: 'рекомендации', reason: 'причина', sup: 'поставщик', art: 'артикул', brand: 'бренд', who: 'кто', how: 'как', type: 'тип', cars: 'машины', works: 'работы', cid: 'клиент (связь)', qtyBase: 'остаток (поправка)', oilCost: 'закупка масла', oilReserve: 'запас масла, %', carId: 'машина (связь)', num: 'номер', what: 'что' };
   const logVal = v => { if (v === undefined || v === null || v === '') return '—'; if (v === true) return 'да'; if (v === false) return 'нет'; if (typeof v === 'number') return fmtN(v); if (typeof v === 'object') return Array.isArray(v) ? v.length + ' шт.' : '…'; const t = String(v); return t.length > 40 ? t.slice(0, 38) + '…' : t; };
   function fmtN(v) { return Math.round(v * 100) / 100 === Math.round(v) ? fmt(v) : String(Math.round(v * 100) / 100).replace('.', ','); }
   function logName(k, r) {
@@ -1676,7 +1803,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
   function logFields(a, b) {
     const out = [];
     new Set([...Object.keys(a || {}), ...Object.keys(b || {})]).forEach(f => {
-      if (['id', 'logo', 'cid', 'carId', 'blk', 'link', 'saleWas', 'isNew'].includes(f)) return;
+      if (['id', 'logo', 'cid', 'carId', 'blk', 'link', 'saleWas', 'isNew', 'oilRule2', 'logV2', 'oilArt', 'oilFrom', 'oilPct', 'oilBase', 'tr', 'cr', 'app', 'month', 'edited', 'adj', 'V', 'R', 'U', 'L', 'created', 'upd'].includes(f)) return;
       const x = a ? a[f] : undefined, y = b ? b[f] : undefined;
       if (JSON.stringify(x) === JSON.stringify(y)) return;
       if ((x == null || x === '' || x === false) && (y == null || y === '' || y === false)) return;
@@ -1688,8 +1815,10 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
   function logStep(prevJson, label) {
     try {
       const prev = JSON.parse(prevJson), rev = {}, info = [], cnt = {};
-      const add = (k, t, r, f) => { cnt[k] = cnt[k] || { '+': 0, '-': 0, '~': 0 }; cnt[k][t]++; if (info.length < 40) info.push({ k, t, n: logName(k, r), f }); };
-      new Set([...Object.keys(prev), ...Object.keys(D)]).forEach(k => {
+      const M = jgBuild(); (prev.orders || []).forEach(o => { if (o && o.num != null && !M.num[o.num]) M.num[o.num] = o.id; }); (prev.parts || []).forEach(p => { if (p && p.link && p.order == null && !M.link[p.link]) M.link[p.link] = low(p.client || '').startsWith('сто') ? 'x:' + p.link : 's:' + (p.blk || p.id); });
+      const add = (k, t, r, f) => { cnt[k] = cnt[k] || { '+': 0, '-': 0, '~': 0 }; cnt[k][t]++; if (t === '~' && Array.isArray(f) && !f.length && (k === 'orders' || k === 'parts' || k === 'pays')) return; if (info.length < 40) { let g = null, p = null; try { g = Array.isArray(D[k]) || Array.isArray(prev[k]) ? groupOf(k, r) : 'cfg:' + k; p = jPhrase(k, t, r, f); } catch (er) {} info.push({ k, t, n: logName(k, r), f, g, p }); } };
+      const KO = ['clients', 'orders', 'parts', 'pays'];
+      [...new Set([...Object.keys(prev), ...Object.keys(D)])].sort((a, b) => (KO.indexOf(a) + 1 || 9) - (KO.indexOf(b) + 1 || 9)).forEach(k => {
         if (k === 'log') return;
         const a = prev[k], b = D[k];
         if (JSON.stringify(a) === JSON.stringify(b)) return;
@@ -1779,6 +1908,230 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     const cut = t => (t.length > 45 ? t.slice(0, 43) + '…' : t);
     changed('Откат на ' + steps.length + ' ' + (steps.length === 1 ? 'действие' : steps.length < 5 ? 'действия' : 'действий') + ' назад, до «' + cut(e.label) + '» ' + new Date(e.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
     toast('Готово. Если передумал — откати и это действие в журнале.');
+  }
+
+  /* ---------- Журнал v2 (10.11.2026): по записям, отменённое скрыто, возврат одной записи ---------- */
+  const JG_ORDER = ['o', 's', 'x', 'y', 'c', 'k', 'r', 'w', 'cfg'];
+  /* карта «номер наряда → id» и «link → группа» по текущей базе и по всем правкам журнала */
+  let jgMaps = null;
+  function jgBuild() {
+    const num = {}, link = {};
+    const seeO = o => { if (o && o.num != null && o.id) num[o.num] = num[o.num] || o.id; };
+    const seeP = p => { if (p && p.link && p.order == null) link[p.link] = link[p.link] || (low(p.client || '').startsWith('сто') ? 'x:' + p.link : 's:' + (p.blk || p.id)); };
+    (D.orders || []).forEach(seeO); (D.parts || []).forEach(seeP);
+    (D.log || []).forEach(e => { const r = e.rev; if (!r) return; if (r.orders) { (r.orders.ch || []).forEach(seeO); (r.orders.rm || []).forEach(x => seeO(x.r)); } if (r.parts) { (r.parts.ch || []).forEach(seeP); (r.parts.rm || []).forEach(x => seeP(x.r)); } });
+    jgMaps = { num, link, n: (D.log || []).length };
+    return jgMaps;
+  }
+  const jgM = () => (jgMaps && jgMaps.n === (D.log || []).length ? jgMaps : jgBuild());
+  function groupOf(k, r) {
+    if (!r) return null;
+    const M = jgM();
+    if (k === 'orders') return 'o:' + r.id;
+    if (k === 'parts') {
+      if (r.order != null) return 'o:' + (M.num[r.order] || ('#' + r.order));
+      if (low(r.client || '').startsWith('сто')) return 'x:' + (r.link || r.blk || r.id);
+      return 's:' + (r.blk || r.id);
+    }
+    if (k === 'pays') {
+      if (r.order != null) return 'o:' + (M.num[r.order] || ('#' + r.order));
+      if (r.link && M.link[r.link]) return M.link[r.link];
+      if (r.link) return 'x:' + r.link;
+      return 'y:' + r.id;
+    }
+    if (k === 'clients') return 'c:' + r.id;
+    if (k === 'stock') return 'k:' + r.id;
+    if (k === 'schedule') return 'r:' + r.id;
+    if (k === 'workTypes') return 'w:' + r.id;
+    return 'cfg:' + k;
+  }
+  const gKind = g => g.split(':')[0];
+  /* все записи (k, «до», «после»), которых касается правка журнала */
+  function jRecs(e) {
+    const out = [], r = e.rev; if (!r) return out;
+    Object.keys(r).forEach(k => {
+      const x = r[k];
+      if (x.ch || x.rm || x.ad) {
+        const cur = new Map((D[k] || []).map(y => [y.id, y]));
+        (x.ch || []).forEach(y => out.push({ k, t: '~', old: y, now: cur.get(y.id) }));
+        (x.rm || []).forEach(y => out.push({ k, t: '-', old: y.r, now: cur.get(y.r.id) }));
+        (x.ad || []).forEach(id => out.push({ k, t: '+', old: null, now: cur.get(id), id }));
+      } else out.push({ k, t: '~', cfg: true });
+    });
+    return out;
+  }
+  const jgCache = new Map();
+  function jGroups(e) {
+    const ck = e.id + '|' + (D.log || []).length;
+    if (jgCache.has(ck)) return jgCache.get(ck);
+    const set = new Set();
+    (e.info || []).forEach(i => { if (i.g) set.add(i.g); });
+    jRecs(e).forEach(x => { if (x.cfg) { set.add('cfg:' + x.k); return; } const a = groupOf(x.k, x.old), b = groupOf(x.k, x.now); if (a) set.add(a); if (b) set.add(b); });
+    const gs = [...set].filter(g => !/^o:#/.test(g) || ![...set].some(h => h !== g && gKind(h) === 'o'));
+    gs.sort((a, b) => JG_ORDER.indexOf(gKind(a)) - JG_ORDER.indexOf(gKind(b)));
+    const cc = e.cnt && e.cnt.clients, cEdit = !!(cc && (cc['~'] || cc['-']) && !cc['+']);
+    if (cEdit) { const ci = gs.findIndex(x => gKind(x) === 'c'); if (ci > 0) gs.unshift(gs.splice(ci, 1)[0]); }
+    jgCache.set(ck, gs); return gs;
+  }
+  /* заголовок записи: «Наряд № 416 · Вова Агент, DAEWOO Lanos» */
+  function gTitle(g, e) {
+    if (gKind(g) === '?') return (e && e.label) || 'Изменение';
+    const [kd, id] = [gKind(g), g.slice(g.indexOf(':') + 1)];
+    const findRec = (k, pred) => { let r = (D[k] || []).find(pred); if (r) return r; for (const x of jRecs(e || {})) { if (x.k === k && x.old && pred(x.old)) return x.old; } return null; };
+    if (kd === 'o') { const o = id[0] === '#' ? null : findRec('orders', x => x.id === id); const num = o ? o.num : id.slice(1); return 'Наряд № ' + (num != null && num !== '' ? num : 'б/н') + (o ? ' · ' + [o.client, o.car].filter(Boolean).join(', ') : ''); }
+    if (kd === 's') { const p = findRec('parts', x => (x.blk || x.id) === id); return 'Продажа' + (p ? ' · ' + [p.client, p.car].filter(Boolean).join(', ') + (p.date ? ' (' + dshort(p.date) + ')' : '') : ''); }
+    if (kd === 'x') { const p = findRec('parts', x => (x.link || x.blk || x.id) === id); const y = !p && findRec('pays', x => x.link === id); return 'Расход СТО' + (p ? ' · ' + (p.name || '') + (p.date ? ' (' + dshort(p.date) + ')' : '') : y ? ' · ' + (y.note || y.name || '') : ''); }
+    if (kd === 'y') { const y = findRec('pays', x => x.id === id); return 'Деньги' + (y ? ' · ' + (y.name || '') + (y.date ? ' (' + dshort(y.date) + ')' : '') : ''); }
+    if (kd === 'c') { const c = findRec('clients', x => x.id === id); return 'Клиент · ' + (c ? ((c.name || '') + ' ' + (c.nick || '')).trim() : ''); }
+    if (kd === 'k') { const s = findRec('stock', x => x.id === id); return 'Склад · ' + (s ? s.name || s.art : ''); }
+    if (kd === 'r') { const s = findRec('schedule', x => x.id === id); return 'Запись на ремонт' + (s ? ' · ' + (s.client || '') + (s.date ? ' (' + dshort(s.date) + ')' : '') : ''); }
+    if (kd === 'w') return 'Прайс работ';
+    return 'Настройки';
+  }
+  /* одна фраза про одну запись: «добавлена запчасть «Вилка сцепления» 3 246,56 ₽» */
+  function jPhrase(k, t, r, f) {
+    const nm = r ? (r.name || r.art || '') : '';
+    const money = v => (v == null ? '' : rub(v));
+    const fl = (f || []).map(x => {
+      if (x[0] === 'не получено') return x[2] === 'нет' ? 'пришла' : 'отмечена «НЕТ»';
+      if (x[0] === 'возврат') return x[2] === 'да' ? 'возврат' : 'возврат отменён';
+      if (x[0] === 'остаток (поправка)') { const n = v => parseFloat(String(v).replace(/\s/g, '').replace(',', '.')) || 0, dlt = Math.round((n(x[2]) - n(x[1])) * 100) / 100; return 'остаток поправлен вручную: ' + (dlt > 0 ? '+' : '−') + fmtN(Math.abs(dlt)); }
+      const dd = v => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? dshort(v) : v);
+      if (x[0] === 'дата закрытия') return x[2] === '—' ? 'снова в работе' : 'машина сдана ' + dd(x[2]);
+      if (x[0] === 'работы' && x[1] === x[2]) return 'работы изменены';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(x[1]) || /^\d{4}-\d{2}-\d{2}$/.test(x[2])) return x[0] + ': ' + dd(x[1]) + ' → ' + dd(x[2]);
+      return x[0] + ': ' + x[1] + ' → ' + x[2];
+    });
+    const fx = fl.length ? ': ' + fl.slice(0, 4).join('; ') + (fl.length > 4 ? '…' : '') : '';
+    if (k === 'parts') { const w = r && low(r.client || '').startsWith('сто') && r.order == null ? 'покупка' : 'запчасть'; return (t === '+' ? 'добавлена ' : t === '-' ? 'удалена ' : '') + w + ' «' + nm + '»' + (t !== '~' && r && r.sum ? ' ' + money(r.sum) : '') + (t === '~' ? fx : ''); }
+    if (k === 'pays') { const tp = r ? (TYPE_S[r.type] || r.type || '') : ''; const am = r && r.amount != null ? (r.amount > 0 ? '+' : '') + fmtN(r.amount) + ' ₽' : ''; return (t === '+' ? 'оплата ' : t === '-' ? 'удалена оплата ' : 'оплата ') + [tp, am].filter(Boolean).join(' ') + (r && r.name && k === 'pays' ? ' · ' + r.name : '') + (t === '~' ? fx : ''); }
+    if (k === 'orders') return t === '+' ? 'создан наряд' : t === '-' ? 'удалён наряд' : 'наряд' + (fx || ': изменён');
+    if (k === 'clients') return t === '+' ? 'новый клиент' : t === '-' ? 'клиент удалён' : 'карточка клиента' + ((fx || ': изменена').replace(/название:/g, 'имя:'));
+    if (k === 'stock') return t === '+' ? 'новая позиция «' + nm + '»' : t === '-' ? 'позиция удалена' : 'позиция' + (fx.replace('остаток (поправка)', 'поправка остатка') || ': изменена');
+    if (k === 'schedule') return t === '+' ? 'запись добавлена' : t === '-' ? 'запись удалена' : 'запись' + (fx || ': изменена');
+    return (LOG_COLL[k] || k) + (fx || ': изменено');
+  }
+  /* фразы правки — по группе g (или все) */
+  function jPhrases(e, g) {
+    const items = e.info || [];
+    const out = [];
+    if (items.some(i => i.g)) items.forEach(i => { if (i.k === 'cfg') return; if (!g || i.g === g) out.push(i.p || jPhrase(i.k, i.t, i.r, i.f)); });
+    else items.forEach(i => out.push(i.p || ((i.t === '+' ? 'добавлено: ' : i.t === '-' ? 'удалено: ' : '') + (LOG_COLL[i.k] || i.k).toLowerCase() + ' ' + (i.n || '') + ((i.f || []).length ? ': ' + i.f.slice(0, 3).map(f => f[0] + ' ' + f[1] + ' → ' + f[2]).join('; ') : ''))));
+    return out;
+  }
+  /* старые записи журнала (до 10.11): пары «действие + Отменено (↶)» и откаты — скрыть */
+  function jLegacyHide() {
+    if (!D.log) return;
+    const L = D.log;
+    for (let i = 0; i < L.length; i++) {
+      const e = L[i], m = /^Отменено \(↶\): (.*)$/.exec(e.label || '');
+      if (m) { if (e.hid) continue; e.hid = true; const want = m[1].replace(/…$/, ''); for (let j = i - 1; j >= 0; j--) { if (!L[j].hid && (L[j].label || '').startsWith(want)) { L[j].hid = true; break; } } continue; }
+      const r = /^Откат на (\d+) /.exec(e.label || '');
+      if (r) { if (e.hid) continue; e.hid = true; let n = +r[1]; for (let j = i - 1; j >= 0 && n > 0; j--, n--) L[j].hid = true; continue; }
+      const p = /^Повторено \(↷\): (.*)$/.exec(e.label || ''); if (p) e.label = p[1];
+    }
+  }
+  /* применить обратные правки только к записям группы g */
+  function revFiltered(rev, g, onlyRm) {
+    Object.keys(rev).forEach(k => {
+      const r = rev[k];
+      if (!(r.ch || r.rm || r.ad)) { if (g === 'cfg:' + k && !onlyRm) { if ('v' in r) { if (r.v === undefined) delete D[k]; else D[k] = clone(r.v); } else if (r.ix) Object.keys(r.ix).forEach(i => { D[k][+i] = clone(r.ix[i]); }); else if (r.o) { D[k] = D[k] || {}; Object.assign(D[k], clone(r.o)); (r.del || []).forEach(f => delete D[k][f]); } } return; }
+      let arr = (D[k] || []).slice();
+      const inG = x => groupOf(k, x) === g;
+      if (!onlyRm) {
+        const ad = new Set((r.ad || []).filter(id => { const x = arr.find(y => y.id === id); return x && inG(x); }));
+        arr = arr.filter(x => !ad.has(x.id));
+        (r.ch || []).forEach(x => { const i = arr.findIndex(y => y.id === x.id); if (inG(x) || (i >= 0 && inG(arr[i]))) { if (i >= 0) arr[i] = clone(x); else arr.push(clone(x)); } });
+      }
+      (r.rm || []).slice().sort((p, q) => p.i - q.i).forEach(({ i, r: x }) => { if (inG(x) && !arr.some(y => y.id === x.id)) arr.splice(Math.min(i, arr.length), 0, clone(x)); });
+      D[k] = arr;
+    });
+  }
+  /* правки группы g начиная с записи журнала id (или только она — onlyRm) */
+  function jSteps(g, id, onlyRm) { const L = D.log, j = L.findIndex(x => x.id === id); if (j < 0) return { j, steps: [] }; return { j, steps: onlyRm ? [L[j]] : L.slice(j).filter(e => jGroups(e).includes(g)) }; }
+  /* связанные записи: что ещё задели те же действия (клиент → его наряды и т. п.) */
+  function jRelated(g, steps) {
+    const set = new Set();
+    steps.forEach(e => jGroups(e).forEach(h => { if (h !== g && !h.startsWith('cfg:') && gKind(h) !== '?' && gKind(h) !== 'w') set.add(h); }));
+    return [...set];
+  }
+  /* версия записи сразу после правки j: «до» в следующей правке, которая её трогала, иначе — сейчас */
+  function jAfter(k, rid, j) {
+    const L = D.log;
+    for (let m = j + 1; m < L.length; m++) { const r = L[m].rev && L[m].rev[k]; if (!r || !(r.ch || r.rm)) continue; const c = (r.ch || []).find(x => x.id === rid); if (c) return c; const d = (r.rm || []).find(x => x.r.id === rid); if (d) return d.r; }
+    return (D[k] || []).find(x => x.id === rid) || null;
+  }
+  /* связанные записи откатываем по полям: только то, что поменяли эти действия, и только если поле с тех пор не трогали */
+  function jRelPlan(hs, steps) {
+    const L = D.log, plan = [], H = new Set(hs);
+    steps.slice().reverse().forEach(e => {
+      const j = L.indexOf(e), rev = e.rev; if (!rev) return;
+      Object.keys(rev).forEach(k => {
+        const r = rev[k]; if (!(r.ch || r.rm || r.ad)) return;
+        (r.ch || []).forEach(old => {
+          const cur = (D[k] || []).find(x => x.id === old.id), after = jAfter(k, old.id, j);
+          if (!H.has(groupOf(k, old)) && !(cur && H.has(groupOf(k, cur)))) return;
+          const fs = {};
+          new Set([...Object.keys(old), ...Object.keys(after || {})]).forEach(f => { if (JSON.stringify(old[f]) !== JSON.stringify(after ? after[f] : undefined)) fs[f] = { old: old[f], after: after ? after[f] : undefined }; });
+          plan.push({ k, id: old.id, fs });
+        });
+        (r.ad || []).forEach(id => { const cur = (D[k] || []).find(x => x.id === id); if (cur && H.has(groupOf(k, cur))) plan.push({ k, id, del: true }); });
+        (r.rm || []).forEach(({ i, r: x }) => { if (H.has(groupOf(k, x))) plan.push({ k, id: x.id, add: x, i }); });
+      });
+    });
+    return plan;
+  }
+  function jRelApply(plan) {
+    plan.forEach(p => {
+      const arr = D[p.k] = D[p.k] || [];
+      if (p.del) { const i = arr.findIndex(x => x.id === p.id); if (i >= 0) arr.splice(i, 1); return; }
+      if (p.add) { if (!arr.some(x => x.id === p.id)) arr.splice(Math.min(p.i, arr.length), 0, clone(p.add)); return; }
+      const cur = arr.find(x => x.id === p.id); if (!cur) return;
+      Object.keys(p.fs).forEach(f => { const v = p.fs[f]; if (JSON.stringify(cur[f]) !== JSON.stringify(v.after)) return; if (v.old === undefined) delete cur[f]; else cur[f] = clone(v.old); });
+    });
+  }
+  /* закрытые месяцы, которых коснётся возврат */
+  function jClosedMonths(gs, steps) {
+    const cl = D.cfg.closed || {}, ms = new Set(), G = new Set(gs);
+    const see = (k, r) => { if (!r) return; [r.date, r.start, r.doneDate, r.month && r.month + '-01'].forEach(d => { if (d && /^\d{4}-\d{2}/.test(d)) { const m = d.slice(0, 7); if (cl[m]) ms.add(m); } }); };
+    const MF = { orders: ['works', 'doneDate', 'start', 'num', 'paid', 'adj'], parts: ['sum', 'price', 'cost', 'qty', 'no', 'ret', 'retDone', 'order', 'month', 'keepMonth', 'paid', 'oilCost', 'date', 'client', 'sup'], pays: ['amount', 'type', 'receipt', 'date', 'name', 'order'] };
+    const money = x => (MF[x.k] ? lockMoneyDiff(x.k, x.old, x.now) : false);
+    steps.forEach(e => jRecs(e).forEach(x => { if (x.cfg || !money(x)) return; if (G.has(groupOf(x.k, x.old)) || G.has(groupOf(x.k, x.now))) { see(x.k, x.old); see(x.k, x.now); } }));
+    return [...ms].sort();
+  }
+  /* «Вернуть как было до этого»: группа g к состоянию до правки журнала id */
+  function jRestore(g, id, onlyRm) {
+    if (ui.editor || ui.sale) { toast('Сначала закрой наряд или продажу'); return; }
+    const L = D.log, { j, steps } = jSteps(g, id, onlyRm); if (j < 0) return;
+    const withRel = !ui.jAsk || ui.jAsk.rel !== false, rel = withRel ? jRelated(g, steps) : [];
+    const relPlan = rel.length ? jRelPlan(rel, steps) : [];
+    const lockedMs = jClosedMonths([g].concat(rel), steps).filter(isLockedM);
+    if (lockedMs.length) { toast(lockedMs.map(m => S.monthLabel(m)).join(', ') + ' — закрыт. Открой его для правки в «Отчёте».'); return; }
+    if (steps.some(e => !e.rev)) { toast('Так далеко назад не получится — восстанови из ежедневной копии'); return; }
+    const title = gTitle(g, L[j]), at = new Date(L[j].at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    let renum = null;
+    try {
+      if (onlyRm) revFiltered(L[j].rev, g, true);
+      else for (let i = L.length - 1; i >= j; i--) if (L[i].rev && jGroups(L[i]).includes(g)) revFiltered(L[i].rev, g, false);
+      if (relPlan.length) jRelApply(relPlan);
+      /* восстановленный наряд, а его номер уже занят другим — даём новый номер */
+      if (gKind(g) === 'o') { const oid = g.slice(2), o = D.orders.find(x => x.id === oid); if (o && o.num != null && D.orders.some(x => x !== o && x.num === o.num)) { const old = o.num, nn = Math.max(0, ...D.orders.map(x => +x.num || 0)) + 1; D.parts.forEach(p => { if (p.order === old && groupOf('parts', Object.assign({}, p)) === g) p.order = nn; }); o.num = nn; renum = [old, nn]; } }
+    } catch (er) { toast('Не получилось: ' + er.message); return; }
+    D = normalize(D); D.log = L;
+    const hides = steps.filter(e => jGroups(e).every(x => x === g || rel.includes(x) || x.startsWith('cfg:'))).map(e => e.id);
+    hides.forEach(hid => { const e = L.find(x => x.id === hid); if (e) e.hid = true; });
+    ui.jAsk = null;
+    if (ui.cdraft) { const c = ui.cdraft.id && D.clients.find(x => x.id === ui.cdraft.id); ui.cdraft = c ? clone(c) : null; ui.cmove = null; ui.cpick = null; ui.cmvSale = null; ui.cmvSaleOpen = null; }
+    const n0 = L.length;
+    changed((onlyRm ? 'Восстановлено: ' : 'Возвращено как было ' + at + ': ') + title);
+    const ne = L.length > n0 ? L[L.length - 1] : null;
+    if (ne) { ne.hides = hides; ne.hid = true; ne.g = g; }
+    toast((onlyRm ? 'Восстановлено: ' : 'Вернул как было ' + at + ': ') + title + (rel.length ? ` и связанное (${rel.length})` : '') + (renum ? ` (номер ${renum[0]} занят — теперь № ${renum[1]})` : '') + '. Передумал — ↶');
+  }
+  /* что отменится при возврате: фразы всех правок группы после id */
+  function jPreview(g, id) {
+    const L = D.log, j = L.findIndex(x => x.id === id);
+    return L.slice(j).filter(e => jGroups(e).includes(g)).map(e => ({ at: e.at, ph: jPhrases(e, g) }));
   }
 
   /* ---------- Ежедневные копии базы в выбранную папку ---------- */
@@ -2219,7 +2572,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
         <button class="btn primary" data-act="save-order">Сохранить</button>
       </header>
       <div class="sheet-body">
-        ${E.err ? `<div class="note bad">${esc(E.err)}</div>` : ''}
+        ${E.err ? `<div class="note bad">${esc(E.err)}</div>` : ''}${(() => { const sv = D.orders.find(x => x.id === o.id), m = sv && sv.doneDate ? S.monthOf(sv.doneDate) : null; return m && isLockedM(m) ? `<div class="note">🔒 <span><b>${esc(S.monthLabel(m))} закрыт</b> — наряд только для просмотра. Принять оплату долга сегодняшним днём можно. Исправить сам наряд: «Отчёт» → «Открыть для правки».</span></div>` : ''; })()}
         <section class="block">
           <div class="block-head"><h3>Клиент и машина</h3><span class="pill ${o.doneDate ? 'st-done' : 'st-work'}">${o.doneDate ? 'Сдан ' + dshort(o.doneDate) : 'В работе'}</span></div>
           ${clientBlock(E, o)}
@@ -2249,7 +2602,8 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
               <label class="f">Артикул<input id="p-art-${i}" class="mono" value="${esc(p.art)}" data-p="${i}" data-k="art" ${p.sup === 'Склад' ? 'list="dl-stock"' : ''} autocomplete="off"></label>
               <label class="f grow">Название<input id="p-name-${i}" value="${esc(p.name)}" data-p="${i}" data-k="name"></label>
               <label class="f">Бренд<input id="p-br-${i}" value="${esc(p.brand)}" data-p="${i}" data-k="brand"></label>
-              <label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="p-cost-${i}" value="${esc(nv(p.cost))}" data-p="${i}" data-k="cost" inputmode="decimal" placeholder="${p.sup === 'Склад' ? 'со склада' : ''}" title="${esc(stockCostTip(p))}"></label>
+              ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="p-cost-${i}" value="${esc(nv(p.cost))}" data-p="${i}" data-k="cost" inputmode="decimal" placeholder="${p.sup === 'Склад' ? 'со склада' : ''}" title="${esc(stockCostTip(p))}"></label>`}
+${oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="p-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-p="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg * (1 + oilPct() / 100))))}"></label>` : ''}
               <label class="f num">Кол-во<input id="p-qty-${i}" value="${esc(nv(p.qty))}" data-p="${i}" data-k="qty" inputmode="decimal"></label>
               <label class="f num">Цена<input id="p-pr-${i}" value="${esc(nv(p.price))}" data-p="${i}" data-k="price" inputmode="decimal"></label>
               <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
@@ -2318,7 +2672,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
         <section class="block totals${ui.totOpen ? ' open' : ''}">
           ${totBar(t)}
           <div><span>Работы</span><b>${rub(t.works)}</b></div>
-          <div><span>Запчасти</span><b>${rub(t.parts)}</b></div>
+          <div><span>Запчасти</span><b>${rub(t.parts)}</b>${t.partsWait > 0 ? `<small class="muted" title="Запчасти с отметкой «НЕТ» — заказаны, но ещё не пришли. Они уже входят в сумму.">ещё не пришло: ${rub(t.partsWait)}</small>` : ''}</div>
           <div class="big"><span>Итого</span><b>${rub(t.total)}</b></div>
           <div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
           <div class="big ${t.debt > 5 ? 'neg' : t.debt < -5 ? 'pos' : ''}"><span>${t.debt < -5 ? 'Переплата' : 'Долг'}</span><b>${rub(Math.abs(t.debt))}</b></div>
@@ -2461,9 +2815,12 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     const k = String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase();
     const st = X.stockByArt[p.art] || D.stock.find(x => String(x.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase() === k && k);
     if (!st) return 'Со склада — такой позиции на складе не нашёл';
+    if (st.oil && p.oilCost != null && p.oilArt === p.art) return `Закупка в этой продаже: ${rub(p.oilCost)} за л` + (p.oilBase != null ? ` = бочка ${rub(p.oilBase)} + ${p.oilPct}% запас${p.oilFrom ? ' (бочка от ' + p.oilFrom.split(',').map(dshort).join(' и ') + ')' : ''}` : ' (по карточке склада на момент продажи)') + `${p.qty ? ` · на ${fmt(p.qty, p.qty % 1 ? 2 : 0)} л: ${rub(p.oilCost * p.qty)}` : ''}. Можно поправить руками.`;
+    if (st.oil && !(p.oilCost != null && p.oilArt === p.art)) { const r = barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), +p.qty || 1, st.cost); return `При сохранении закупка возьмётся из бочки: ${rub(r.avg)} + ${oilPct()}% = ${rub(r.avg * (1 + oilPct() / 100))} за л`; }
     if (st.cost == null || st.cost === '') return 'Со склада — у позиции не указана закупка';
     return `Закупка на складе: ${rub(st.cost)} за ${st.oil ? 'л' : 'шт.'}${p.qty ? ` · на ${fmt(p.qty, p.qty % 1 ? 2 : 0)} ${st.oil ? 'л' : 'шт.'}: ${rub(st.cost * p.qty)}` : ''}`;
   }
+  const oilSt = p => { if (low(p.sup) !== 'склад') return null; const st = X.stockByArt[p.art]; return st && st.oil ? st : null; };
   function isFromSale(p) { return !!(p.fromSale || p.link || p.saleWas); }
   function saleWasOf(p) { return p.saleWas || { client: p.client || '', note: p.note || '', car: p.car || '', vin: p.vin || '', plate: p.plate || '', phone: p.phone || '', cid: p.cid }; }
   function saleClosedMonth(g) {
@@ -2775,6 +3132,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
         return;
       }
       p[k] = numIn(el.value);
+      if (k === 'oilCost') { p.oilArt = p.art; delete p.oilBase; delete p.oilFrom; if (p.oilCost == null) delete p.oilCost; return; }
       if (k === 'cost') p.price = S.markupPrice(D.cfg, p.cost);
       p.sum = r2((p.price || 0) * (p.qty || 0));
       later();
@@ -2796,6 +3154,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
   function later() { clearTimeout(later.t); later.t = setTimeout(() => paintEditor(), 400); }
 
   function saveOrder() {
+    ui.stash = { editor: ui.editor };
     const E = ui.editor, o = E.order;
     o.client = (o.client || '').trim(); o.note = (o.note || '').trim();
     if (E.picking && !o.cid) { E.err = 'Выбери клиента из списка или нажми «+ Новый клиент».'; paintEditor(true); return; }
@@ -2863,6 +3222,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     changed();
   }
   function deleteOrder() {
+    ui.stash = { editor: ui.editor };
     const o = ui.editor.order;
     const old = D.orders.find(x => x.id === o.id);
     if (old) {
@@ -3227,7 +3587,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     setHTML(host, `<div class="sheet" role="dialog" aria-modal="true" aria-label="Продажа запчастей">
       <header class="sheet-head"><button class="btn ghost" data-act="sale-close">Закрыть</button><h2>${fromStock ? 'Продажа со склада' : 'Продажа без наряда'}</h2>${eyeBtn()}<button class="btn primary" data-act="sale-save">Сохранить</button></header>
       <div class="sheet-body">
-        ${Sx.err ? `<div class="note bad">${esc(Sx.err)}</div>` : ''}
+        ${Sx.err ? `<div class="note bad">${esc(Sx.err)}</div>` : ''}${(() => { const m = (Sx.origRows || []).map(p => S.partPeriod(p, X)).find(x => x && x !== 'work' && isLockedM(x)); return m ? `<div class="note">🔒 <span><b>${esc(S.monthLabel(m))} закрыт</b> — продажа только для просмотра. Принять оплату долга сегодняшним днём можно.</span></div>` : ''; })()}
         <section class="block"><div class="grid g4">
           <label class="f span2">Кому<input id="sa-client" list="dl-clients" value="${esc((Sx.client + (Sx.note ? ' ' + Sx.note : '')).trim())}" data-sa="client" autocomplete="off" placeholder="Клиент, Антон или Глеб"></label>
           <label class="f">Машина<input id="sa-car" value="${esc(Sx.car)}" data-sa="car"></label>
@@ -3240,7 +3600,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
               <label class="f">Артикул<input id="sp-art-${i}" class="mono" value="${esc(p.art)}" data-sp="${i}" data-k="art" ${p.sup === 'Склад' ? 'list="dl-stock"' : ''} autocomplete="off"></label>
               <label class="f grow">Название<input id="sp-name-${i}" value="${esc(p.name)}" data-sp="${i}" data-k="name"></label>
               <label class="f">Бренд<input id="sp-br-${i}" value="${esc(p.brand)}" data-sp="${i}" data-k="brand"></label>
-              <label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="sp-cost-${i}" value="${esc(nv(p.cost))}" data-sp="${i}" data-k="cost" inputmode="decimal" title="${esc(stockCostTip(p))}"></label>
+              ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="sp-cost-${i}" value="${esc(nv(p.cost))}" data-sp="${i}" data-k="cost" inputmode="decimal" title="${esc(stockCostTip(p))}"></label>`}${oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="sp-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-sp="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg * (1 + oilPct() / 100))))}"></label>` : ''}
               <label class="f num">Кол-во<input id="sp-qty-${i}" value="${esc(nv(p.qty))}" data-sp="${i}" data-k="qty" inputmode="decimal"></label>
               <label class="f num">Цена<input id="sp-pr-${i}" value="${esc(nv(p.price))}" data-sp="${i}" data-k="price" inputmode="decimal"></label>
               <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
@@ -3314,6 +3674,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
         return;
       }
       p[k] = numIn(el.value);
+      if (k === 'oilCost') { p.oilArt = p.art; delete p.oilBase; delete p.oilFrom; if (p.oilCost == null) delete p.oilCost; return; }
       if (k === 'cost') p.price = salePrice(p.cost);
       p.sum = r2((p.price || 0) * (p.qty || 0));
       clearTimeout(ui.saT); ui.saT = setTimeout(() => paintSale(), 400);
@@ -3332,6 +3693,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     if (el.dataset.act === 'sa-paste-no') { Sx.paste.no = el.checked; return; }
   }
   function saveSale() {
+    ui.stash = { sale: ui.sale };
     const Sx = ui.sale;
     Sx.client = (Sx.client || '').trim();
     if (!Sx.client) { Sx.err = 'Укажи, кому продажа.'; paintSale(true); return; }
@@ -3570,7 +3932,19 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     d.cars.forEach(c => { c.car = c.car.trim(); c.plate = c.plate.trim().toUpperCase(); c.vin = c.vin.trim().toUpperCase(); });
     if (!d.id) { d.id = uid('c'); D.clients.push(d); }
     else {
-      const i = D.clients.findIndex(x => x.id === d.id); D.clients[i] = d;
+      const i = D.clients.findIndex(x => x.id === d.id), old = D.clients[i];
+      /* покупки без наряда этого клиента: переименовываем вместе с ним и привязываем насовсем (cid) */
+      if (old && (old.name !== d.name || (old.nick || '') !== d.nick)) {
+        const oldNames = new Set([low(old.name), low((old.name + ' ' + (old.nick || '')).trim())]);
+        let n = 0;
+        (X.salesByPerson[d.id] || []).forEach(g => {
+          g.rows.forEach(p => { p.cid = d.id; p.client = d.name; p.note = d.nick; });
+          if (g.link) D.pays.forEach(y => { if (y.link === g.link && oldNames.has(low((y.name || '').trim()))) y.name = (d.name + ' ' + d.nick).trim(); });
+          n++;
+        });
+        if (n) ui.cRenamed = n;
+      }
+      D.clients[i] = d;
       D.orders.forEach(o => {
         if (o.cid !== d.id) return;
         o.client = d.name; o.note = d.nick;
@@ -3579,7 +3953,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       });
     }
     ui.cdraft = clone(d); ui.cerr = '';
-    toast('Клиент сохранён'); changed();
+    toast(ui.cRenamed ? `Клиент сохранён, покупки без наряда (${ui.cRenamed}) переименованы вместе с ним` : 'Клиент сохранён'); ui.cRenamed = 0; changed();
   }
 
   /* ----- Деньги ----- */
@@ -3722,7 +4096,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       <div class="scroll"><table class="tbl pays"><thead><tr><th>Дата</th><th>Назначение</th><th>Примечание</th><th>Тип</th><th>Чек</th><th>Наряд</th><th class="r">Сумма</th><th></th></tr></thead><tbody>
       ${list.map(p => `<tr title="${esc(tipOf(p))}"><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${esc(p.name)}${p.tr ? ' <span class="muted small">перевод</span>' : ''}</td><td class="muted">${esc(p.note)}</td><td>${esc(TYPE_S[p.type] || p.type || '—')}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order ?? ''}</td>
         <td class="r ${p.amount < 0 ? 'neg' : 'pos'}"><b>${p.amount > 0 ? '+' : ''}${fmt(p.amount, Math.round(p.amount) === p.amount ? 0 : 2)}</b></td>
-        <td class="r nowrap">${ui.payDel === p.id ? `<button class="btn small danger" data-act="pay-del-yes" data-id="${esc(p.id)}">Удалить${p.tr ? ' обе строки' : ''}</button><button class="btn small ghost" data-act="pay-del-no">Нет</button>` : `<span class="acts"><button class="link small" data-act="pay-edit" data-id="${esc(p.id)}">Изменить</button><button class="x" data-act="pay-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">В этом месяце платежей нет.</td></tr>'}
+        <td class="r nowrap">${isLockedM(S.monthOf(p.date)) ? `<span class="muted" title="${esc(S.monthLabel(S.monthOf(p.date)))} закрыт — менять нельзя. «Отчёт» → «Открыть для правки»">🔒</span>` : ui.payDel === p.id ? `<button class="btn small danger" data-act="pay-del-yes" data-id="${esc(p.id)}">Удалить${p.tr ? ' обе строки' : ''}</button><button class="btn small ghost" data-act="pay-del-no">Нет</button>` : `<span class="acts"><button class="link small" data-act="pay-edit" data-id="${esc(p.id)}">Изменить</button><button class="x" data-act="pay-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">В этом месяце платежей нет.</td></tr>'}
       </tbody></table></div>`;
   }
   /* ----- Склад ----- */
@@ -3813,13 +4187,18 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     const row = ({ s, q }) => `<tr class="${SEL.has(s.id) ? 'sel' : ''}">${chk(s)}<td class="mono">${esc(s.art)}</td><td>${esc(s.name)}<div class="muted small">${esc(s.brand)}</div></td>
       <td class="r ${q < 0 ? 'neg' : q === 0 ? 'muted' : ''}"><b>${fmt(q, q % 1 ? 2 : 0)}</b></td><td class="r cst">${s.cost ? rub(s.cost) : '<span class="muted">—</span>'}</td><td class="r">${rub(s.price)}</td>${acts(s)}</tr>${formRow(s)}`;
     /* масла и жидкости: стрелочка раскрывает, кому, сколько и когда продали */
+    const oilCostCell = st => { const b = barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), 1, st.cost).avg; return b ? `<td class="r cst"><span class="tip-t" title="${esc('Бочка, из которой сейчас льёшь: ' + rub(b) + ' за л + ' + oilPct() + '% запас. С этой закупкой пойдут новые продажи.')}">${rub(b * (1 + oilPct() / 100))}</span></td>` : `<td class="r cst">${st.cost ? rub(st.cost) : '<span class="muted">—</span>'}</td>`; };
     const oilRow = ({ s, q }) => {
       const open = ui.openRows.has('stk-' + s.id);
       return `<tr class="stk-row${open ? ' is-open' : ''}${SEL.has(s.id) ? ' sel' : ''}">${chk(s)}<td class="mono" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="stk-${esc(s.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span> ${esc(s.art)}</td><td data-act="toggle-row" data-id="stk-${esc(s.id)}">${esc(s.name)}<div class="muted small">${esc(s.brand)}</div></td>
-      <td class="r ${q < 0 ? 'neg' : q === 0 ? 'muted' : ''}"><b>${fmt(q, q % 1 ? 2 : 0)}</b></td><td class="r cst">${s.cost ? rub(s.cost) : '<span class="muted">—</span>'}</td><td class="r">${rub(s.price)}</td>${acts(s)}</tr>${formRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
+      <td class="r ${q < 0 ? 'neg' : q === 0 ? 'muted' : ''}"><b>${fmt(q, q % 1 ? 2 : 0)}</b></td>${oilCostCell(s)}<td class="r">${rub(s.price)}</td>${acts(s)}</tr>${formRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
     };
     const head = `<thead><tr><th class="chkc"></th><th>Артикул</th><th>Название</th><th class="r">Остаток</th><th class="r cst">Закупка</th><th class="r">Цена</th><th></th></tr></thead>`;
-    const otbl = rows => `<div class="scroll"><table class="tbl stk">${head}<tbody>${rows.map(oilRow).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
+    const ohead = `<thead><tr><th class="chkc"></th><th>Артикул</th><th>Название</th><th class="r">Остаток</th><th class="r cst">Закупка <button type="button" class="pct-btn" data-act="oilres-open" title="Запас к цене бочки: +${oilPct()}%. Нажми, чтобы поменять" aria-label="Запас к цене бочки, процент">%</button></th><th class="r">Цена</th><th></th></tr></thead>`;
+    const resBox = ui.oilResOpen ? `<div class="oilres-box"><label class="f">Запас к цене бочки, %<input id="oilres" class="r" value="${esc(ui.oilResVal ?? oilPct())}" data-oilres="1" inputmode="decimal"></label>
+      <button class="btn small primary" data-act="oilres-save">Сохранить</button><button class="btn small ghost" data-act="oilres-close">Отмена</button>
+      <p class="muted small">Закупка масла в продаже = цена бочки, из которой сейчас льёшь, + этот процент. Эти деньги остаются в кассе «Масло/антифриз» — запас, если масло подорожает. Пример: бочка 700 ₽/л → ${rub(700 * (1 + (+(ui.oilResVal ?? oilPct()) || 0) / 100))}. Касается только новых продаж; в конкретной продаже закупку можно поправить руками.</p></div>` : '';
+    const otbl = rows => `${resBox}<div class="scroll"><table class="tbl stk">${ohead}<tbody>${rows.map(oilRow).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
     const tbl = rows => `<div class="scroll"><table class="tbl stk">${head}<tbody>${rows.map(row).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
     const selItems = D.stock.filter(x => SEL.has(x.id));
     const openOrders = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num);
@@ -3831,7 +4210,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       ${F && F.mode !== 'edit' ? stockForm(F) : ''}
       ${bar}
       <p class="muted small">Приход на склад — через «Расходы» → «Расход СТО» → «Вставить из буфера»: если артикул совпадает с позицией склада, остаток увеличится. Остаток уменьшается, когда в наряде запчасть «Склад» стоит без «НЕТ». Стоимость остатков: <b>${rub(value)}</b>.</p>
-      <h3 class="sec">Масла и жидкости <span class="muted small">касса «Масло/антифриз»</span></h3>${otbl(oil)}
+      <h3 class="sec">Масла и жидкости <span class="muted small">касса «Масло/антифриз»</span> <button type="button" class="pct-btn pct-m" data-act="oilres-open" title="Запас к цене бочки: +${oilPct()}%. Нажми, чтобы поменять">закупка +${oilPct()}%</button></h3>${otbl(oil)}
       <h3 class="sec">Артикулы для заказов СТО</h3>${tbl(sto)}
       <h3 class="sec">Запчасти на складе</h3>${tbl(other)}${selItems.length ? '<div style="height:110px" aria-hidden="true"></div>' : ''}`;
   }
@@ -3898,9 +4277,9 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
         <label class="f">Бренд<input id="sn-brand" value="${esc(f.brand)}" data-sf="brand"></label>
         <label class="f">Цена продажи<input id="sn-price" value="${esc(nv(f.price))}" data-sf="price" inputmode="decimal"></label>
         <label class="f">Сейчас на складе<input id="sn-qty" value="${esc(nv(f.qty))}" data-sf="qty" inputmode="decimal"></label>
-        <label class="f chk"><input id="sn-oil" type="checkbox" ${f.oil ? 'checked' : ''} data-sf="oil"> Масло / жидкость</label>
-        ${f.oil ? '' : `<label class="f">Блок<select id="sn-grp" data-sf="grp"><option value=""${f.grp === 'sto' ? '' : ' selected'}>Запчасти на складе</option><option value="sto"${f.grp === 'sto' ? ' selected' : ''}>Артикулы для заказов СТО</option></select></label>`}
-        ${f.oil ? `<label class="f">Закупка за 1 ед.<input id="sn-cost" value="${esc(nv(f.cost))}" data-sf="cost" inputmode="decimal"></label>` : ''}
+        <label class="f" title="Масла и жидкости — продаются на литры, закупка берётся из бочки + запас, деньги идут в кассу «Масло/антифриз». Остальное — обычные запчасти.">Блок<select id="sn-grp" data-sf="blk">${[['oil', 'Масла и жидкости (касса «Масло/антифриз»)'], ['sto', 'Артикулы для заказов СТО'], ['', 'Запчасти на складе']].map(([v, l]) => `<option value="${v}"${(f.oil ? 'oil' : f.grp === 'sto' ? 'sto' : '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        ${f.oil ? `<label class="f" title="Используется, только если у позиции нет ни одной покупки бочки. Обычно закупка берётся из бочки, из которой льёшь.">Закупка, если нет бочки<input id="sn-cost" value="${esc(nv(f.cost))}" data-sf="cost" inputmode="decimal"></label>` : ''}
+      </div>${s && f.oil ? `<p class="muted small">Сейчас льёшь из бочки по ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg)} за л → в продажах закупка ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg * (1 + oilPct() / 100))} (+${oilPct()}%, меняется кнопкой «%» у «Закупка»).${f.art && f.art !== s.art ? ' <b>Артикул поменяется и во всех продажах и покупках этой позиции.</b>' : ''}</p>` : s && f.art && f.art !== s.art ? '<p class="muted small"><b>Артикул поменяется и во всех продажах и покупках этой позиции.</b></p>' : ''}<div class="grid g4" style="display:none">
       </div><button class="btn primary" data-act="stock-save">Сохранить</button></section>`;
   }
 
@@ -4123,6 +4502,8 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     let h = `<div class="toolbar">${monthNav(m, 'rep-month')}<span class="pill ${stCls}">${r.status}</span>
       ${r.status === 'Не закрыт' || r.status === 'Изменился' ? (ui.confirmClose ? `<span class="small">Зафиксировать итоги ${esc(S.monthLabel(m))}?</span><button class="btn small primary" data-act="close-month">Да</button><button class="btn small ghost" data-act="close-month-no">Нет</button>` : `<button class="btn small" data-act="close-month-ask">${r.status === 'Изменился' ? 'Закрыть заново' : 'Закрыть месяц'}</button>`) : ''}</div>`;
     if (isNow) h += checkPanel();
+    if (r.closed && r.closed.unlocked) h += `<div class="note"><span>🔓 <b>${esc(S.monthLabel(m))} открыт для правки</b> — наряды, оплаты и расходы этого месяца сейчас можно менять. Исправь и нажми «Закрыть снова».</span><div class="actions"><button class="btn small primary" data-act="month-lock">Закрыть снова</button></div></div>`;
+    else if (r.closed) h += `<div class="actions" style="margin:0 0 6px"><span class="muted small">🔒 Месяц на замке: наряды, оплаты и расходы этого месяца нельзя менять.</span>${ui.confirmUnlock === m ? `<span class="small">Открыть ${esc(S.monthLabel(m))} для правки?</span><button class="btn small" data-act="month-unlock">Да, открыть</button><button class="btn small ghost" data-act="month-unlock-no">Нет</button>` : `<button class="btn small ghost" data-act="month-unlock-ask">Открыть для правки</button>`}</div>`;
     if (r.closed) h += `<p class="muted small">Месяц закрыт ${dshort(r.closed.date)}. Прибыль с запчастей и расходы СТО показаны как на момент закрытия.${r.diff ? ` Сейчас «Итого» было бы ${rub(r.liveItogo)} (разница ${rub(r.diff)}).` : ''}</p>`;
     h += `<div class="rep"><section class="block"><h3>Выручка и прибыль</h3>
       ${line('Работы', r.works)}${line('Подрядчик', -r.sub, 'minus')}${line('Никита', -r.nik, 'minus')}${line('Прибыль СТО', r.stoProfit, 'sub')}
@@ -4294,28 +4675,68 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
   }
   function viewLog() {
     const w = low(ui.logQ || '').split(' ').filter(Boolean);
-    const hay = e => low(e.label + ' ' + (e.info || []).map(i => (LOG_COLL[i.k] || '') + ' ' + i.n + ' ' + (i.f || []).map(f => f.join(' ')).join(' ')).join(' '));
-    const all = D.log.slice().reverse(), list = w.length ? all.filter(e => w.every(t => hay(e).includes(t))) : all;
-    const lim = ui.logLim || 100, idx = new Map(D.log.map((e, i) => [e.id, i]));
-    const bigFrom = (() => { for (let i = D.log.length - 1; i >= 0; i--) if (!D.log[i].rev) return i; return -1; })();
-    const sym = { '+': '+', '-': '−', '~': '✎' };
-    const sumHTML = e => Object.keys(e.cnt || {}).map(k => { const c = e.cnt[k]; return `<span class="lg-c">${esc(LOG_COLL[k] || k)} ${['+', '-', '~'].filter(t => c[t]).map(t => sym[t] + c[t]).join(' ')}</span>`; }).join('');
-    let day = '', out = '';
-    list.slice(0, lim).forEach(e => {
-      const d = new Date(e.at), dk = d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
-      if (dk !== day) { if (day) out += '</ul>'; day = dk; out += `<h4 class="lg-day">${esc(dk)}</h4><ul class="lg-list">`; }
-      const open = ui.logOpen && ui.logOpen.has(e.id), i = idx.get(e.id), n = D.log.length - i, can = i > bigFrom;
-      out += `<li class="${open ? 'is-open' : ''}"><div class="lg-row" role="button" tabindex="0" data-act="log-toggle" data-id="${esc(e.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="lg-t">${d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span><span class="lg-l">${esc(e.label)}</span><span class="lg-s">${sumHTML(e)}</span></div>
-        ${open ? `<div class="lg-det">${(e.info || []).slice(0, ui.logAll && ui.logAll.has(e.id) ? 40 : 8).map(x => `<div class="lg-i"><b>${sym[x.t]} ${esc(LOG_COLL[x.k] || x.k)}</b> ${esc(x.n || '')}${(x.f || []).length ? `<ul>${x.f.map(f => `<li><span class="muted">${esc(f[0])}:</span> ${esc(f[1])} → <b>${esc(f[2])}</b></li>`).join('')}</ul>` : ''}</div>`).join('')}${(e.info || []).length > 8 && !(ui.logAll && ui.logAll.has(e.id)) ? `<button class="link small" style="justify-self:start" data-act="log-all" data-id="${esc(e.id)}">Показать все (${Object.values(e.cnt || {}).reduce((m, c) => m + c['+'] + c['-'] + c['~'], 0)})</button>` : (e.info || []).length >= 40 ? '<p class="muted small">…показаны первые 40 изменений.</p>' : ''}
-          <div class="actions">${!can ? '<span class="muted small">Так далеко назад — только из ежедневной копии.</span>' : ui.logAsk === e.id ? `<span class="small">Отменится действий: <b>${n}</b> — это и все после него. Откат тоже запишется в журнал, его можно будет отменить.</span><button class="btn small danger" data-act="log-yes" data-id="${esc(e.id)}">Да, вернуть</button><button class="btn small ghost" data-act="log-no">Нет</button>` : `<button class="btn small" data-act="log-ask" data-id="${esc(e.id)}">Вернуть как было до этого${n > 1 ? ` (отменить ${n} действ.)` : ''}</button>`}</div></div>` : ''}</li>`;
+    const vis = D.log.filter(e => !e.hid).map(e => ({ e, g: jGroups(e)[0] || '?:' + e.id }));
+    const hay = x => low(x.e.label + ' ' + gTitle(x.g, x.e) + ' ' + jPhrases(x.e).join(' '));
+    const list = (w.length ? vis.filter(x => w.every(t => hay(x).includes(t))) : vis).reverse();
+    const dayKey = at => { const d = new Date(at); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); };
+    const dayName = at => { const d = new Date(at), t = new Date(), y = new Date(Date.now() - 864e5); if (dayKey(at) === dayKey(t)) return 'Сегодня'; if (dayKey(at) === dayKey(y)) return 'Вчера'; return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' }); };
+    const hm = at => new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    /* дни → записи (группы) → правки */
+    const days = []; let cur = null;
+    list.forEach(x => {
+      const dk = dayKey(x.e.at);
+      if (!cur || cur.k !== dk) { cur = { k: dk, name: dayName(x.e.at), groups: new Map() }; days.push(cur); }
+      if (!cur.groups.has(x.g)) cur.groups.set(x.g, []);
+      cur.groups.get(x.g).push(x.e);
     });
-    if (day) out += '</ul>';
+    const lim = ui.logLim || 60; let shown = 0, more = 0;
+    const A = ui.jAsk;
+    const entryHTML = (g, e) => {
+      const ph = jPhrases(e), all = ui.logAll && ui.logAll.has(e.id), cut = all ? ph : ph.slice(0, 6);
+      const delG = jRecs(e).some(x => x.t === '-' && groupOf(x.k, x.old) === g && !x.now && (x.k !== 'parts' || gKind(g) !== 'o' || jRecs(e).some(y => y.k === 'orders' && y.t === '-')));
+      const isAsk = A && A.id === e.id && A.g === g;
+      return `<li><span class="lg-t">${hm(e.at)}</span><div class="lg-ph">${cut.length ? `<ul>${cut.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : `<span class="muted">${esc(e.label)}</span>`}${ph.length > cut.length ? `<button class="link small" data-act="log-all" data-id="${esc(e.id)}">ещё ${ph.length - cut.length}</button>` : ''}
+        ${isAsk ? jAskHTML(g, e) : `<div class="lg-acts">${delG ? `<button class="btn small" data-act="j-ask" data-g="${esc(g)}" data-id="${esc(e.id)}" data-rm="1">Восстановить</button>` : `<button class="link small" data-act="j-ask" data-g="${esc(g)}" data-id="${esc(e.id)}" title="Вернуть только эту запись к тому, как она была до ${hm(e.at)}. Остальное не тронется.">Вернуть как было до ${hm(e.at)}</button>`}</div>`}</div></li>`;
+    };
+    const jLockedFor = (g, e) => { const { steps } = jSteps(g, e.id, A.rm), rel = A.rel === false ? [] : jRelated(g, steps); return jClosedMonths([g].concat(rel), steps).some(isLockedM); };
+    const relHTML = (g, e) => {
+      const { steps } = jSteps(g, e.id, A.rm), rel = jRelated(g, steps), cm = jClosedMonths([g].concat(A.rel === false ? [] : rel), steps);
+      return (rel.length ? `<div class="lg-rel"><span>Эти действия задели ещё:</span><ul>${rel.slice(0, 10).map(h => `<li>${esc(gTitle(h, e))}</li>`).join('')}${rel.length > 10 ? `<li class="muted">и ещё ${rel.length - 10}</li>` : ''}</ul>
+          <label class="f chk"><input type="checkbox" data-jrel="1" ${A.rel === false ? '' : 'checked'}> Вернуть и их тоже — только то, что поменяли эти действия</label></div>` : '')
+        + (cm.some(isLockedM) ? `<div class="lg-warn">🔒 <b>${cm.filter(isLockedM).map(m => esc(S.monthLabel(m).toLowerCase())).join(', ')}</b> — ${cm.filter(isLockedM).length > 1 ? 'закрыты' : 'закрыт'}. Вернуть нельзя, пока не откроешь месяц: «Отчёт» → «Открыть для правки».</div>` : '')
+        + (cm.some(m => !isLockedM(m)) ? `<div class="lg-warn">⚠ ${cm.filter(m => !isLockedM(m)).map(m => esc(S.monthLabel(m).toLowerCase())).join(', ')} открыт для правки. После возврата проверь сверку и закрой месяц снова.</div>` : '');
+    };
+    const jAskHTML = (g, e) => {
+      if (A.rm) return `<div class="lg-ask"><span>Восстановить <b>${esc(gTitle(g, e))}</b> — как было до удаления?</span>${relHTML(g, e)}<div class="actions">${jLockedFor(g, e) ? '' : '<button class="btn small primary" data-act="j-yes">Да, восстановить</button>'}<button class="btn small ghost" data-act="j-no">Нет</button></div></div>`;
+      const pv = jPreview(g, e.id);
+      return `<div class="lg-ask"><span><b>${esc(gTitle(g, e))}</b> станет как было до ${hm(e.at)}${dayName(e.at) !== 'Сегодня' ? ' (' + esc(dayName(e.at)) + ')' : ''}. Отменятся только её изменения:</span>
+        <ul>${pv.slice(0, 12).map(p => `<li><span class="muted">${esc(new Date(p.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span> ${esc(p.ph.join('; ') || '—')}</li>`).join('')}${pv.length > 12 ? `<li class="muted">и ещё ${pv.length - 12}</li>` : ''}</ul>
+        ${relHTML(g, e)}<span class="muted small">Остальные наряды, оплаты и записи не изменятся. Если передумаешь — ↶.</span>
+        <div class="actions">${jLockedFor(g, e) ? '' : '<button class="btn small primary" data-act="j-yes">Да, вернуть</button>'}<button class="btn small ghost" data-act="j-no">Нет</button></div></div>`;
+    };
+    let out = '';
+    days.forEach(d => {
+      const gs = [...d.groups.entries()];
+      if (shown >= lim) { more += gs.length; return; }
+      out += `<h4 class="lg-day">${esc(d.name)}</h4><ul class="lg-list">`;
+      gs.forEach(([g, es]) => {
+        if (shown >= lim) { more++; return; }
+        shown++;
+        const key = d.k + '|' + g, open = (ui.logOpen && ui.logOpen.has(key)) || (A && A.g === g && es.some(e => e.id === A.id));
+        const last = es[0], ph = jPhrases(last, g);
+        const sum = gKind(g) === '?' ? '' : es.length > 1 ? `${es.length} ${es.length < 5 ? 'изменения' : 'изменений'}` : (ph[0] || last.label) + (ph.length > 1 ? ` и ещё ${ph.length - 1}` : '');
+        out += `<li class="${open ? 'is-open' : ''}"><div class="lg-row" role="button" tabindex="0" data-act="log-toggle" data-id="${esc(key)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="lg-t">${hm(last.at)}</span><span class="lg-l"><b>${esc(gTitle(g, last))}</b><span class="lg-sum">${esc(sum)}</span></span></div>
+          ${open ? `<ul class="lg-ents">${es.map(e => entryHTML(g, e)).join('')}</ul>` : ''}</li>`;
+      });
+      out += '</ul>';
+    });
     const R = ui.copyRestore;
-    return `${R ? `<div class="note bad"><span>Восстановить базу из копии <b>«${esc(R.name)}»</b>? Всё, что внесено после неё, пропадёт из базы (но этот шаг можно будет откатить в журнале).</span><div class="actions"><button class="btn small danger" data-act="copy-restore-yes">Да, восстановить</button><button class="btn small ghost" data-act="copy-restore-no">Нет</button></div></div>` : ''}
-      <div class="toolbar"><input id="lgq" class="search" type="search" placeholder="Поиск по журналу: клиент, номер наряда, запчасть, действие" value="${esc(ui.logQ || '')}" data-act="log-search" autocomplete="off"></div>
-      <section class="block"><div class="block-head"><h3>Журнал действий</h3><span class="muted small">хранится в файле базы, последние ${LOG_DAYS} дней</span></div>
+    return `${R ? `<div class="note bad"><span>Восстановить базу из копии <b>«${esc(R.name)}»</b>? Всё, что внесено после неё, пропадёт из базы (этот шаг можно отменить ↶).</span><div class="actions"><button class="btn small danger" data-act="copy-restore-yes">Да, восстановить</button><button class="btn small ghost" data-act="copy-restore-no">Нет</button></div></div>` : ''}
+      <div class="toolbar"><input id="lgq" class="search" type="search" placeholder="Поиск: номер наряда, клиент, запчасть, оплата" value="${esc(ui.logQ || '')}" data-act="log-search" autocomplete="off"></div>
+      <section class="block"><div class="block-head"><h3>Журнал</h3><span class="muted small">последние ${LOG_DAYS} дней · отменённое не показывается</span></div>
+        <p class="muted small">Нажми на строку — увидишь все изменения этой записи за день. «Вернуть как было» и «Восстановить» меняют только эту запись, остальное не трогают.</p>
         ${list.length ? out : `<p class="muted">${w.length ? 'Ничего не нашёл.' : 'Пока пусто — здесь появится каждое действие: сохранение наряда, оплата, правка клиента и т. д.'}</p>`}
-        ${list.length > lim ? `<div class="actions"><button class="btn small" data-act="log-more">Показать ещё (${list.length - lim})</button></div>` : ''}</section>
+        ${more ? `<div class="actions"><button class="btn small" data-act="log-more">Показать ещё (${more})</button></div>` : ''}</section>
       <section class="block"><div class="block-head"><h3>Ежедневные копии</h3></div>${cloud ? `<p class="small">Раз в день программа кладёт копию базы на Яндекс Диск в папку «Приложения/AGservice/Копии» и хранит последние ${CLOUD_KEEP}.</p>` : ''}${copyStatusHTML(true)}</section>`;
   }
   function viewSettings() {
@@ -4398,6 +4819,9 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     const mnav = (k, d) => (d === '0' ? NOW_M() : S.addMonths(ui[k], +d));
     if (act === 'tot-toggle') { ui.totOpen = !ui.totOpen; const sec = b.closest('.totals'); if (sec) sec.classList.toggle('open', ui.totOpen); b.setAttribute('aria-expanded', ui.totOpen); const ar = b.querySelector('.tot-arr'); if (ar) ar.textContent = ui.totOpen ? '▾' : '▴'; return; }
     switch (act) {
+      case 'oilres-open': ui.oilResOpen = !ui.oilResOpen; ui.oilResVal = null; render(); if (ui.oilResOpen) setTimeout(() => { const t = $('#oilres'); if (t) { t.focus(); t.select(); } }, 30); break;
+      case 'oilres-close': ui.oilResOpen = false; ui.oilResVal = null; render(); break;
+      case 'oilres-save': { const v = numIn(String(ui.oilResVal ?? oilPct())); if (v == null || v < 0 || v > 200) { toast('Укажи процент от 0 до 200'); break; } ui.oilResOpen = false; ui.oilResVal = null; if (v !== oilPct()) { D.cfg.oilReserve = v; toast('Запас ' + v + '% — для новых продаж масла'); changed(); } else render(); break; }
       case 'theme': ui.theme = b.dataset.k; applyTheme(ui.theme); try { localStorage.setItem('sto.theme', ui.theme); } catch (er) {} render(); break;
       case 'tab': ui.tab = b.dataset.k; try { localStorage.setItem('sto.tab', ui.tab); } catch (er) {} render(); window.scrollTo(0, 0); break;
       case 'filter': ui.filter = b.dataset.k; ui.limit = 40; render(); break;
@@ -4421,6 +4845,9 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       case 'log-ask': ui.logAsk = b.dataset.id; render(); break;
       case 'log-no': ui.logAsk = null; render(); break;
       case 'log-yes': logRollback(b.dataset.id); break;
+      case 'j-ask': ui.jAsk = { g: b.dataset.g, id: b.dataset.id, rm: !!b.dataset.rm }; render(); break;
+      case 'j-no': ui.jAsk = null; render(); break;
+      case 'j-yes': { const a = ui.jAsk; if (a) jRestore(a.g, a.id, a.rm); break; }
       case 'log-more': ui.logLim = (ui.logLim || 100) + 200; render(); break;
       case 'copy-pick': copyPickDir(); break;
       case 'copy-now': copyDaily(true).then(() => { if (cloud) mirrorWrite(true); }); break;
@@ -4546,7 +4973,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       case 'sale-save': saveSale(); break;
       case 'sale-del-ask': ui.sale.confirmDelete = true; paintSale(); break;
       case 'sale-del-no': ui.sale.confirmDelete = false; paintSale(); break;
-      case 'sale-del': { const Sx = ui.sale, ids = new Set(Sx.origRows.map(p => p.id)); D.parts = D.parts.filter(p => !ids.has(p.id)); if (Sx.link) D.pays = D.pays.filter(p => p.link !== Sx.link); ui.sale = null; paintSale(); toast('Продажа удалена'); changed(); break; }
+      case 'sale-del': { ui.stash = { sale: ui.sale }; const Sx = ui.sale, ids = new Set(Sx.origRows.map(p => p.id)); D.parts = D.parts.filter(p => !ids.has(p.id)); if (Sx.link) D.pays = D.pays.filter(p => p.link !== Sx.link); ui.sale = null; paintSale(); toast('Продажа удалена'); changed(); break; }
       case 'sp-add': ui.sale.rows.push(saleRowNew()); paintSale(); break;
       case 'sp-del': ui.sale.rows.splice(+b.dataset.i, 1); paintSale(); break;
       case 'sp-no': { const p = ui.sale.rows[+b.dataset.i]; p.no = !p.no; paintSale(); break; }
@@ -4629,6 +5056,10 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
       case 'close-month-ask': ui.confirmClose = true; render(); break;
       case 'close-month-no': ui.confirmClose = false; render(); break;
       case 'close-month': closeMonth(); break;
+      case 'month-unlock-ask': ui.confirmUnlock = ui.month; render(); break;
+      case 'month-unlock-no': ui.confirmUnlock = null; render(); break;
+      case 'month-unlock': { const c = D.cfg.closed && D.cfg.closed[ui.month]; ui.confirmUnlock = null; if (c) { c.unlocked = S.todayISO(); toast(S.monthLabel(ui.month) + ' открыт для правки'); changed('Открыт для правки: ' + S.monthLabel(ui.month)); } break; }
+      case 'month-lock': { const c = D.cfg.closed && D.cfg.closed[ui.month]; if (c) { delete c.unlocked; toast(S.monthLabel(ui.month) + ' снова закрыт'); changed('Снова закрыт: ' + S.monthLabel(ui.month)); } break; }
       case 'exp-kind': ui.expForm.kind = b.dataset.k; ui.expForm.what = b.dataset.k === 'fixed' ? 'Аренда' : ''; if (b.dataset.k === 'fixed' && ['piggy', 'anton', 'gleb'].includes(ui.expForm.how)) ui.expForm.how = 'ip'; render(); break;
       case 'exp-add': addExpense(); break;
       case 'se-open': ui.fxEdit = null; stoEditOpen(b.dataset.id); break;
@@ -4696,7 +5127,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
         const Sx = ui.sale, rows = Sx.rows.filter(p => (p.name || '').trim() || p.art || p.sum).map(p => ({ sup: p.sup, art: p.art, name: p.name, brand: p.brand, price: p.price, qty: p.qty, sum: p.sum, cost: p.cost, no: p.no }));
         ui.sale = null; paintSale(); stockToOrder(rows, null); break;
       }
-      case 'stock-new': ui.stockForm = { mode: 'new', art: '', name: '', brand: '', price: null, qty: 0, oil: false, cost: null }; render(); break;
+      case 'stock-new': ui.stockForm = { mode: 'new', art: '', name: '', brand: '', price: null, qty: 0, oil: false, cost: null, grp: '' }; render(); setTimeout(() => { const t = $('#sn-art'); if (t) { t.scrollIntoView({ block: 'center' }); t.focus(); } }, 30); break;
       case 'stock-edit': { const s = D.stock.find(x => x.id === b.dataset.id); ui.stockForm = { mode: 'edit', id: s.id, art: s.art, name: s.name, brand: s.brand, price: s.price, qty: S.stockQty(s, D), oil: s.oil, cost: s.cost, grp: s.grp || '' }; render(); break; }
       case 'stock-cancel': ui.stockForm = null; render(); break;
       case 'stock-save': saveStockItem(); break;
@@ -4790,6 +5221,9 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     if (el.dataset.cf) { ui.cdraft[el.dataset.cf] = el.value; return; }
     if (el.dataset.cc) { const c = ui.cdraft.cars.find(x => x.id === el.dataset.cc); c[el.dataset.k] = el.value; return; }
     if (el.dataset.ssel) { ui.stockSel = ui.stockSel || new Set(); if (el.checked) ui.stockSel.add(el.dataset.ssel); else ui.stockSel.delete(el.dataset.ssel); render(); return; }
+    if (el.dataset.oilres) { ui.oilResVal = el.value; return; }
+    if (el.dataset.jrel) { if (ui.jAsk) ui.jAsk.rel = el.checked; render(); return; }
+    if (el.dataset.sf === 'blk') { const f = ui.stockForm; f.oil = el.value === 'oil'; f.grp = el.value === 'sto' ? 'sto' : ''; render(); return; }
     if (el.dataset.sf) { const f = ui.stockForm, k = el.dataset.sf; f[k] = el.type === 'checkbox' ? el.checked : ['qty', 'cost', 'price'].includes(k) ? numIn(el.value) : el.value; if (k === 'oil') render(); return; }
     if (el.dataset.xp) { ui.xpaste[el.dataset.xp] = el.value; if (el.dataset.xp === 'how') ui.xpaste.howSet = true; if (el.dataset.xp !== 'date') render(); return; }
     if (el.dataset.xpq != null) { ui.xpaste.items[+el.dataset.xpq].qty = numIn(el.value) || 0; clearTimeout(ui.xpT); ui.xpT = setTimeout(render, 400); return; }
@@ -4891,9 +5325,18 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     if (!f.name) { toast('Напиши название'); return; }
     if (f.mode === 'edit') {
       const s = D.stock.find(x => x.id === f.id);
-      const curQ = S.stockQty(s, D);
+      const curQ = S.stockQty(s, D), oldA = s.art, newA = (f.art || '').trim();
+      let renamed = 0;
+      if (newA && oldA && newA !== oldA) {
+        /* старые записи с новым артикулом, которые раньше не были связаны со складом, — их прошлые цифры не трогаем */
+        if (s.oil && !D.stock.some(x => x !== s && x.art === newA)) D.parts.forEach(p => { if (p.art === newA && p.oilCost == null && p.client !== 'СТО (масло/антифриз)') { p.oilCost = 0; p.oilArt = newA; } });
+        D.parts.forEach(p => { if (p.art === oldA) { p.art = newA; if (p.oilArt === oldA) p.oilArt = newA; renamed++; } });
+      }
       Object.assign(s, { art: f.art || s.art, name: f.name, brand: f.brand, price: f.price, cost: f.oil ? f.cost : s.cost, oil: !!f.oil, grp: f.oil ? undefined : (f.grp || undefined) });
-      if (f.qty != null && f.qty !== curQ) s.qtyBase = r2((s.qtyBase || 0) + (f.qty - curQ));
+      if (renamed) { X = S.index(D); }
+      const nowQ = S.stockQty(s, D), want = f.qty != null ? f.qty : curQ;
+      if (Math.abs(want - nowQ) > 1e-9) s.qtyBase = r2((s.qtyBase || 0) + (want - nowQ));
+      if (renamed) toast(`Артикул заменён и в ${renamed} записях (продажи и покупки этой позиции)`);
     } else D.stock.push({ id: uid('s'), art: f.art || f.name, name: f.name, brand: f.brand, price: f.price, cost: f.oil ? f.cost : null, qtyBase: f.qty || 0, oil: !!f.oil, grp: f.oil ? undefined : (f.grp || undefined) });
     ui.stockForm = null; toast('Склад сохранён'); changed();
   }
