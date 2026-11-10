@@ -433,6 +433,10 @@ html.hide-cost .costeye .eye-off { display: inline; }
 html.hide-cost .cst, html.hide-cost td.cst, html.hide-cost th.cst, html.hide-cost .cst-wrap { visibility: hidden; }
 .ckbadge.waitb { background: var(--work-soft); color: var(--work); }
 .wait-day { display: grid; gap: 6px; }
+.wck { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.wck input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
+.wait-day ul.plain li.sel { background: var(--accent-soft); }
+.stk-bar-pad { height: 72px; }
 .o-main .hit { flex-basis: 100%; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .link.muted { color: var(--muted); font-weight: 400; }
 .rk-other { align-self: center; }
@@ -2345,6 +2349,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     let html = banners() + renumNoteHTML();
     html += ({ orders: viewOrders, sales: viewSales, wait: viewWait, sched: viewSched, clients: viewClients, money: viewMoney, stock: viewStock, exps: viewExps, report: viewReport, log: viewLog, settings: viewSettings }[ui.tab] || viewOrders)();
     setHTML($('#view'), html);
+    document.querySelectorAll('#view [data-mixed]').forEach(e => { e.indeterminate = true; });
     restoreFocus(keep);
     paintStatus(); paintEditor();
   }
@@ -4297,6 +4302,9 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (ui.rkFail) h += `<div class="note"><span><b>Помощник Rossko не ответил.</b> Если кнопка «Обновить из Rossko» ещё не подключена — один раз запусти файл «Rossko — подключить кнопку.bat» в папке с помощником. Если подключена — проверь, что браузер не заблокировал запуск (значок в адресной строке), и запусти Rossko.bat вручную.</span><div class="actions"><button class="btn small ghost" data-act="rk-fail-close">Скрыть</button></div></div>`;
     const rkOn = ui.rkCheck && ui.rk;
     const rn = rkOn ? rkNew() : [];
+    const allIds = new Set(all.map(p => String(p.id)));
+    ui.waitSel = new Set([...(ui.waitSel || [])].filter(id => allIds.has(id)));
+    const WS = ui.waitSel;
     if (rkOn) h += rkFlatHTML('wait');
     if (rkOn) {
       const rs = all.filter(p => low(p.sup) === 'rossko'), got = rs.filter(p => { const m = rkMatch(p); return m && m.status === 2; }), miss = rs.filter(p => !rkMatch(p));
@@ -4313,13 +4321,18 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       h += `<section class="block"><div class="block-head"><h3>${esc(sup)} <span class="muted small">${ids.length} шт.</span></h3>
         ${Object.keys(days).length > 1 ? `<button class="btn small" data-act="wait-ok" data-ids="${ids.join(',')}">Пришло всё от ${esc(sup)}</button>` : ''}</div>`;
       Object.keys(days).sort().forEach(d => {
-        const rows = days[d];
-        h += `<div class="wait-day"><div class="wait-head"><b>Заказ от ${dshort(d)}</b><button class="btn small primary" data-act="wait-ok" data-ids="${rows.map(p => p.id).join(',')}">Пришло всё (${rows.length})</button></div>
-          <ul class="plain">${rows.map(p => `<li><span class="mono">${esc(p.art || '')}</span><span>${esc(p.name || '')}${rkOn && low(p.sup) === 'rossko' ? (rkMatch(p) ? rkPill(rkMatch(p).status) : ' <span class="pill">Rossko: не нашёл</span>') : ''}<div class="muted small">${esc(waitWho(p))}</div></span>
+        const rows = days[d], dIds = rows.map(p => String(p.id)), dAll = dIds.every(id => WS.has(id)), dSome = dIds.some(id => WS.has(id));
+        h += `<div class="wait-day"><div class="wait-head"><label class="wck"><input type="checkbox" data-wday="${esc(dIds.join(','))}" ${dAll ? 'checked' : ''} ${!dAll && dSome ? 'data-mixed="1"' : ''} aria-label="Выбрать весь заказ"><b>Заказ от ${dshort(d)}</b></label><button class="btn small primary" data-act="wait-ok" data-ids="${rows.map(p => p.id).join(',')}">Пришло всё (${rows.length})</button></div>
+          <ul class="plain">${rows.map(p => `<li class="${WS.has(String(p.id)) ? 'sel' : ''}"><span class="mono"><label class="wck"><input type="checkbox" data-wsel="${esc(String(p.id))}" ${WS.has(String(p.id)) ? 'checked' : ''} aria-label="Выбрать"><span>${esc(p.art || '')}</span></label></span><span>${esc(p.name || '')}${rkOn && low(p.sup) === 'rossko' ? (rkMatch(p) ? rkPill(rkMatch(p).status) : ' <span class="pill">Rossko: не нашёл</span>') : ''}<div class="muted small">${esc(waitWho(p))}</div></span>
             <span class="nowrap">${fmt(p.qty, p.qty % 1 ? 2 : 0)} шт.</span><button class="btn small" data-act="wait-ok" data-ids="${p.id}">Пришло</button></li>`).join('')}</ul></div>`;
       });
       h += `</section>`;
     });
+    if (WS.size) {
+      const sel = all.filter(p => WS.has(String(p.id)));
+      h += `<div class="stk-bar"><b>Выбрано: ${sel.length}</b><span class="muted small">${esc(sel.map(p => p.name || p.art).join(', ').slice(0, 120))}</span>
+        <span class="rk-to"><button class="btn small primary" data-act="wait-ok" data-ids="${esc(sel.map(p => p.id).join(','))}">Пришло выбранное (${sel.length})</button><button class="btn small ghost" data-act="wait-sel-clear">Снять выбор</button></span></div><div class="stk-bar-pad"></div>`;
+    }
     return h;
   }
   function plural(n, a, b, c) { const m = n % 10, mm = n % 100; return m === 1 && mm !== 11 ? a : m >= 2 && m <= 4 && (mm < 12 || mm > 14) ? b : c; }
@@ -5067,7 +5080,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'rk-fail-close': ui.rkFail = false; render(); break;
       case 'rk-check': rkRead(false).then(d => { if (d) { ui.rkCheck = true; render(); } }); break;
       case 'rk-check-pick': rkRead(true).then(d => { if (d) { ui.rkCheck = true; render(); } }); break;
-      case 'wait-ok': markArrived(b.dataset.ids.split(',')); break;
+      case 'wait-ok': { const ids = b.dataset.ids.split(','); if (ui.waitSel) ids.forEach(id => ui.waitSel.delete(id)); markArrived(ids); break; }
+      case 'wait-sel-clear': ui.waitSel = new Set(); render(); break;
       case 'wait-undo': if (ui.waitMsg) markArrived(ui.waitMsg.ids, true); break;
       case 'wait-msg-close': ui.waitMsg = null; render(); break;
       case 'go-wait': ui.tab = 'wait'; render(); break;
@@ -5400,6 +5414,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.cmv) { ui.cmove = ui.cmove || new Set(); if (el.checked) ui.cmove.add(el.dataset.cmv); else ui.cmove.delete(el.dataset.cmv); if (!ui.cmove.size) { ui.cmove = null; if (ui.cpick && ui.cpick.mode !== 'merge') ui.cpick = null; } else if (ui.cpick && ui.cpick.mode === 'merge') ui.cpick = null; render(); return; }
     if (el.dataset.cf) { ui.cdraft[el.dataset.cf] = el.value; return; }
     if (el.dataset.cc) { const c = ui.cdraft.cars.find(x => x.id === el.dataset.cc); c[el.dataset.k] = el.value; return; }
+    if (el.dataset.wsel) { ui.waitSel = ui.waitSel || new Set(); if (el.checked) ui.waitSel.add(el.dataset.wsel); else ui.waitSel.delete(el.dataset.wsel); render(); return; }
+    if (el.dataset.wday) { ui.waitSel = ui.waitSel || new Set(); el.dataset.wday.split(',').forEach(id => el.checked ? ui.waitSel.add(id) : ui.waitSel.delete(id)); render(); return; }
     if (el.dataset.ssel) { ui.stockSel = ui.stockSel || new Set(); if (el.checked) ui.stockSel.add(el.dataset.ssel); else ui.stockSel.delete(el.dataset.ssel); render(); return; }
     if (el.dataset.oilres) { ui.oilResVal = el.value; return; }
     if (el.dataset.jrel) { if (ui.jAsk) ui.jAsk.rel = el.checked; render(); return; }
