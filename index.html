@@ -568,6 +568,7 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 
 /* ===== телефон ===== */
 .tot-bar { display: none; }
+.cmrg { flex-basis: 100%; display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); } .cmrg .f { max-width: 520px; }
 .rk-flat .rk-all { margin: 4px 0; }
 .rk-rows { margin: 0; padding: 0; border-top: 1px solid var(--line); }
 ul.plain.rk-rows > li { display: grid; grid-template-columns: 22px minmax(0, 1fr) 260px 28px; gap: 8px; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); }
@@ -3982,13 +3983,42 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const st = X.cstat[d.id] || { orders: [] }, nOrd = st.orders.filter(o => ids.includes(o.carId)).length;
     const P = ui.cpick && ui.cpick.mode !== 'merge' ? ui.cpick : null;
     const head = `<b>Отмечено: ${cars.map(c => esc(c.car || 'без названия')).join(', ')}</b> <span class="muted small">(нарядов по ним: ${nOrd} — переедут вместе с машинами)</span>`;
-    if (!P) return `<div class="note cl-movebar"><div>${head}</div>${salesHTML}<div class="actions"><button class="btn small primary" data-act="cmv-new">Вынести в нового клиента</button><button class="btn small" data-act="cmv-other">Передать другому клиенту…</button><button class="btn small ghost" data-act="cmv-clear">Снять отметки</button></div></div>`;
+    if (!P) return `<div class="note cl-movebar"><div>${head}</div>${ui.cmrg ? '' : salesHTML}<div class="actions"><button class="btn small primary" data-act="cmv-new">Вынести в нового клиента</button><button class="btn small" data-act="cmv-other">Передать другому клиенту…</button>${cars.length >= 2 ? `<button class="btn small" data-act="cmrg-ask">Это одна машина — объединить</button>` : ''}<button class="btn small ghost" data-act="cmv-clear">Снять отметки</button></div>${ui.cmrg ? carMergeHTML(d, cars) : ''}</div>`;
     if (P.mode === 'new') return `<div class="note cl-movebar"><div>${head}</div>
       <div class="grid g3"><label class="f">Имя<input id="cmn-name" value="${esc(P.name)}" data-cmn="name"></label><label class="f">Прозвище / откуда<input id="cmn-nick" value="${esc(P.nick)}" data-cmn="nick" placeholder="чтобы отличать от «${esc(label(d))}»"></label><label class="f">Телефон<input id="cmn-phone" value="${esc(P.phone)}" data-cmn="phone" inputmode="tel"></label></div>
       ${salesHTML}${P.err ? `<p class="neg small">${esc(P.err)}</p>` : ''}
       <div class="actions"><button class="btn small primary" data-act="cmv-do">Создать клиента и перенести</button><button class="btn small ghost" data-act="cp-cancel">Отмена</button></div></div>`;
     return `<div class="note cl-movebar"><div>${head}</div>${salesHTML}${clPicker(d)}
       <div class="actions"><button class="btn small primary" data-act="cmv-do"${P.sel ? '' : ' disabled'}>Перенести к выбранному</button><button class="btn small ghost" data-act="cp-cancel">Отмена</button></div></div>`;
+  }
+  /* несколько записей одной и той же машины → одна: наряды, записи и покупки переходят на неё */
+  function carMergeHTML(d, cars) {
+    const keep = ui.cmrg.keep && cars.some(c => c.id === ui.cmrg.keep) ? ui.cmrg.keep : (cars.find(c => c.vin) || cars[0]).id;
+    ui.cmrg.keep = keep;
+    const k = cars.find(c => c.id === keep), plate = cars.map(c => c.plate).find(Boolean) || '', vin = cars.map(c => c.vin).find(Boolean) || '';
+    return `<div class="cmrg"><b>Объединить в одну машину</b>
+      <label class="f">Какое название оставить<select id="cmrg-keep" data-cmrg="keep">${cars.map(c => `<option value="${esc(c.id)}"${c.id === keep ? ' selected' : ''}>${esc(c.car || 'без названия')}${c.plate ? ' · ' + esc(c.plate) : ''}${c.vin ? ' · ' + esc(c.vin) : ''}</option>`).join('')}</select></label>
+      <p class="small">Получится: <b>${esc(k.car || '')}</b>${(k.plate || plate) ? ' · ' + esc(k.plate || plate) : ''}${(k.vin || vin) ? ' · VIN ' + esc(k.vin || vin) : ''}. Все наряды, записи на ремонт и покупки без наряда по этим машинам будут под этим названием. Пустой номер или VIN подставится из другой записи.</p>
+      ${new Set(cars.map(c => (c.vin || '').trim().toUpperCase()).filter(Boolean)).size > 1 ? '<p class="lg-warn">⚠ У этих машин <b>разные VIN</b> — скорее всего, это разные машины. Объединяй, только если VIN где-то вписан с ошибкой.</p>' : ''}
+      <div class="actions"><button class="btn small primary" data-act="cmrg-do">Объединить</button><button class="btn small ghost" data-act="cmrg-no">Отмена</button></div></div>`;
+  }
+  function mergeCars() {
+    if (clDraftDirty()) { toast('Сначала нажми «Сохранить клиента»'); return; }
+    const d = D.clients.find(x => x.id === ui.cdraft.id); if (!d) return;
+    const ids = [...(ui.cmove || [])], cars = d.cars.filter(c => ids.includes(c.id)); if (cars.length < 2) return;
+    const keep = cars.find(c => c.id === ui.cmrg.keep) || cars[0], gone = cars.filter(c => c !== keep), goneIds = new Set(gone.map(c => c.id));
+    if (!keep.plate) keep.plate = cars.map(c => c.plate).find(Boolean) || '';
+    if (!keep.vin) keep.vin = cars.map(c => c.vin).find(Boolean) || '';
+    const names = new Set(cars.map(c => low((c.car || '').trim())).filter(Boolean));
+    let no = 0, ns = 0;
+    D.orders.forEach(o => { if (o.cid === d.id && (goneIds.has(o.carId) || o.carId === keep.id)) { o.carId = keep.id; o.car = keep.car; o.plate = keep.plate; o.vin = keep.vin; no++; } });
+    D.parts.forEach(p => { if (p.order != null) { const o = X.ordersByNum[p.order]; if (o && o.cid === d.id && o.carId === keep.id) { p.car = keep.car; p.plate = keep.plate; p.vin = keep.vin; } } });
+    (X.salesByPerson[d.id] || []).forEach(g => { if (g.car && names.has(low(g.car.trim()))) { g.rows.forEach(p => { p.car = keep.car; p.cid = d.id; }); ns++; } });
+    D.schedule.forEach(s => { if (s.cid === d.id && goneIds.has(s.carId)) s.carId = keep.id; });
+    d.cars = d.cars.filter(c => !goneIds.has(c.id));
+    ui.cdraft = clone(d); ui.cmove = null; ui.cmrg = null; ui.cpick = null; ui.cmvSale = null; ui.cmvSaleOpen = null;
+    toast(`Машины объединены в «${keep.car}»: нарядов ${no}, покупок без наряда ${ns}`);
+    changed('Объединены машины клиента ' + label(d) + ': ' + cars.map(c => c.car).join(' + '));
   }
   function clDraftDirty() { const d = ui.cdraft, o = d && d.id && D.clients.find(x => x.id === d.id); return o && JSON.stringify(o) !== JSON.stringify(d); }
   /* перенести отмеченные машины (с их нарядами, записями и покупками) к другому клиенту */
@@ -5002,6 +5032,9 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'rk-put': rkPut(); break;
       case 'rk-add': rkAdd(b.dataset.k); break;
       case 'rk-done-x': ui.rkDone = ''; render(); break;
+      case 'cmrg-ask': ui.cmrg = { keep: null }; render(); break;
+      case 'cmrg-no': ui.cmrg = null; render(); break;
+      case 'cmrg-do': mergeCars(); break;
       case 'renum-ok': ui.renumNote = null; render(); break;
       case 'rk-hide-line': { D.cfg.rkHiddenLines = (D.cfg.rkHiddenLines || []).concat(b.dataset.id); rkSelSet().delete(b.dataset.id); toast('Строка убрана из «Не внесено»'); changed(); if (ui.editor) paintEditor(); if (ui.sale) paintSale(); break; }
       case 'rk-to-order': {
@@ -5373,6 +5406,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.rksel != null) { const S2 = rkSelSet(); if (el.checked) S2.add(el.dataset.rksel); else S2.delete(el.dataset.rksel); rkRepaintAll(); return; }
     if (el.dataset.rkselall != null) { const S2 = rkSelSet(); rkLines().forEach(L => { if (el.checked) S2.add(L.key); else S2.delete(L.key); }); rkRepaintAll(); return; }
     if (el.dataset.rkhow != null) { ui.rkHow = el.value; return; }
+    if (el.dataset.cmrg) { if (ui.cmrg) ui.cmrg.keep = el.value; render(); return; }
     if (el.closest('#editor')) { if (el.tagName === 'SELECT' || el.type === 'checkbox') onEditorInput(el); return; }
     if (el.closest('#saleEd')) { if (el.dataset.sa === 'client') onSaleInput(el); return; }
     if ((a === 'xl-create' || a === 'xl-reload') && el.files && el.files[0]) { readExcel(el.files[0], a === 'xl-create' ? 'create' : 'replace'); el.value = ''; return; }
