@@ -568,6 +568,9 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 
 /* ===== телефон ===== */
 .tot-bar { display: none; }
+.clq-found { list-style: none; margin: 0; padding: 4px 10px 8px 34px; font-size: 13px; display: grid; gap: 2px; }
+.clq-found li::before { content: '🔎 '; font-size: 11px; }
+li.clq-pre { list-style: none; border: 0 !important; padding: 0 !important; background: none !important; }
 .cmrg { flex-basis: 100%; display: grid; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); } .cmrg .f { max-width: 520px; }
 .rk-flat .rk-all { margin: 4px 0; }
 .rk-rows { margin: 0; padding: 0; border-top: 1px solid var(--line); }
@@ -3906,19 +3909,30 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     ui.tab = 'clients'; try { localStorage.setItem('sto.tab', ui.tab); } catch (er) {}
     openClient(id);
   }
-  function openClient(id) {
+  function openClient(id) { ui.clQ = '';
     const p = X.clientById[id];
     ui.cdraft = clone(p); ui.cerr = ''; ui.cdelAsk = false; ui.cmove = null; ui.cpick = null; ui.cmvSale = null; ui.cmvSaleOpen = null;
     render(); window.scrollTo(0, 0);
   }
+  /* поиск по запчастям и работам клиента: артикул, название, бренд */
+  function clqMatch(q) {
+    const w = low(q || '').split(/\s+/).filter(Boolean); if (!w.length) return null;
+    const an = x => String(x || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase();
+    return p => { const hay = low([p.name, p.brand, p.art].join(' ')), ah = an(p.art); return w.every(t => hay.includes(t) || (an(t).length >= 3 && ah.includes(an(t)))); };
+  }
+  const clqLine = (p, isWork) => isWork ? `<li><span class="muted small">работа</span> ${esc(p.name || '')}${p.sum ? ' · ' + rub(p.sum) : ''}</li>`
+    : `<li>${esc(p.name || '')}${p.brand ? ' <span class="muted">' + esc(p.brand) + '</span>' : ''}${p.art ? ' <span class="mono muted small">' + esc(p.art) + '</span>' : ''} · ${fmt(p.qty || 0, (p.qty || 0) % 1 ? 2 : 0)} шт. · ${rub(p.sum || 0)}${p.no ? ' <span class="pill st-wait">НЕТ</span>' : ''}${p.ret ? ' <span class="pill">возврат</span>' : ''}${p.sup ? ' <span class="muted small">' + esc(p.sup) + '</span>' : ''}</li>`;
   function viewClientCard() {
     const d = ui.cdraft, isNew = !d.id;
     const st = (d.id && X.cstat[d.id]) || { count: 0, orders: [] };
-    const orders = st.orders.slice().sort((a, b) => (b.start || b.doneDate || '').localeCompare(a.start || a.doneDate || ''));
+    const mq = clqMatch(ui.clQ), hits = {};
+    const ordersAll = st.orders.slice().sort((a, b) => (b.start || b.doneDate || '').localeCompare(a.start || a.doneDate || ''));
+    const orders = !mq ? ordersAll : ordersAll.filter(o => { const ps = (o.num != null ? X.partsByOrder[o.num] || [] : []).filter(mq), ws = (o.works || []).filter(w => mq({ name: w.name })); if (ps.length || ws.length) { hits[o.id] = { ps, ws }; return true; } return false; });
+    const salesAll = (!isNew && X.salesByPerson[d.id]) || [], sales = !mq ? salesAll : salesAll.filter(g => { const ps = g.rows.filter(mq); if (ps.length) { hits[g.id] = { ps, ws: [] }; return true; } return false; });
     let total = 0, debt = 0;
     const rows = orders.map(o => { const t = S.orderTotals(o, X); total += t.total; if (o.doneDate && t.debt > 5) debt += t.debt; const car = d.cars.find(c => c.id === o.carId);
-      const open = ui.openRows.has(o.id);
-      return `<li class="${open ? 'is-open' : ''}"><div class="hist" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="o-num">${o.num != null ? '№\u00a0' + o.num : 'б/н'}</span><span>${dshort(o.start || o.doneDate)}</span><span>${esc(car ? car.car : o.car)}</span><span class="mil">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</span><span class="r"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 && o.doneDate ? ` <span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : !o.doneDate ? ' <span class="pill st-work">в работе</span>' : ''}</span></div>${open ? orderDetail(o, t) : ''}</li>`; }).join('');
+      const open = ui.openRows.has(o.id), hh = hits[o.id];
+      return `<li class="${open ? 'is-open' : ''}${hh ? ' clq-hit' : ''}"><div class="hist" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="o-num">${o.num != null ? '№\u00a0' + o.num : 'б/н'}</span><span>${dshort(o.start || o.doneDate)}</span><span>${esc(car ? car.car : o.car)}</span><span class="mil">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</span><span class="r"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 && o.doneDate ? ` <span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : !o.doneDate ? ' <span class="pill st-work">в работе</span>' : ''}</span></div>${hh ? `<ul class="clq-found">${hh.ps.map(p => clqLine(p)).join('')}${hh.ws.map(w => clqLine(w, true)).join('')}</ul>` : ''}${open ? orderDetail(o, t) : ''}</li>`; }).join('');
     const used = new Set(orders.map(o => o.carId));
     return `<div class="toolbar"><button class="btn ghost" data-act="cl-back">‹ Все клиенты</button></div>
       ${ui.cerr ? `<div class="note bad">${esc(ui.cerr)}</div>` : ''}
@@ -3949,10 +3963,12 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <p class="small">Выбери клиента, который на самом деле тот же человек. Он исчезнет, а его машины, наряды, покупки и записи перейдут к «${esc(label(d))}».</p>
         ${clPicker(d)}
         <div class="actions"><button class="btn primary" data-act="cl-merge"${ui.cpick.sel ? '' : ' disabled'}>Объединить</button></div></section>` : ''}
-      ${isNew || !(X.salesByPerson[d.id] || []).length ? '' : `<section class="block"><div class="block-head"><h3>Покупки без наряда (${X.salesByPerson[d.id].length})</h3><span class="muted">на ${rub(X.salesByPerson[d.id].reduce((a, g) => a + g.sum, 0))}</span></div>
-        <ul class="orders">${X.salesByPerson[d.id].map(saleRow).join('')}</ul></section>`}
-      ${isNew ? '' : `<section class="block"><div class="block-head"><h3>Наряды (${st.count})</h3><span class="muted">на ${rub(total)}${debt ? ` · <span class="neg">долг ${rub(debt)}</span>` : ''}</span></div>
-        ${rows ? `<ul class="hist-list">${rows}</ul>` : '<p class="muted">Нарядов пока нет.</p>'}</section>`}`;
+      ${isNew || (!salesAll.length && !st.count) ? '' : `<div class="toolbar"><input id="clq" class="search" type="search" placeholder="Поиск по запчастям и работам клиента: артикул, название, бренд" value="${esc(ui.clQ || '')}" data-act="cl-search" autocomplete="off">${mq ? `<span class="muted small">найдено: нарядов ${orders.length}, покупок ${sales.length}</span>` : ''}</div>`}
+      ${isNew || !sales.length ? '' : `<section class="block"><div class="block-head"><h3>Покупки без наряда (${mq ? sales.length + ' из ' + salesAll.length : salesAll.length})</h3><span class="muted">на ${rub(sales.reduce((a, g) => a + g.sum, 0))}</span></div>
+        <ul class="orders">${sales.map(g => saleRow(g) + (hits[g.id] ? `<li class="clq-pre"><ul class="clq-found">${hits[g.id].ps.map(p => clqLine(p)).join('')}</ul></li>` : '')).join('')}</ul></section>`}
+      ${isNew ? '' : `<section class="block"><div class="block-head"><h3>Наряды (${mq ? orders.length + ' из ' + st.count : st.count})</h3><span class="muted">на ${rub(total)}${debt ? ` · <span class="neg">долг ${rub(debt)}</span>` : ''}</span></div>
+        ${rows ? `<ul class="hist-list">${rows}</ul>` : `<p class="muted">${mq ? 'В нарядах не нашёл.' : 'Нарядов пока нет.'}</p>`}</section>`}
+      ${mq && !orders.length && !sales.length ? '<p class="muted">Ничего не нашёл — проверь артикул или попробуй часть названия.</p>' : ''}`;
   }
   /* поиск клиента для объединения / переноса машин */
   function clPicker(d) {
@@ -5375,6 +5391,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (a === 'wp-search') { ui.wpq = el.value; ui.wpLim = 50; render(); return; }
     if (a === 'wf-search') { ui.wpFill.q = el.value; render(); return; }
     if (a === 'pay-search') { ui.payQ = el.value; render(); return; }
+    if (a === 'cl-search') { ui.clQ = el.value; render(); return; }
     if (a === 'log-search') { ui.logQ = el.value; ui.logLim = 100; render(); return; }
     if (a === 'cl-search') { ui.cq = el.value; ui.climit = 60; render(); return; }
     if (a === 'cp-search') { ui.cpick.q = el.value; render(); return; }
