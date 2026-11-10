@@ -568,6 +568,15 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 
 /* ===== телефон ===== */
 .tot-bar { display: none; }
+.rk-flat .rk-all { margin: 4px 0; }
+.rk-rows { margin: 0; padding: 0; border-top: 1px solid var(--line); }
+ul.plain.rk-rows > li { display: grid; grid-template-columns: 22px minmax(0, 1fr) 260px 28px; gap: 8px; align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line); }
+ul.plain.rk-rows > li.on { background: var(--accent-soft); }
+.rk-rows .rk-l { display: grid; gap: 1px; cursor: pointer; min-width: 0; }
+.rk-rows select { width: 100%; }
+.rk-foot { flex-wrap: wrap; } .rk-foot select { max-width: 280px; }
+.paste ul.plain.rk-rows > li, #editor ul.plain.rk-rows > li, #saleEd ul.plain.rk-rows > li { grid-template-columns: 22px minmax(0, 1fr) 28px; }
+@media (max-width: 560px) { ul.plain.rk-rows > li { grid-template-columns: 22px minmax(0, 1fr) 28px; } ul.plain.rk-rows > li > select { grid-column: 2 / 4; } ul.plain.rk-rows > li > .x { grid-column: 3; grid-row: 1; } }
 .pct-btn { margin-left: 4px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--card, #fff); color: var(--accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1.4; }
 .pct-m { display: none; }
 @media (max-width: 560px) { .pct-m { display: inline-block; } }
@@ -2319,13 +2328,17 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
     t.classList.toggle('more-r', t.scrollLeft + t.clientWidth < t.scrollWidth - 4);
     if (!t.dataset.sc) { t.dataset.sc = '1'; t.addEventListener('scroll', () => t.classList.toggle('more-r', t.scrollLeft + t.clientWidth < t.scrollWidth - 4), { passive: true }); }
   }
+  function renumNoteHTML() {
+    const R = ui.renumNote; if (!R || !R.length) return '';
+    return `<div class="note"><span><b>Номера нарядов изменены при объединении с другим компьютером</b> — на обоих завели новый наряд без интернета, и номера совпали:<br>${R.map(r => `№ ${r[0]} → <b>№ ${r[1]}</b>${r[2] ? ' (' + esc(r[2]) + ')' : ''}`).join('<br>')}<br>Если наряд с прежним номером уже распечатан или отправлен клиенту — перепечатай.</span><button class="link small" data-act="renum-ok">Понятно</button></div>`;
+  }
   function render() {
     const a = document.activeElement;
     const keep = a && a.id && a.closest('#view') ? { id: a.id, s: a.selectionStart, e: a.selectionEnd, v: a.value } : null;
     if (!D) { $('#tabs').innerHTML = ''; $('#view').innerHTML = viewStart(); paintStatus(); paintEditor(); return; }
     $('#tabs').innerHTML = TABS.map(([k, l]) => `<button class="tab${ui.tab === k ? ' on' : ''}" data-act="tab" data-k="${k}" ${ui.tab === k ? 'aria-current="page"' : ''}>${l}</button>`).join('');
     tabsFit();
-    let html = banners();
+    let html = banners() + renumNoteHTML();
     html += ({ orders: viewOrders, sales: viewSales, wait: viewWait, sched: viewSched, clients: viewClients, money: viewMoney, stock: viewStock, exps: viewExps, report: viewReport, log: viewLog, settings: viewSettings }[ui.tab] || viewOrders)();
     setHTML($('#view'), html);
     restoreFocus(keep);
@@ -2958,10 +2971,14 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (X._rk && X._rk.d === d) return X._rk.m;
     const cand = D.parts.filter(p => low(p.sup) === 'rossko' && p.date).map(p => ({ p, a: rkNorm(p.art), b: rkNorm(p.brand), left: Math.max(1, +p.qty || 1) }));
     const lines = [];
-    d.orders.forEach(o => (o.parts || []).forEach(x => { if (RK_LIVE.has(x.status)) lines.push({ o, x }); }));
+    d.orders.forEach(o => (o.parts || []).forEach((x, k) => { if (RK_LIVE.has(x.status)) lines.push({ o, x, k }); }));
     lines.sort((u, v) => u.o.created.localeCompare(v.o.created));
     const m = new Map();
-    lines.forEach(({ o, x }) => {
+    /* сначала — точная связь: запчасть внесена из этой строки Rossko (p.rk) */
+    const byRk = new Map(); D.parts.forEach(p => { if (p.rk) byRk.set(p.rk, p); });
+    const rest = [];
+    lines.forEach(L => { const p = byRk.get(String(L.o.id) + ':' + L.k); if (p) { m.set(L.x, p); const c = cand.find(c => c.p === p); if (c) c.left -= Math.max(1, +L.x.count || 1); } else rest.push(L); });
+    rest.forEach(({ o, x }) => {
       let best = null, bd = 1e9;
       cand.forEach(c => {
         if (c.left <= 0 || (c.a !== x.norm && c.b !== x.norm)) return;
@@ -3024,6 +3041,111 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     else { ui.tab = 'exps'; ui.expMonth = NOW_M(); if (!ui.expForm) render(); ui.expForm.kind = 'sto'; ui.expForm.what = ''; rkOpenPanel('xp'); rkTake('xp', id, only); render(); window.scrollTo(0, 0); }
     if (left) toast('Сохрани, потом вернись во «Ждём» и снова нажми «Внести» — осталось направлений: ' + left, 6000);
   }
+  /* ===== «Не внесено из Rossko» v2 (10.11.2026): плоский список запчастей с галочками ===== */
+  const rkKey = (o, k) => String(o.id) + ':' + k;
+  /* все невнесённые строки из всех заказов Rossko, новые сверху */
+  function rkLines() {
+    const d = ui.rk && ui.rk.data; if (!d) return [];
+    const m = rkMatchAll(), hid = new Set((D.cfg.rkHiddenLines || []).map(String)), hidO = new Set((D.cfg.rkHidden || []).map(String));
+    const out = [];
+    d.orders.forEach(o => {
+      if (hidO.has(String(o.id)) || !((+o.total || 0) > 0)) return;
+      (o.parts || []).forEach((x, k) => { if (RK_LIVE.has(x.status) && (+x.price || 0) > 0 && !m.has(x) && !hid.has(rkKey(o, k))) out.push({ key: rkKey(o, k), o, x, k }); });
+    });
+    return out.sort((a, b) => (b.o.created + (b.o.time || '')).localeCompare(a.o.created + (a.o.time || '')) || a.k - b.k);
+  }
+  const rkItem = L => ({ sup: (D.cfg.suppliers || []).find(s => low(s) === 'rossko') || 'Rossko', art: L.x.norm || L.x.art, name: L.x.name || '', brand: L.x.brand || '', cost: +L.x.price || 0, qty: +L.x.count || 1, no: L.x.status !== 2, rk: L.key });
+  const rkSelSet = () => (ui.rkSel = ui.rkSel || new Set());
+  function rkFlatHTML(ctx) {
+    const d = ui.rk && ui.rk.data; if (!d) return '';
+    const lines = rkLines(), sel = rkSelSet(), on = lines.filter(L => sel.has(L.key));
+    const open = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num);
+    const destOpts = (v, first) => `<option value=""${v === '' ? ' selected' : ''}>${first || '— куда?'}</option>${open.map(x => `<option value="o${x.num}"${v === 'o' + x.num ? ' selected' : ''}>Наряд № ${x.num} · ${esc(orderWho(x))}</option>`).join('')}<option value="new"${v === 'new' ? ' selected' : ''}>+ Новый наряд</option><option value="sale"${v === 'sale' ? ' selected' : ''}>Продажа без наряда</option><option value="sto"${v === 'sto' ? ' selected' : ''}>Расходы СТО</option>`;
+    const head = `<div class="block-head"><h3>Не внесено из Rossko <span class="muted small">${lines.length} ${plural(lines.length, 'запчасть', 'запчасти', 'запчастей')}</span></h3>
+      <span class="muted small">данные от ${esc(rkUpdated(d))}${ctx !== 'wait' ? ` · <button class="btn small" data-act="rk-refresh" data-k="${ctx}" ${ui.rkBusy ? 'disabled' : ''}>${ui.rkBusy ? 'Обновляю…' : 'Обновить'}</button>` : ''}</span></div>`;
+    if (!lines.length) return `<section class="block rk-flat">${head}<p class="muted small">Всё из Rossko уже внесено.</p>${ctx !== 'wait' ? `<button class="link small" data-act="rk-all" data-k="${ctx}">Показать все заказы Rossko</button>` : ''}</section>`;
+    const tip = ctx === 'wait' ? 'Отметь запчасти, выбери «куда» и нажми «Внести выбранное» — всё запишется сразу, без открытия нарядов. «НЕТ» ставится само у того, что Rossko ещё не выдал.'
+      : ctx === 'ed' ? 'Отметь запчасти для этого наряда и нажми «Добавить в наряд».' : ctx === 'sale' ? 'Отметь запчасти для этой продажи и нажми «Добавить».' : 'Отметь расходники и нажми «Записать в расходы СТО».';
+    const row = L => { const x = L.x, cm = sel.has(L.key);
+      return `<li class="${cm ? 'on' : ''}"><input type="checkbox" id="rks-${esc(L.key)}" data-rksel="${esc(L.key)}" ${cm ? 'checked' : ''} aria-label="Выбрать">
+        <label for="rks-${esc(L.key)}" class="rk-l"><span><b>${esc(x.name || '')}</b> <span class="mono muted small">${esc(x.norm || x.art || '')}</span></span>
+          <span class="muted small">${esc(x.brand || '')} · ${fmt(x.count || 1)} шт. · <span class="cst-wrap">${rub(x.price)}</span>${rkPill(x.status)} · заказ № ${esc(L.o.id)} от ${dshort(L.o.created)}${x.comment ? ' · «' + esc(x.comment) + '»' : ''}</span></label>
+        ${ctx === 'wait' ? `<select id="rkd-${esc(L.key)}" data-rkd="${esc(L.key)}" aria-label="Куда внести">${destOpts(rkDest(L.o, L.k))}</select>` : ''}
+        <button class="x" data-act="rk-hide-line" data-id="${esc(L.key)}" title="Уже внесено или не нужно — убрать из списка" aria-label="Убрать из списка">×</button></li>`; };
+    const all = lines.length && on.length === lines.length;
+    const foot = ctx === 'wait'
+      ? `<select id="rk-bulk" data-rkbulk="1" aria-label="Куда — всем отмеченным" ${on.length ? '' : 'disabled'}>${destOpts('', 'Куда — всем отмеченным…')}</select>
+         <button class="btn primary" data-act="rk-put" ${on.length ? '' : 'disabled'}>Внести выбранное${on.length ? ' (' + on.length + ')' : ''}</button>`
+      : ctx === 'xp' ? `<label class="f inline">Чем платили<select id="rk-how" data-rkhow="1">${['debt', 'cash', 'ip', 'anton', 'gleb'].map(k => `<option value="${k}"${(ui.rkHow || 'debt') === k ? ' selected' : ''}>${k === 'debt' ? DEBT_LABEL : HOW[k][2]}</option>`).join('')}</select></label>
+         <button class="btn primary" data-act="rk-add" data-k="xp" ${on.length ? '' : 'disabled'}>Записать в расходы СТО${on.length ? ' (' + on.length + ')' : ''}</button>`
+      : `<button class="btn primary" data-act="rk-add" data-k="${ctx}" ${on.length ? '' : 'disabled'}>${ctx === 'ed' ? 'Добавить в наряд' : 'Добавить в продажу'}${on.length ? ' (' + on.length + ')' : ''}</button>`;
+    return `<section class="block rk-flat">${head}<p class="muted small">${tip}</p>
+      <label class="f chk rk-all"><input type="checkbox" data-rkselall="1" ${all ? 'checked' : ''}> Отметить все</label>
+      <ul class="plain rk-rows">${lines.map(row).join('')}</ul>
+      <div class="actions rk-foot">${foot}</div>
+      ${ctx === 'wait' && ui.rkDone ? `<div class="note ok"><span>${ui.rkDone}</span><button class="link small" data-act="rk-done-x">ок</button></div>` : ''}
+      ${ctx !== 'wait' ? `<button class="link small" data-act="rk-all" data-k="${ctx}">Показать все заказы Rossko</button>` : ''}</section>`;
+  }
+  /* запчасть Rossko прямо в сохранённый наряд, без открытия */
+  function rkPartForOrder(o, it) {
+    const price = S.markupPrice(D.cfg, it.cost), today = S.todayISO();
+    return { id: uid('p'), date: today, sup: it.sup, order: o.num, art: it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price, sum: r2(price * it.qty),
+      client: o.client, car: o.car, note: o.note, vin: o.vin, plate: o.plate, phone: o.phone, no: it.no, ret: false, retDone: false, month: S.monthOf(today), paid: null, app: true, rk: it.rk };
+  }
+  /* «Внести выбранное» во «Ждём» */
+  function rkPut() {
+    const sel = rkSelSet(), lines = rkLines().filter(L => sel.has(L.key));
+    if (!lines.length) { toast('Отметь запчасти'); return; }
+    const by = {};
+    lines.forEach(L => { const dst = rkDest(L.o, L.k); (by[dst] = by[dst] || []).push(L); });
+    if (by['']) { toast('Выбери «куда» у отмеченных: ' + by[''].length + ' без «куда»'); return; }
+    const done = [];
+    Object.keys(by).filter(k => k[0] === 'o').forEach(k => {
+      const o = X.ordersByNum[+k.slice(1)]; if (!o) return;
+      by[k].forEach(L => D.parts.push(rkPartForOrder(o, rkItem(L))));
+      done.push(`${by[k].length} в <button class="link" data-act="open-order" data-id="${esc(o.id)}">наряд № ${o.num}</button>`);
+      by[k].forEach(L => sel.delete(L.key));
+    });
+    let changedDone = false;
+    if (by.sto) {
+      const items = by.sto.map(L => Object.assign(rkItem(L), { on: true }));
+      ui.xpaste = { items, date: S.todayISO(), sup: items[0].sup, to: 'СТО', how: 'debt', howSet: true, no: false };
+      xpasteAdd(); changedDone = true;
+      done.push(`${by.sto.length} в расходы СТО (в долг Rossko)`);
+      by.sto.forEach(L => sel.delete(L.key));
+    }
+    const later = (by.new || []).concat(by.sale || []);
+    ui.rkDone = done.length ? 'Внесено: ' + done.join(', ') + '.' + (later.length ? ' Остались «новый наряд» / «продажа» — для них нужен клиент.' : '') : '';
+    if (done.length) { if (changedDone) changed('Внесено из Rossko'); else changed('Внесено из Rossko'); }
+    if (later.length) {
+      const grp = by.new ? 'new' : 'sale', ls = by[grp];
+      const items = ls.map(rkItem);
+      if (grp === 'new') { openOrder(null); ui.editor.picking = true; items.forEach(it => { const price = S.markupPrice(D.cfg, it.cost); ui.editor.parts.push(newPart({ sup: it.sup, art: it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price, sum: r2(price * it.qty), no: it.no, rk: it.rk })); }); paintEditor(); }
+      else { openSale(null); items.forEach(it => { const price = salePrice(it.cost); ui.sale.rows.push(saleRowNew({ sup: it.sup, art: it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price, sum: r2(price * it.qty), no: it.no, rk: it.rk })); }); ui.sale.rows = ui.sale.rows.filter(p => (p.name || '').trim() || p.art || p.sum); paintSale(); }
+      ls.forEach(L => sel.delete(L.key));
+      toast(grp === 'new' ? 'Новый наряд: выбери клиента и сохрани' : 'Продажа: укажи, кому, и сохрани', 5000);
+    } else if (!done.length) toast('Нечего вносить');
+  }
+  /* из наряда / продажи / расходов: добавить отмеченные */
+  function rkAdd(ctx) {
+    const sel = rkSelSet(), lines = rkLines().filter(L => sel.has(L.key));
+    if (!lines.length) { toast('Отметь запчасти'); return; }
+    const items = lines.map(rkItem);
+    if (ctx === 'ed') {
+      const E = ui.editor; E.parts = E.parts.filter(p => (p.name || '').trim() || p.art || p.sum);
+      items.forEach(it => { const price = S.markupPrice(D.cfg, it.cost); E.parts.push(newPart({ sup: it.sup, art: it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price, sum: r2(price * it.qty), no: it.no, rk: it.rk })); });
+      E.paste = null; paintEditor(); toast('Добавлено в наряд: ' + items.length + '. Не забудь сохранить');
+    } else if (ctx === 'sale') {
+      const Sx = ui.sale; Sx.rows = Sx.rows.filter(p => (p.name || '').trim() || p.art || p.sum);
+      items.forEach(it => { const price = salePrice(it.cost); Sx.rows.push(saleRowNew({ sup: it.sup, art: it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price, sum: r2(price * it.qty), no: it.no, rk: it.rk })); });
+      Sx.paste = null; paintSale(); toast('Добавлено в продажу: ' + items.length + '. Не забудь сохранить');
+    } else {
+      const how = ui.rkHow || 'debt';
+      ui.xpaste = { items: items.map(it => Object.assign(it, { on: true })), date: (ui.expForm && ui.expForm.date) || S.todayISO(), sup: items[0].sup, to: 'СТО', how, howSet: true, no: false };
+      xpasteAdd();
+    }
+    lines.forEach(L => sel.delete(L.key));
+  }
   function rkGuessOrder(o) {
     const txt = (o.parts || []).map(x => x.comment || '').join(' ');
     const nums = (txt.match(/\d{2,5}/g) || []).map(Number);
@@ -3046,6 +3168,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   /* при открытии «Загрузить запчасти» сразу показываем невнесённое из Rossko, если файл заказов уже выбирали */
   async function rkAuto(kind) {
+    if (ui.rk && ui.rk.data) { const P0 = rkPanelOf(kind); if (P0 && !P0.items) { P0.rkShow = true; P0.rkAll = false; rkRepaint(kind); } return; }
     if (!hasFS) return;
     try { const h = await idb.get('rosskoFile'); if (!h) return; } catch (e) { return; }
     const d = await rkRead(false); const P = rkPanelOf(kind);
@@ -3055,10 +3178,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const sup = (D.cfg.suppliers || []).find(x => low(x) === 'rossko') || (D.cfg.suppliers || [])[0] || '';
     if (kind === 'ed') { if (!ui.editor.paste) ui.editor.paste = { items: null, sup, no: true }; }
     else if (kind === 'sale') { if (!ui.sale.paste) ui.sale.paste = { items: null, sup, no: true }; }
-    else if (!ui.xpaste) ui.xpaste = { items: null, date: (ui.expForm && ui.expForm.date) || S.todayISO(), sup, to: 'СТО', how: 'ip', no: true };
+    else if (!ui.xpaste) ui.xpaste = { items: null, date: (ui.expForm && ui.expForm.date) || S.todayISO(), sup, to: 'СТО', how: 'cash', no: true };
     return rkPanelOf(kind);
   }
   function rkPanelOf(kind) { return kind === 'ed' ? ui.editor && ui.editor.paste : kind === 'sale' ? ui.sale && ui.sale.paste : ui.xpaste; }
+  function rkRepaintAll() { render(); if (ui.editor) paintEditor(); if (ui.sale) paintSale(); }
   function rkRepaint(kind) { if (kind === 'ed') paintEditor(); else if (kind === 'sale') paintSale(); else render(); }
   function rkTake(kind, id, only) {
     const P = rkPanelOf(kind), o = ui.rk && ui.rk.data.orders.find(x => String(x.id) === String(id));
@@ -3078,7 +3202,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (!P.items) return `<div class="paste">
       <p><b>Вставка из выгрузки магазина.</b> В Excel выдели строки (можно вместе с заголовком) или запчасти на сайте Mikado или ПП, нажми Ctrl+C, потом щёлкни в поле ниже и нажми Ctrl+V.</p>
       <textarea id="paste-box" class="paste-box" placeholder="Сюда Ctrl+V" data-act="paste-box"></textarea>
-      ${P.rkShow ? rkOrdersHTML('ed') : ''}
+      ${P.rkShow ? (P.rkAll ? rkOrdersHTML('ed') : rkFlatHTML('ed')) : ''}
       <div class="actions">${P.rkShow ? '' : rkButton('ed')}<button class="btn ghost" data-act="paste-close">Отмена</button></div></div>`;
     return `<div class="paste">
       <div class="block-head"><b>Нашёл строк: ${P.items.length}</b><label class="f inline">Поставщик<select id="paste-sup" data-act="paste-sup">${opt(sups, P.sup)}</select></label></div>
@@ -3638,7 +3762,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function salePastePanel() {
     const P = ui.sale.paste;
     if (!P.items) return `<div class="paste"><p><b>Вставка из выгрузки магазина.</b> Выдели строки в Excel или запчасти на сайте Mikado или ПП, Ctrl+C, щёлкни в поле и Ctrl+V.</p>
-      <textarea id="sa-paste-box" class="paste-box" placeholder="Сюда Ctrl+V" data-act="sa-paste-box"></textarea>${P.rkShow ? rkOrdersHTML('sale') : ''}<div class="actions">${P.rkShow ? '' : rkButton('sale')}<button class="btn ghost" data-act="sp-paste-close">Отмена</button></div></div>`;
+      <textarea id="sa-paste-box" class="paste-box" placeholder="Сюда Ctrl+V" data-act="sa-paste-box"></textarea>${P.rkShow ? (P.rkAll ? rkOrdersHTML('sale') : rkFlatHTML('sale')) : ''}<div class="actions">${P.rkShow ? '' : rkButton('sale')}<button class="btn ghost" data-act="sp-paste-close">Отмена</button></div></div>`;
     return `<div class="paste"><div class="block-head"><b>Нашёл строк: ${P.items.length}</b><label class="f inline">Поставщик<select id="sa-paste-sup" data-act="sa-paste-sup">${opt(D.cfg.suppliers || [], P.sup)}</select></label></div>
       <div class="scroll"><table class="tbl"><thead><tr><th></th><th>Артикул</th><th>Название</th><th>Бренд</th><th class="r cst">Закупка</th><th class="r">Кол-во</th><th class="r">Цена</th></tr></thead><tbody>
       ${P.items.map((it, i) => `<tr class="${it.on ? '' : 'off'}"><td><input type="checkbox" id="sapc-${i}" data-sapc="${i}" ${it.on ? 'checked' : ''} aria-label="Добавить строку"></td><td class="mono">${esc(it.art)}</td><td>${esc(it.name)}${it.rst != null ? rkPill(it.rst) : ''}</td><td>${esc(it.brand)}</td><td class="r cst">${fmt(it.cost, 2)}</td><td class="r"><input id="sapq-${i}" class="r qty" value="${esc(it.qty)}" data-sapq="${i}" inputmode="decimal"></td><td class="r">${fmt(salePrice(it.cost), 2)}</td></tr>`).join('')}
@@ -4127,7 +4251,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (ui.rkFail) h += `<div class="note"><span><b>Помощник Rossko не ответил.</b> Если кнопка «Обновить из Rossko» ещё не подключена — один раз запусти файл «Rossko — подключить кнопку.bat» в папке с помощником. Если подключена — проверь, что браузер не заблокировал запуск (значок в адресной строке), и запусти Rossko.bat вручную.</span><div class="actions"><button class="btn small ghost" data-act="rk-fail-close">Скрыть</button></div></div>`;
     const rkOn = ui.rkCheck && ui.rk;
     const rn = rkOn ? rkNew() : [];
-    if (rn.length) h += rkNewBlock(rn);
+    if (rkOn) h += rkFlatHTML('wait');
     if (rkOn) {
       const rs = all.filter(p => low(p.sup) === 'rossko'), got = rs.filter(p => { const m = rkMatch(p); return m && m.status === 2; }), miss = rs.filter(p => !rkMatch(p));
       h += `<div class="note"><div><b>Rossko, данные от ${esc(rkUpdated(ui.rk.data))}:</b> ${got.length ? `уже получено ${got.length} из ${rs.length} — ${esc(got.map(p => p.name || p.art).join(', ').slice(0, 200))}` : `из ${rs.length} ждущих ничего ещё не выдано`}.
@@ -4290,7 +4414,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const fixed = D.pays.filter(p => S.monthOf(p.date) === m && fx.has(low(p.name))).sort((a, b) => a.date.localeCompare(b.date));
     const sto = D.parts.filter(p => p.month === m && low(p.client).startsWith('сто')).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const r = S.monthReport(D, X, m);
-    const f = ui.expForm || (ui.expForm = { kind: 'fixed', date: m === NOW_M() ? S.todayISO() : m + '-01', what: (D.cfg.fixedNames || [])[1] || 'Аренда', amount: null, how: 'ip', note: '', sup: '' });
+    const f = ui.expForm || (ui.expForm = { kind: 'fixed', date: m === NOW_M() ? S.todayISO() : m + '-01', what: (D.cfg.fixedNames || [])[1] || 'Аренда', amount: null, how: 'cash', note: '', sup: '' });
     const kinds = D.cfg.fixedNames || [];
     const acc = r.taxMode ? { 'налог': r.tax, 'взносы': r.fixed.vznos, 'аренда': r.fixed.rent, 'бухгалтер': r.fixed.acc, 'электричество': r.fixed.elec, 'аренда терминала': r.fixed.term, 'эквайринг': r.fixed.acqCard + r.fixed.acqQr } : null;
     const xq = (ui.xq || '').trim().toLowerCase(), xall = !!ui.xqAll;
@@ -4433,7 +4557,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (!P.items) return `<section class="block paste">
       <p><b>Покупка из выгрузки магазина.</b> В Excel выдели строки (можно с заголовком) или запчасти на сайте Mikado или ПП, Ctrl+C, щёлкни в поле ниже и Ctrl+V.</p>
       <textarea id="xp-box" class="paste-box" placeholder="Сюда Ctrl+V" data-act="xp-box"></textarea>
-      ${P.rkShow ? rkOrdersHTML('xp') : ''}
+      ${P.rkShow ? (P.rkAll ? rkOrdersHTML('xp') : rkFlatHTML('xp')) : ''}
       <div class="actions">${P.rkShow ? '' : rkButton('xp')}<button class="btn ghost" data-act="xp-close">Отмена</button></div></section>`;
     const on = P.items.filter(x => x.on), total = r2(on.reduce((a, it) => a + (it.cost || 0) * (it.qty || 0), 0));
     const fund = P.to === 'СТО (масло/антифриз)' ? 'oil' : P.to === 'СТО (копилка)' ? 'piggy' : null;
@@ -4455,7 +4579,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     </section>`;
   }
   /* у поставщика с балансом по умолчанию «в долг», пока сам не выбрал другое */
-  function xpHow(P) { const bal = isBalanceSup(P.sup); if (bal && !P.howSet) return 'debt'; if (!bal && P.how === 'debt') return 'ip'; return P.how || 'ip'; }
+  function xpHow(P) { const bal = isBalanceSup(P.sup); if (bal && !P.howSet) return 'debt'; if (!bal && P.how === 'debt') return 'cash'; return P.how || 'cash'; }
   function xpasteAdd() {
     const P = ui.xpaste, items = P.items.filter(x => x.on && x.qty);
     if (!items.length) { toast('Отметь хотя бы одну строку'); return; }
@@ -4467,7 +4591,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       const sum = r2((it.cost || 0) * it.qty);
       const st = D.stock.find(s => s.art && low(s.art) === low(it.art));
       D.parts.push({ id, date: P.date, sup: P.sup, order: null, art: it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price: it.cost, sum, client: P.to, car: '', note: '', vin: '', plate: '', phone: '',
-        paid: i === 0 ? total : null, no: it.no != null ? it.no : !!P.no, ret: false, retDone: false, month: m, app: true, link, blk, stockIn: !!st || undefined });
+        paid: i === 0 ? total : null, no: it.no != null ? it.no : !!P.no, ret: false, retDone: false, month: m, app: true, link, blk, stockIn: !!st || undefined, rk: it.rk || undefined });
     });
     const what = items.length === 1 ? items[0].name : items[0].name + ' и ещё ' + (items.length - 1) + ' поз.';
     const fund = P.to === 'СТО (масло/антифриз)' ? 'oil' : P.to === 'СТО (копилка)' ? 'piggy' : null;
@@ -4487,7 +4611,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       D.parts.push({ id: uid('p'), date: f.date, sup: f.sup || '', order: null, art: '', name: f.what, brand: '', cost: a, qty: 1, price: a, sum: a, client: f.how === 'piggy' ? 'СТО (копилка)' : f.how === 'oil' ? 'СТО (масло/антифриз)' : 'СТО', car: '', note: f.note, vin: '', plate: '', phone: '', paid: a, no: false, ret: false, retDone: false, month: m, app: true, link });
       D.pays.push(...payRows(f.how, -a, f.date, f.what + (f.sup ? ' (' + f.sup + ')' : ''), link, f.sup));
     }
-    ui.expForm = Object.assign({}, f, { amount: null, note: '', what: f.kind === 'fixed' ? f.what : '' });
+    ui.expForm = Object.assign({}, f, { amount: null, note: '', what: f.kind === 'fixed' ? f.what : '', how: 'cash', howSet: false, sup: '' });
     toast('Расход записан'); changed();
   }
 
@@ -4862,7 +4986,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'open-order': openOrder(b.dataset.id); break;
       case 'rk-open': case 'rk-pick': {
         const k = b.dataset.k;
-        rkRead(b.dataset.act === 'rk-pick').then(d => { const P = rkPanelOf(k); if (d && P) { P.rkShow = true; rkRepaint(k); } });
+        const go = d => { const P = rkPanelOf(k); if (d && P) { P.rkShow = true; P.rkAll = false; rkRepaint(k); } };
+        if (b.dataset.act === 'rk-open' && ui.rk && ui.rk.data) go(ui.rk.data); else rkRead(b.dataset.act === 'rk-pick').then(go);
         break;
       }
       case 'rk-take': rkTake(b.dataset.k, b.dataset.id); break;
@@ -4874,6 +4999,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         break;
       }
       case 'rk-go': rkGo(b.dataset.id); break;
+      case 'rk-put': rkPut(); break;
+      case 'rk-add': rkAdd(b.dataset.k); break;
+      case 'rk-done-x': ui.rkDone = ''; render(); break;
+      case 'renum-ok': ui.renumNote = null; render(); break;
+      case 'rk-hide-line': { D.cfg.rkHiddenLines = (D.cfg.rkHiddenLines || []).concat(b.dataset.id); rkSelSet().delete(b.dataset.id); toast('Строка убрана из «Не внесено»'); changed(); if (ui.editor) paintEditor(); if (ui.sale) paintSale(); break; }
       case 'rk-to-order': {
         const sel = $('#rko-' + b.dataset.id), num = sel && +sel.value; if (!num) { toast('Выбери наряд'); break; }
         const o = X.ordersByNum[num]; if (!o) break;
@@ -5060,7 +5190,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'month-unlock-no': ui.confirmUnlock = null; render(); break;
       case 'month-unlock': { const c = D.cfg.closed && D.cfg.closed[ui.month]; ui.confirmUnlock = null; if (c) { c.unlocked = S.todayISO(); toast(S.monthLabel(ui.month) + ' открыт для правки'); changed('Открыт для правки: ' + S.monthLabel(ui.month)); } break; }
       case 'month-lock': { const c = D.cfg.closed && D.cfg.closed[ui.month]; if (c) { delete c.unlocked; toast(S.monthLabel(ui.month) + ' снова закрыт'); changed('Снова закрыт: ' + S.monthLabel(ui.month)); } break; }
-      case 'exp-kind': ui.expForm.kind = b.dataset.k; ui.expForm.what = b.dataset.k === 'fixed' ? 'Аренда' : ''; if (b.dataset.k === 'fixed' && ['piggy', 'anton', 'gleb'].includes(ui.expForm.how)) ui.expForm.how = 'ip'; render(); break;
+      case 'exp-kind': ui.expForm.kind = b.dataset.k; ui.expForm.what = b.dataset.k === 'fixed' ? 'Аренда' : ''; ui.expForm.how = isBalanceSup(ui.expForm.sup) && b.dataset.k === 'sto' ? 'debt' : 'cash'; ui.expForm.howSet = false; render(); break;
       case 'exp-add': addExpense(); break;
       case 'se-open': ui.fxEdit = null; stoEditOpen(b.dataset.id); break;
       case 'se-cancel': ui.stoEdit = null; render(); break;
@@ -5084,7 +5214,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         }
         toast('Удалено'); changed(); break;
       }
-      case 'xp-open': ui.xpaste = { items: null, date: ui.expForm.date || S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', to: 'СТО', how: 'ip', no: true }; render(); rkAuto('xp'); setTimeout(() => { const t = $('#xp-box'); if (t) t.focus(); }, 30); break;
+      case 'xp-open': ui.xpaste = { items: null, date: ui.expForm.date || S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', to: 'СТО', how: 'cash', no: true }; render(); rkAuto('xp'); setTimeout(() => { const t = $('#xp-box'); if (t) t.focus(); }, 30); break;
       case 'xp-close': ui.xpaste = null; render(); break;
       case 'xp-add': xpasteAdd(); break;
       case 'pf-dir': ui.payForm.dir = +b.dataset.v; render(); break;
@@ -5240,11 +5370,18 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   });
   document.addEventListener('change', e => {
     const el = e.target, a = el.dataset.act;
+    if (el.dataset.rksel != null) { const S2 = rkSelSet(); if (el.checked) S2.add(el.dataset.rksel); else S2.delete(el.dataset.rksel); rkRepaintAll(); return; }
+    if (el.dataset.rkselall != null) { const S2 = rkSelSet(); rkLines().forEach(L => { if (el.checked) S2.add(L.key); else S2.delete(L.key); }); rkRepaintAll(); return; }
+    if (el.dataset.rkhow != null) { ui.rkHow = el.value; return; }
     if (el.closest('#editor')) { if (el.tagName === 'SELECT' || el.type === 'checkbox') onEditorInput(el); return; }
     if (el.closest('#saleEd')) { if (el.dataset.sa === 'client') onSaleInput(el); return; }
     if ((a === 'xl-create' || a === 'xl-reload') && el.files && el.files[0]) { readExcel(el.files[0], a === 'xl-create' ? 'create' : 'replace'); el.value = ''; return; }
     if (a === 'fb-open' && el.files && el.files[0]) { openFallback(el.files[0]); el.value = ''; return; }
     if (a === 'cloud-upload' && el.files && el.files[0]) { cloudUploadFile(el.files[0]); el.value = ''; return; }
+    if (el.dataset.rksel != null) { const S2 = rkSelSet(); if (el.checked) S2.add(el.dataset.rksel); else S2.delete(el.dataset.rksel); rkRepaintAll(); return; }
+    if (el.dataset.rkselall != null) { const S2 = rkSelSet(); rkLines().forEach(L => { if (el.checked) S2.add(L.key); else S2.delete(L.key); }); rkRepaintAll(); return; }
+    if (el.dataset.rkbulk != null) { if (!el.value) return; ui.rkDest = ui.rkDest || {}; rkLines().forEach(L => { if (rkSelSet().has(L.key)) ui.rkDest[L.key] = el.value; }); render(); return; }
+    if (el.dataset.rkhow != null) { ui.rkHow = el.value; return; }
     if (el.dataset.rkd != null) { ui.rkDest = ui.rkDest || {}; ui.rkDest[el.dataset.rkd] = el.value; render(); return; }
     if (el.dataset.rkall != null) {
       const o = ui.rk && ui.rk.data.orders.find(x => String(x.id) === el.dataset.rkall); if (!o || !el.value) return;
@@ -5422,6 +5559,31 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
 
   /* объединить изменения: base — что было на Диске, когда это устройство последний раз с ним сверялось,
      mine — база на этом устройстве, theirs — что сейчас на Диске (с другого устройства) */
+  /* после объединения: одинаковые номера нарядов (оба ПК без интернета завели наряд) —
+     наряду с ЭТОГО компьютера даём следующий свободный номер, вместе с его запчастями и оплатами */
+  function mergeRenum(base, mine, theirs, data) {
+    const ids = (x, k) => new Set(((x && x[k]) || []).map(r => r.id));
+    const bO = ids(base, 'orders'), tO = ids(theirs, 'orders'), bP = ids(base, 'parts'), tP = ids(theirs, 'parts'), bY = ids(base, 'pays'), tY = ids(theirs, 'pays');
+    const mineNew = new Set(((mine && mine.orders) || []).filter(o => !bO.has(o.id) && !tO.has(o.id)).map(o => o.id));
+    const byNum = {};
+    (data.orders || []).forEach(o => { if (o.num != null) (byNum[o.num] = byNum[o.num] || []).push(o); });
+    let next = Math.max(0, ...(data.orders || []).map(o => +o.num || 0));
+    const out = [], today = new Date().toLocaleDateString('ru-RU');
+    Object.keys(byNum).forEach(n => {
+      const os = byNum[n]; if (os.length < 2) return;
+      const keep = os.find(o => !mineNew.has(o.id)) || os[0];
+      os.forEach(o => {
+        if (o === keep || !mineNew.has(o.id)) return;
+        const old = o.num, nn = ++next;
+        (data.parts || []).forEach(p => { if (p.order === old && !bP.has(p.id) && !tP.has(p.id)) p.order = nn; });
+        (data.pays || []).forEach(p => { if (p.order === old && !bY.has(p.id) && !tY.has(p.id)) p.order = nn; });
+        o.num = nn;
+        o.memo = ((o.memo ? o.memo + '\n' : '') + `Номер изменён с № ${old} на № ${nn} при объединении с другим компьютером ${today} (оба наряда завели без интернета).`).trim();
+        out.push([old, nn, [o.client, o.car].filter(Boolean).join(', ')]);
+      });
+    });
+    return out;
+  }
   function merge3(base, mine, theirs) {
     let disputes = 0;
     const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -5507,11 +5669,15 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         else {
           const theirsJson = await yaGet(CLOUD_FILE), theirs = JSON.parse(theirsJson);
           if (cl.pending && D) {
-            const { data, disputes } = merge3(cl.baseJson ? JSON.parse(cl.baseJson) : {}, JSON.parse(JSON.stringify(D)), theirs);
+            const baseObj = cl.baseJson ? JSON.parse(cl.baseJson) : {}, mineObj = JSON.parse(JSON.stringify(D));
+            const { data, disputes } = merge3(baseObj, mineObj, theirs);
+            const renum = mergeRenum(baseObj, mineObj, theirs, data);
             D = normalize(data); reindex(); histReset();
+            if (renum.length) ui.renumNote = renum;
             cl.baseMd5 = meta.md5; cl.baseJson = theirsJson;
             await cloudUpload();
-            toast('Объединил с изменениями с другого устройства' + (disputes ? ` (спорных записей: ${disputes} — оставил вариант с этого устройства)` : ''), 6000);
+            toast('Объединил с изменениями с другого устройства' + (disputes ? ` (спорных записей: ${disputes} — оставил вариант с этого устройства)` : '') + (renum.length ? '. Номера нарядов: ' + renum.map(r => '№ ' + r[0] + ' → № ' + r[1]).join(', ') : ''), 9000);
+            if (renum.length) render();
           } else if (ui.editor || ui.sale) { cl.deferred = true; }
           else {
             const first = !D;
@@ -5629,6 +5795,6 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (isWeb && yaToken() && lsGet('ag.mode') !== 'file') { lsSet('ag.mode', 'cloud'); cloudOpen(); }
   })();
   render();
-  window.__sto = { get D() { return D; }, payT: { payEffects, effText }, get X() { return X; }, copyTest: async h => { copyDir = h; copyDoneDay = ''; await copyDaily(true); return ui.copyInfo; }, logRollback: id => logRollback(id), mirrorTest: async h => { copyDir = h; await mirrorWrite(false); return ui.copyInfo; }, open: h => loadFromHandle(h), load: d => { D = normalize(d); reindex(); histReset(); ui.fileName = 'проверка'; render(); }, openOrder };
+  window.__sto = { get D() { return D; }, mergeTest: (b, m, t) => { const r = merge3(b, m, t); return { data: r.data, disputes: r.disputes, renum: mergeRenum(b, m, t, r.data) }; }, rkSet: d => { ui.rk = { data: d, name: 'test' }; ui.rkCheck = true; X._rk = null; render(); }, get ui() { return ui; }, payT: { payEffects, effText }, get X() { return X; }, copyTest: async h => { copyDir = h; copyDoneDay = ''; await copyDaily(true); return ui.copyInfo; }, logRollback: id => logRollback(id), mirrorTest: async h => { copyDir = h; await mirrorWrite(false); return ui.copyInfo; }, open: h => loadFromHandle(h), load: d => { D = normalize(d); reindex(); histReset(); ui.fileName = 'проверка'; render(); }, openOrder };
 })();
 </script>
