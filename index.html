@@ -3968,7 +3968,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <p class="small">Выбери клиента, который на самом деле тот же человек. Он исчезнет, а его машины, наряды, покупки и записи перейдут к «${esc(label(d))}».</p>
         ${clPicker(d)}
         <div class="actions"><button class="btn primary" data-act="cl-merge"${ui.cpick.sel ? '' : ' disabled'}>Объединить</button></div></section>` : ''}
-      ${isNew || (!salesAll.length && !st.count) ? '' : `<div class="toolbar"><input id="clq" class="search" type="search" placeholder="Поиск по запчастям и работам клиента: артикул, название, бренд" value="${esc(ui.clQ || '')}" data-act="cl-search" autocomplete="off">${mq ? `<span class="muted small">найдено: нарядов ${orders.length}, покупок ${sales.length}</span>` : ''}</div>`}
+      ${isNew || (!salesAll.length && !st.count) ? '' : `<div class="toolbar"><input id="clq" class="search" type="search" placeholder="Поиск по запчастям и работам клиента: артикул, название, бренд" value="${esc(ui.clQ || '')}" data-act="clq-search" autocomplete="off">${mq ? `<span class="muted small">найдено: нарядов ${orders.length}, покупок ${sales.length}</span>` : ''}</div>`}
       ${isNew || !sales.length ? '' : `<section class="block"><div class="block-head"><h3>Покупки без наряда (${mq ? sales.length + ' из ' + salesAll.length : salesAll.length})</h3><span class="muted">на ${rub(sales.reduce((a, g) => a + g.sum, 0))}</span></div>
         <ul class="orders">${sales.map(g => saleRow(g) + (hits[g.id] ? `<li class="clq-pre"><ul class="clq-found">${hits[g.id].ps.map(p => clqLine(p)).join('')}</ul></li>` : '')).join('')}</ul></section>`}
       ${isNew ? '' : `<section class="block"><div class="block-head"><h3>Наряды (${mq ? orders.length + ' из ' + st.count : st.count})</h3><span class="muted">на ${rub(total)}${debt ? ` · <span class="neg">долг ${rub(debt)}</span>` : ''}</span></div>
@@ -5405,7 +5405,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (a === 'wp-search') { ui.wpq = el.value; ui.wpLim = 50; render(); return; }
     if (a === 'wf-search') { ui.wpFill.q = el.value; render(); return; }
     if (a === 'pay-search') { ui.payQ = el.value; render(); return; }
-    if (a === 'cl-search') { ui.clQ = el.value; render(); return; }
+    if (a === 'clq-search') { ui.clQ = el.value; render(); return; }
     if (a === 'log-search') { ui.logQ = el.value; ui.logLim = 100; render(); return; }
     if (a === 'cl-search') { ui.cq = el.value; ui.climit = 60; render(); return; }
     if (a === 'cp-search') { ui.cpick.q = el.value; render(); return; }
