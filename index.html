@@ -216,6 +216,9 @@ h3.sec { margin: 6px 2px -4px; font-size: 15px; display: flex; gap: 8px; align-i
 ul.plain.ret-rows > li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: 6px 12px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 ul.plain.ret-rows > li.sel { background: var(--accent-soft); }
 @media (max-width: 560px) { ul.plain.ret-rows > li { grid-template-columns: 26px minmax(0, 1fr) auto; } ul.plain.ret-rows > li > .acts { grid-column: 2 / 4; justify-self: start; } }
+.totals .rnd-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.totals .rnd-row span { flex: 1; }
+.totals .rnd-row b { font-weight: 500; }
 .chk-line { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; user-select: none; }
 .chk-line input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 
@@ -415,7 +418,12 @@ html, body { margin: 0; }
 .cr[data-act="row-edit"] { cursor: pointer; }
 .cr[data-act="row-edit"]:hover { border-color: var(--line); }
 .cr-w { grid-template-columns: 18px minmax(0, 1fr) 110px 28px; }
-.cr-w.editing { grid-template-columns: minmax(0, 1fr) 100px 100px 100px 28px; }
+.cr-w.editing { grid-template-columns: minmax(0, 1fr) minmax(100px, auto) 100px 100px 28px; }
+.wsum { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.wsum input { width: 100px !important; flex: none; }
+.wpct { border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.wpct.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+.line.work > .wpct { align-self: flex-end; margin-bottom: 6px; }
 .cr-p { grid-template-columns: 18px minmax(0, 1fr) 110px 100px auto 28px; }
 .cr-p.editing { grid-template-columns: 92px 118px minmax(120px, 1fr) 96px 78px 52px 86px 96px auto 28px; }
 .cr.editing { border-color: var(--accent); background: var(--surface) !important; }
@@ -449,6 +457,7 @@ html, body { margin: 0; }
   .cr-p.editing > *:nth-child(3) { grid-column: 1 / -1; }
   .cr-w.editing { grid-template-columns: 1fr 1fr 1fr 28px; }
   .cr-w.editing > .wsug-host { grid-column: 1 / -1; }
+  .wsum input { width: auto !important; flex: 1 1 0; min-width: 0; }
 }
 /* итог наряда прилипает к низу окна */
 #editor .block.totals { position: sticky; bottom: 0; z-index: 6; box-shadow: 0 -6px 18px rgba(0,0,0,.10); }
@@ -1350,14 +1359,16 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   /* Отчёт за месяц — как столбец листа «Итог_расчёт» */
   function monthReport(D, X, month, opts) {
     const cfg = D.cfg, start = taxStart(cfg), live = opts && opts.live;
-    let works = 0, sub = 0, nik = 0;
+    let works = 0, sub = 0, nik = 0, rnd = 0;
+    /* w.kind / p.kind: 'rnd' — округление до 100 при оплате без чека, 'noch' — клиент не взял сдачу; в бланк не печатаются, в отчёте отдельной строкой */
     D.orders.forEach(o => o.works.forEach(w => {
-      if (w.done && monthOf(w.done) === month) { works += w.sum || 0; sub += w.sub || 0; nik += w.nik || 0; }
+      if (w.done && monthOf(w.done) === month) { if (w.kind) { rnd += w.sum || 0; return; } works += w.sum || 0; sub += w.sub || 0; nik += w.nik || 0; }
     }));
     let partsSale = 0, partsCost = 0, oilCost = 0, stoExp = 0, piggy = 0, oilBuy = 0, salesForRevenue = 0, oilSoldCost = 0;
     D.parts.forEach(p => {
       const per = partPeriod(p, X);
-      if (per === month && !p.no && !p.ret) {
+      if (per === month && !p.no && !p.ret && p.kind) rnd += p.sum || 0;
+      else if (per === month && !p.no && !p.ret) {
         partsSale += p.sum || 0;
         partsCost += (p.cost || 0) * (p.qty || 0);
         oilCost += oilCostOf(p, X);
@@ -1372,11 +1383,12 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     });
     const stoProfit = works - sub - nik;
     const liveParts = partsSale - partsCost - oilCost;
-    const liveItogo = stoProfit + liveParts - stoExp;
+    const liveItogo = stoProfit + liveParts + rnd - stoExp;
     const closed = !live && cfg.closed && cfg.closed[month];
     const partsProfit = closed ? closed.partsProfit : liveParts;
     const stoExpShown = closed ? closed.stoExp : stoExp;
-    const itogo = stoProfit + partsProfit - stoExpShown;
+    const rndShown = closed ? (closed.rnd || 0) : rnd;
+    const itogo = stoProfit + partsProfit + rndShown - stoExpShown;
 
     const taxMode = !!start && month >= start;
     const inMonth = p => monthOf(p.date) === month;
@@ -1405,7 +1417,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     const out = {
       month, status, closed: closed || null, liveItogo: r2(liveItogo), diff: closed ? Math.round(liveItogo - closed.itogo) : 0, taxMode,
       works: r2(works), sub: r2(sub), nik: r2(nik), stoProfit: r2(stoProfit), partsSale: r2(partsSale), partsProfit: r2(partsProfit),
-      stoExp: r2(stoExpShown), piggy: Math.round(piggy), oilBuy: Math.round(oilBuy), itogo: r2(itogo), revenue: r2(revenue),
+      rnd: r2(rndShown), stoExp: r2(stoExpShown), piggy: Math.round(piggy), oilBuy: Math.round(oilBuy), itogo: r2(itogo), revenue: r2(revenue),
       withReceipt: r2(withReceipt), withoutReceipt: r2(revenue - withReceipt), receipts, noMark, refunds: r2(refunds), tax: 0, fixedSum: 0, rest: null, oilSoldCost,
     };
     if (taxMode) {
@@ -1675,6 +1687,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     X = S.index(D);
     try { jLegacyHide(); } catch (er) {}
     try { oilAddInit(); } catch (er) {}
+    try { rndInit(); } catch (er) {}
     freezeOil();
     X.clientById = {}; X.cstat = {};
     D.clients.forEach(p => { X.clientById[p.id] = p; X.cstat[p.id] = { count: 0, last: '', lastCar: {}, orders: [] }; });
@@ -2219,7 +2232,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   function jClosedMonths(gs, steps) {
     const cl = D.cfg.closed || {}, ms = new Set(), G = new Set(gs);
     const see = (k, r) => { if (!r) return; [r.date, r.start, r.doneDate, r.month && r.month + '-01'].forEach(d => { if (d && /^\d{4}-\d{2}/.test(d)) { const m = d.slice(0, 7); if (cl[m]) ms.add(m); } }); };
-    const MF = { orders: ['works', 'doneDate', 'start', 'num', 'paid', 'adj'], parts: ['sum', 'price', 'cost', 'qty', 'no', 'ret', 'retDone', 'retNo', 'order', 'month', 'keepMonth', 'paid', 'oilCost', 'date', 'client', 'sup'], pays: ['amount', 'type', 'receipt', 'date', 'name', 'order'] };
+    const MF = { orders: ['works', 'doneDate', 'start', 'num', 'paid', 'adj'], parts: ['sum', 'price', 'cost', 'qty', 'no', 'ret', 'retDone', 'retNo', 'kind', 'order', 'month', 'keepMonth', 'paid', 'oilCost', 'date', 'client', 'sup'], pays: ['amount', 'type', 'receipt', 'date', 'name', 'order'] };
     const money = x => (MF[x.k] ? lockMoneyDiff(x.k, x.old, x.now) : false);
     steps.forEach(e => jRecs(e).forEach(x => { if (x.cfg || !money(x)) return; if (G.has(groupOf(x.k, x.old)) || G.has(groupOf(x.k, x.now))) { see(x.k, x.old); see(x.k, x.now); } }));
     return [...ms].sort();
@@ -2649,7 +2662,22 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     paintEditor(true);
     if (ui.editor.picking) setTimeout(() => { const f = $('#e-pick'); if (f) f.focus(); }, 30);
   }
-  function addWork() { ui.editor.order.works.push({ id: uid('w'), name: '', sum: null, sub: 0, nik: 0, done: null }); }
+  function addWork() { ui.editor.order.works.push({ id: uid('w'), name: '', sum: null, base: null, pct: wPctCfg(), sub: 0, nik: 0, done: null }); }
+  /* наценка на работы: вводишь свою цену (base), клиенту идёт base + % (округление из настроек). % запоминается в работе — смена настройки старые работы не трогает */
+  const wPctCfg = () => +D.cfg.workPct || 0;
+  const wRoundCfg = () => +D.cfg.workRound || 1;
+  const wHasPct = w => w && w.pct != null && !w.kind;
+  function wMark(v, w) {
+    if (v == null) return null;
+    if (!wHasPct(w) || w.noPct || !(w.pct > 0)) return r2(v);
+    const R = wRoundCfg(), x = v * (1 + w.pct / 100);
+    return R > 1 ? Math.round(x / R) * R : r2(x);
+  }
+  const wInVal = w => (wHasPct(w) ? w.base ?? w.sum : w.sum);
+  function wPctBtn(w, i) {
+    if (!wHasPct(w) || !(w.pct > 0)) return '';
+    return `<button type="button" class="wpct${w.noPct ? '' : ' on'}" data-act="w-pct" data-i="${i}" title="${w.noPct ? 'Без наценки. Нажми, чтобы добавить +' + w.pct + '%' : 'Наценка +' + w.pct + '%: клиенту ' + rub(w.sum || 0) + '. Нажми, чтобы убрать'}">${w.noPct ? 'без %' : '+' + fmt(w.pct, w.pct % 1 ? 1 : 0) + '%' + (w.base != null ? ' = ' + fmt(w.sum || 0) : '')}</button>`;
+  }
   function newPart(extra) {
     return Object.assign({ id: uid('p'), date: S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', order: ui.editor.order.num, art: '', name: '', brand: '', cost: null, qty: 1, price: null, sum: 0, client: '', no: true, ret: false, retDone: false, month: null, paid: null, app: true }, extra || {});
   }
@@ -2682,6 +2710,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   function paintEditor(top) {
     const host = $('#editor');
     const E = ui.editor;
+    if (E) try { edRndSync(); } catch (er) { console.warn(er); }
     if (!E) { host.hidden = true; host.innerHTML = ''; if (!ui.sale) { document.body.classList.remove('locked'); if (draftLast) draftClear(); } return; }
     const a = document.activeElement;
     const keep = a && a.id && host.contains(a) ? { id: a.id, s: a.selectionStart, e: a.selectionEnd, v: a.value } : null;
@@ -2708,12 +2737,12 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
         </section>
 
         <section class="block">
-          <div class="block-head"><h3>Работы</h3><span class="muted">${rub(t.works)}</span></div>
+          <div class="block-head"><h3>Работы</h3><span class="muted">${rub(r2(t.works - o.works.filter(w => w.kind).reduce((a, w) => a + (w.sum || 0), 0)))}</span></div>
           <div class="lines${ui.dense ? ' dense' : ''}">
-          ${ui.dense ? o.works.map((w, i) => workRowC(E, w, i)).join('') : o.works.map((w, i) => `
+          ${ui.dense ? o.works.map((w, i) => w.kind ? '' : workRowC(E, w, i)).join('') : o.works.map((w, i) => w.kind ? '' : `
             <div class="line work">
               <label class="f grow wsug-host">Работа<input id="w-n-${i}" value="${esc(w.name)}" data-w="${i}" data-k="name" autocomplete="off" role="combobox" aria-expanded="${E.wsug && E.wsug.i === i ? 'true' : 'false'}">${E.wsug && E.wsug.i === i ? workSuggHTML(i) : ''}</label>
-              <label class="f num">Сумма, ₽<input id="w-s-${i}" value="${esc(nv(w.sum))}" data-w="${i}" data-k="sum" inputmode="decimal"></label>
+              <label class="f num">Сумма, ₽<input id="w-s-${i}" value="${esc(nv(wInVal(w)))}" data-w="${i}" data-k="sum" inputmode="decimal"></label>${wPctBtn(w, i)}
               <label class="f num">Подрядчик<input id="w-o-${i}" value="${esc(nv(w.sub || null))}" data-w="${i}" data-k="sub" inputmode="decimal"></label>
               <label class="f num">Никита<input id="w-p-${i}" value="${esc(nv(w.nik || null))}" data-w="${i}" data-k="nik" inputmode="decimal"></label>
               <button class="x" data-act="del-work" data-i="${i}" aria-label="Удалить работу">×</button>
@@ -2755,16 +2784,16 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         </section>
 
         <section class="block">
-          <div class="block-head"><h3>Для заказ-наряда</h3><span class="muted small">печатается, только если заполнено</span></div>
+          <div class="block-head"><h3>Для заказ-наряда</h3></div>
           <div class="grid g2">
-            <label class="f">Причина обращения<textarea id="e-reason" rows="2" data-ed="reason" placeholder="Стук спереди справа, плановое ТО…">${esc(o.reason || '')}</textarea></label>
-            <label class="f">Рекомендации<textarea id="e-advice" rows="2" data-ed="advice" placeholder="Через 10 000 км заменить…">${esc(o.advice || '')}</textarea></label>
+            <label class="f">Причина обращения<textarea id="e-reason" rows="2" data-ed="reason">${esc(o.reason || '')}</textarea></label>
+            <label class="f">Рекомендации<textarea id="e-advice" rows="2" data-ed="advice">${esc(o.advice || '')}</textarea></label>
           </div>
         </section>
 
         <section class="block">
-          <div class="block-head"><h3>Примечание</h3><span class="muted small">только для себя, не печатается</span></div>
-          <label class="f"><textarea id="e-memo" rows="2" data-ed="memo" placeholder="Клиент просил позвонить перед заменой, своё масло привезёт сам…" aria-label="Примечание">${esc(o.memo || '')}</textarea></label>
+          <div class="block-head"><h3>Примечание</h3></div>
+          <label class="f"><textarea id="e-memo" rows="2" data-ed="memo" aria-label="Примечание">${esc(o.memo || '')}</textarea></label>
         </section>
 
         <section class="block">
@@ -2800,8 +2829,9 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
 
         <section class="block totals${ui.totOpen ? ' open' : ''}">
           ${totBar(t)}
-          <div><span>Работы</span><b>${rub(t.works)}</b></div>
+          <div><span>Работы</span><b>${rub(r2(t.works - o.works.filter(w => w.kind).reduce((a, w) => a + (w.sum || 0), 0)))}</b></div>
           <div><span>Запчасти</span><b>${rub(t.parts)}</b>${t.partsWait > 0 ? `<small class="muted" title="Запчасти с отметкой «НЕТ» — заказаны, но ещё не пришли. Они уже входят в сумму.">ещё не пришло: ${rub(t.partsWait)}</small>` : ''}</div>
+          ${rndRowsHTML(o.works, 'ed')}
           <div class="big"><span>Итого</span><b>${rub(t.total)}</b></div>
           <div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
           <div class="big ${t.debt > 5 ? 'neg' : t.debt < -5 ? 'pos' : ''}"><span>${t.debt < -5 ? 'Переплата' : 'Долг'}</span><b>${rub(Math.abs(t.debt))}</b></div>
@@ -2898,14 +2928,14 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const empty = !(w.name || '').trim() && !w.sum;
     if (isEd(E, 'w', i) || empty) return `<div class="cr cr-w editing">
       <span class="wsug-host"><input id="w-n-${i}" value="${esc(w.name)}" data-w="${i}" data-k="name" autocomplete="off" role="combobox" placeholder="Работа" aria-label="Работа" aria-expanded="${E.wsug && E.wsug.i === i ? 'true' : 'false'}">${E.wsug && E.wsug.i === i ? workSuggHTML(i) : ''}</span>
-      <input id="w-s-${i}" class="r" value="${esc(nv(w.sum))}" data-w="${i}" data-k="sum" inputmode="decimal" placeholder="Сумма" aria-label="Сумма" title="Сумма">
+      <span class="wsum"><input id="w-s-${i}" class="r" value="${esc(nv(wInVal(w)))}" data-w="${i}" data-k="sum" inputmode="decimal" placeholder="Сумма" aria-label="Сумма" title="${wHasPct(w) && w.pct > 0 ? 'Твоя цена — клиенту пойдёт с наценкой' : 'Сумма'}">${wPctBtn(w, i)}</span>
       <input id="w-o-${i}" class="r" value="${esc(nv(w.sub || null))}" data-w="${i}" data-k="sub" inputmode="decimal" placeholder="Подрядчик" aria-label="Подрядчик" title="Подрядчику">
       <input id="w-p-${i}" class="r" value="${esc(nv(w.nik || null))}" data-w="${i}" data-k="nik" inputmode="decimal" placeholder="Никита" aria-label="Никита" title="Никите">
       <button class="x sm" data-act="del-work" data-i="${i}" aria-label="Удалить работу">×</button></div>`;
     const extra = [w.sub ? 'подрядчик ' + rub(w.sub) : '', w.nik ? 'Никита ' + rub(w.nik) : ''].filter(Boolean).join(' · ');
     return `<div class="cr cr-w" data-act="row-edit" data-t="w" data-i="${i}" title="Нажми, чтобы изменить"><span class="cr-pen" aria-hidden="true">✎</span>
       <span class="cr-name" title="${esc(w.name || '')}"><b>${esc(w.name || '—')}</b>${extra ? ` <span class="muted">· ${esc(extra)}</span>` : ''}</span>
-      <b class="cr-sum">${rub(w.sum || 0)}</b>
+      <b class="cr-sum"${wHasPct(w) && w.pct > 0 && !w.noPct && w.base != null ? ` title="${esc('Твоя цена ' + rub(w.base) + ' + ' + w.pct + '%')}"` : ''}>${rub(w.sum || 0)}</b>
       <button class="x sm" data-act="del-work" data-i="${i}" aria-label="Удалить работу">×</button></div>`;
   }
   function partTogglesC(E, p, i) {
@@ -3377,9 +3407,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         w.name = el.value;
         E.wsug = el.value.trim() ? { i: +el.dataset.w, q: el.value, sel: 0 } : null; paintEditor();
         const wt = D.workTypes.find(x => x.name === el.value) || D.workTypes.find(x => wk(x.name) === wk(el.value) || (x.aliases || []).some(a => wk(a) === wk(el.value)));
-        if (wt && wt.price && !w.sum) { w.sum = wt.price; paintEditor(); }
+        if (wt && wt.price && !w.sum) { if (wHasPct(w)) { w.base = wt.price; w.sum = wMark(wt.price, w); } else w.sum = wt.price; paintEditor(); }
         return;
       }
+      if (k === 'sum' && wHasPct(w)) { w.base = numIn(el.value); w.sum = wMark(w.base, w); later(); return; }
       w[k] = numIn(el.value); later();
       return;
     }
@@ -3545,11 +3576,20 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     /* в бланк идут все запчасти наряда, в том числе ещё не полученные; возвраты — нет */
     const pr = parts.filter(p => !p.ret);
     /* «Сдача» (клиент не взял сдачу) в бланк не печатается: оплачено показываем без неё */
-    const isTip = x => low((x.name || '').trim()) === 'сдача';
+    const isTip = x => x.kind === 'noch' || (!x.kind && low((x.name || '').trim()) === 'сдача');
     const tip = r2(works.filter(isTip).reduce((a, w) => a + (w.sum || 0), 0) + pr.filter(isTip).reduce((a, p) => a + (p.sum || 0), 0));
-    const wk = works.filter(w => ((w.name || '').trim() || w.sum) && !isTip(w));
-    const prP = pr.filter(p => !isTip(p));
-    const total = r2(prP.reduce((a, p) => a + (p.sum || 0), 0) + wk.reduce((a, w) => a + (w.sum || 0), 0));
+    const wk = works.filter(w => ((w.name || '').trim() || w.sum) && !isTip(w) && !w.kind).map(w => Object.assign({}, w));
+    const prP = pr.filter(p => !isTip(p) && !p.kind).map(p => Object.assign({}, p));
+    /* округление в бланк отдельно не печатаем: прячем в самой дорогой запчасти с количеством 1 (цена = сумме, пересчитать нечего),
+       нет такой — в самой дорогой работе; нет и её — печатаем строку «Округление» над итогом */
+    let rndLine = 0;
+    const rndSum = r2(works.filter(w => w.kind === 'rnd').reduce((a, w) => a + (w.sum || 0), 0) + pr.filter(p => p.kind === 'rnd').reduce((a, p) => a + (p.sum || 0), 0));
+    if (Math.abs(rndSum) > 0.004) {
+      const big = arr => arr.reduce((m, x) => (!m || (x.sum || 0) > (m.sum || 0) ? x : m), null);
+      const bp = big(prP.filter(p => +p.qty === 1 && (p.sum || 0) > Math.abs(rndSum))), bw = big(wk.filter(w => (w.sum || 0) > Math.abs(rndSum)));
+      if (bp) { bp.sum = r2(bp.sum + rndSum); bp.price = bp.sum; } else if (bw) bw.sum = r2(bw.sum + rndSum); else rndLine = rndSum;
+    }
+    const total = r2(prP.reduce((a, p) => a + (p.sum || 0), 0) + wk.reduce((a, w) => a + (w.sum || 0), 0) + rndLine);
     const paid = r2(t.paid - tip), due = r2(total - paid);
     /* заказчик — только имя, без прозвища */
     const who = (o.cid && X.clientById[o.cid] ? X.clientById[o.cid].name : o.client || '').trim();
@@ -3578,7 +3618,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <tbody>${wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td class="l">${esc(w.name)}</td><td class="r b">${money(w.sum)}</td></tr>`).join('')}</tbody></table>` : ''}
       ${prP.length ? `<table class="zn-t"><colgroup><col class="cn"><col><col class="cb"><col class="cq"><col class="cp"><col class="cs"></colgroup><thead><tr><th class="n">№<br>п/п</th><th class="l">Список запчастей и расходных материалов</th><th>Бренд</th><th>Кол-во</th><th>Цена,<br>руб</th><th>Сумма,<br>руб</th></tr></thead>
         <tbody>${prP.map((p, i) => `<tr><td class="n">${i + 1}</td><td class="l">${esc(p.name || p.art)}</td><td class="c">${esc(p.brand)}</td><td class="c nw">${fmt(p.qty, p.qty % 1 ? 2 : 0)} ${unit(p)}</td><td class="r">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`).join('')}</tbody></table>` : ''}
-      <div class="zn-blk"><div class="zn-sum"><div class="zn-total"><span>Итоговая стоимость ремонта:</span><b>${money(total)}&nbsp;₽</b></div>
+      <div class="zn-blk"><div class="zn-sum">${rndLine ? `<div><span>Округление:</span><b>${rndLine > 0 ? '+' : '−'}${money(Math.abs(rndLine))}&nbsp;₽</b></div>` : ''}<div class="zn-total"><span>Итоговая стоимость ремонта:</span><b>${money(total)}&nbsp;₽</b></div>
         <div><span>Оплачено:</span><b>${money(paid)}&nbsp;₽</b></div>
         <div class="zn-due"><span>${due < -0.005 ? 'Переплата:' : 'К оплате:'}</span><b>${money(Math.abs(due))}&nbsp;₽</b></div></div>
         <div class="zn-words">${esc(rubWords(Math.abs(due)))}</div></div>
@@ -3801,24 +3841,83 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const dl = t.debt < -5 ? 'Переплата' : 'Долг', cls = t.debt > 5 ? 'neg' : t.debt < -5 ? 'pos' : '';
     return `<button type="button" class="tot-bar" data-act="tot-toggle" aria-expanded="${!!ui.totOpen}"><span>Итого <b>${rub(t.total)}</b></span><span>${dl} <b class="${cls}">${rub(Math.abs(t.debt))}</b></span><span class="tot-arr" aria-hidden="true">${ui.totOpen ? '▾' : '▴'}</span></button>`;
   }
+  /* Округление и «без сдачи» — служебные строки (kind), в бланк не печатаются.
+     Округление: все оплаты без чека и оплачено ровно до сотни, разница не больше 50 ₽ — ставится само. */
+  const RND_LBL = { rnd: 'Округление', noch: 'Без сдачи' };
+  /* один раз (13.11.2026): старые строки «Скидка» до 50 ₽ и «Сдача» → служебные «Округление»/«Без сдачи» (закрытые месяцы не трогаем) */
+  function rndInit() {
+    if (D.cfg.rndInit) return;
+    const conv = (x, m) => {
+      if (x.kind || (m && isLockedM(m))) return;
+      const n = low((x.name || '').trim()), v = +x.sum || 0;
+      if (n === 'скидка' && v < 0 && v >= -RND_MAX) { x.kind = 'rnd'; x.name = RND_LBL.rnd; }
+      else if (n === 'сдача' && v > 0) { x.kind = 'noch'; x.name = RND_LBL.noch; }
+    };
+    D.orders.forEach(o => (o.works || []).forEach(w => conv(w, w.done ? S.monthOf(w.done) : null)));
+    D.parts.forEach(p => { if (!p.sup && p.order == null && p.client) conv(p, S.partPeriod(p, X)); });
+    D.cfg.rndInit = S.todayISO();
+  }
+  const RND_MAX = 50;
+  const rnd100 = v => Math.round(r2(v) / 100) * 100;
+  function rndTarget(total) { const R = rnd100(total), d = r2(R - total); return Math.abs(d) > 0.004 && Math.abs(d) <= RND_MAX ? R : null; }
+  function rndAuto(lines, pays, totalNoRnd, paidSum, add) {
+    /* lines — массив строк (работы наряда или строки продажи); убираем старое авто-округление и ставим новое, если подходит */
+    for (let i = lines.length - 1; i >= 0; i--) if (lines[i].kind === 'rnd' && lines[i].auto) lines.splice(i, 1);
+    const real = pays.filter(p => (+p.amount || 0) > 0 && !p.refund);
+    if (!real.length || !real.every(p => p.receipt === false)) return;
+    const R = rndTarget(totalNoRnd);
+    if (R == null || Math.abs(r2(paidSum) - R) > 0.004) return;
+    add(r2(R - totalNoRnd));
+  }
+  function edRndSync() {
+    const E = ui.editor; if (!E) return;
+    const o = E.order, W = o.works;
+    const old = W.filter(w => w.kind === 'rnd' && w.auto).reduce((a, w) => a + (w.sum || 0), 0), noch = W.filter(w => w.kind === 'noch').reduce((a, w) => a + (w.sum || 0), 0);
+    const t = edTotals(), totalNo = r2(t.total - old - noch);
+    rndAuto(W, E.pays, totalNo, r2(t.paid - noch), d => W.push({ id: uid('w'), name: RND_LBL.rnd, kind: 'rnd', auto: true, sum: d, sub: 0, nik: 0, done: o.doneDate || null }));
+  }
+  function saRndSync() {
+    const Sx = ui.sale; if (!Sx || isOwn(Sx.client)) return;
+    const old = Sx.rows.filter(p => p.kind === 'rnd' && p.auto).reduce((a, p) => a + (p.sum || 0), 0), noch = Sx.rows.filter(p => p.kind === 'noch').reduce((a, p) => a + (p.sum || 0), 0);
+    const t = saleTotals(), totalNo = r2(t.sum - old - noch);
+    rndAuto(Sx.rows, Sx.pays, totalNo, r2(t.paid - noch), d => Sx.rows.push(saleRowNew({ sup: '', name: RND_LBL.rnd, kind: 'rnd', auto: true, cost: 0, qty: 1, price: d, sum: d, no: false })));
+  }
+  /* при отметке «чек: нет» сумма оплаты сама округляется до сотни (и обратно при «чек: да») */
+  function rndPayAmount(pays, i, totalNo) {
+    const p = pays[i]; if (!p || p.refund) return;
+    const other = r2(pays.reduce((a, x, j) => a + (j !== i && !x.refund ? (+x.amount || 0) : 0), 0)), R = rndTarget(totalNo);
+    if (R == null) return;
+    if (p.receipt === false && Math.abs((+p.amount || 0) - r2(totalNo - other)) < 0.005 && pays.every((x, j) => j === i || x.refund || !(+x.amount > 0) || x.receipt === false)) p.amount = r2(R - other);
+    else if (p.receipt === true && Math.abs((+p.amount || 0) - r2(R - other)) < 0.005) p.amount = r2(totalNo - other);
+  }
+  function rndRowsHTML(lines, where) {
+    return lines.map((w, i) => w.kind ? `<div class="rnd-row"><span>${esc(RND_LBL[w.kind] || w.name)} <small class="muted">· только для тебя, в бланк не печатается</small></span><b>${(w.sum > 0 ? '+' : '') + rub(w.sum)}</b><button class="x sm" data-act="rnd-del" data-w="${where}" data-i="${i}" aria-label="Убрать">×</button></div>` : '').join('');
+  }
+  /* «без сдачи»: при оплате без чека сначала округляем счёт до сотни, остальное — сдача */
+  function nochAmount(where) {
+    const lines = where === 'ed' ? ui.editor.order.works : ui.sale.rows, pays = where === 'ed' ? ui.editor.pays : ui.sale.pays;
+    const t = where === 'ed' ? edTotals() : saleTotals(), total = where === 'ed' ? t.total : t.sum;
+    const sumK = k => lines.filter(x => x.kind === k && (k !== 'rnd' || x.auto)).reduce((a, x) => a + (x.sum || 0), 0);
+    const totalNo = r2(total - sumK('rnd') - sumK('noch')), paidEff = r2(t.paid - sumK('noch'));
+    const real = pays.filter(p => (+p.amount || 0) > 0 && !p.refund), R = real.length && real.every(p => p.receipt === false) ? rndTarget(totalNo) : null;
+    return r2(paidEff - (R != null ? R : totalNo));
+  }
   function roundBtns(t, where) {
-    if (!(t.paid > 0) || Math.abs(t.debt) < 0.01) return '';
-    const n = rub(Math.abs(t.debt));
-    return `<div class="round-btns">${t.debt > 0
-      ? `<button class="btn small" data-act="rnd-disc" data-w="${where}" title="Клиент заплатил меньше — простить остаток">Скидка ${n}</button><span class="muted small">клиент заплатил меньше — простить остаток</span>`
-      : `<button class="btn small" data-act="rnd-tip" data-w="${where}" title="Клиент не взял сдачу — это доход СТО">Без сдачи ${n}</button><span class="muted small">или «Вернуть клиенту» в оплатах</span>`}</div>`;
+    if (!(t.paid > 0) || t.debt > -0.01) return '';
+    const n = nochAmount(where); if (!(n > 0.004)) return '';
+    return `<div class="round-btns"><button class="btn small" data-act="rnd-tip" data-w="${where}" title="Клиент не взял сдачу — это доход СТО, в бланк не печатается">Без сдачи ${rub(n)}</button><span class="muted small">или «Вернуть клиенту» в оплатах</span></div>`;
   }
   function roundApply(kind, where) {
     if (where === 'ed') {
-      const E = ui.editor, t = edTotals(); const d = r2(t.debt); if (Math.abs(d) < 0.01) return;
+      const E = ui.editor, d = -nochAmount('ed'); if (!(d < -0.004)) return;
       const o = E.order;
-      o.works.push({ id: uid('w'), name: kind === 'disc' ? 'Скидка' : 'Сдача', sum: -d, sub: 0, nik: 0, done: o.doneDate || null });
-      toast(kind === 'disc' ? 'Добавлена строка «Скидка» — долг закрыт' : tipSplit(E.pays, -d));
+      o.works.push({ id: uid('w'), name: RND_LBL.noch, kind: 'noch', sum: -d, sub: 0, nik: 0, done: o.doneDate || null });
+      toast(tipSplit(E.pays, -d));
       paintEditor(); return;
     }
-    const Sx = ui.sale, t = saleTotals(), d = r2(t.debt); if (Math.abs(d) < 0.01) return;
-    Sx.rows.push(saleRowNew({ sup: '', name: kind === 'disc' ? 'Скидка' : 'Сдача', cost: 0, qty: 1, price: -d, sum: -d, no: false }));
-    toast(kind === 'disc' ? 'Добавлена строка «Скидка» — долг закрыт' : tipSplit(Sx.pays, -d));
+    const Sx = ui.sale, d = -nochAmount('sa'); if (!(d < -0.004)) return;
+    Sx.rows.push(saleRowNew({ sup: '', name: RND_LBL.noch, kind: 'noch', cost: 0, qty: 1, price: -d, sum: -d, no: false }));
+    toast(tipSplit(Sx.pays, -d));
     paintSale();
   }
   /* сдачу, оставленную с наличной оплаты, выделяем в отдельную оплату «без чека»: чек пробит на сумму наряда, налог — только с неё */
@@ -3843,6 +3942,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function paintSale(top) {
     const host = $('#saleEd'), Sx = ui.sale;
+    if (Sx) try { saRndSync(); } catch (er) { console.warn(er); }
     if (!Sx) { host.hidden = true; host.innerHTML = ''; if (!ui.editor) { document.body.classList.remove('locked'); if (draftLast) draftClear(); } return; }
     const a = document.activeElement, keep = a && a.id && host.contains(a) ? { id: a.id, s: a.selectionStart, e: a.selectionEnd, v: a.value } : null;
     const b0 = host.querySelector('.sheet-body'), scroll = b0 ? b0.scrollTop : 0;
@@ -3858,7 +3958,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <label class="f">Дата<input id="sa-date" type="date" value="${esc(Sx.date)}" data-sa="date"></label>
         </div>${own ? `<p class="small">Покупка для себя: цена = закупка, без наценки.</p>` : ''}</section>
         <section class="block"><div class="block-head"><h3>${fromStock ? 'Со склада' : 'Запчасти'}</h3><span class="muted">${rub(t.sum)}</span></div>
-          <div class="lines">${Sx.rows.map((p, i) => `
+          <div class="lines">${Sx.rows.map((p, i) => p.kind ? '' : `
             <div class="line part${p.no ? ' is-no' : ''}${p.ret ? ' is-ret' : ''}">
               <label class="f">Откуда<select id="sp-sup-${i}" data-sp="${i}" data-k="sup">${opt(sups.includes(p.sup) ? sups : [...sups, p.sup], p.sup)}</select></label>
               <label class="f">Артикул<input id="sp-art-${i}" class="mono" value="${esc(p.art)}" data-sp="${i}" data-k="art" ${p.sup === 'Склад' ? 'list="dl-stock"' : ''} autocomplete="off"></label>
@@ -3891,7 +3991,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
             <button class="btn small" data-act="sy-add">+ Оплата</button>`}
           ${t.costOther ? `<label class="f" style="max-width:420px">Закупку (${rub(t.costOther)}) в магазине оплатил<select id="sa-sup" data-sa="supHow"><option value="none"${Sx.supHow === 'none' ? ' selected' : ''}>Внесу сам в «Деньги»</option>${Object.entries(HOW).map(([k, h]) => `<option value="${k}"${Sx.supHow === k ? ' selected' : ''}>${h[2]}</option>`).join('')}</select></label>` : ''}
         </section>
-        <section class="block totals${ui.totOpen ? ' open' : ''}">${totBar({ total: t.sum, debt: t.debt })}<div><span>Сумма</span><b>${rub(t.sum)}</b></div><div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
+        <section class="block totals${ui.totOpen ? ' open' : ''}">${totBar({ total: t.sum, debt: t.debt })}${rndRowsHTML(Sx.rows, 'sa')}<div><span>Сумма</span><b>${rub(t.sum)}</b></div><div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
           <div class="big ${t.debt > 5 ? 'neg' : t.debt < -5 ? 'pos' : ''}"><span>${t.debt < -5 ? 'Переплата' : 'Долг'}</span><b>${rub(Math.abs(t.debt))}</b></div>
           ${own ? '' : roundBtns(t, 'sa')}</section>
         <div class="actions"><span class="grow"></span>${Sx.id ? (Sx.confirmDelete ? '<span class="small">Удалить продажу со всеми строками и оплатами?</span><button class="btn danger" data-act="sale-del">Да, удалить</button><button class="btn ghost" data-act="sale-del-no">Нет</button>' : '<button class="btn ghost danger-t" data-act="sale-del-ask">Удалить продажу</button>') : ''}</div>
@@ -4919,7 +5019,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (r.closed) h += `<p class="muted small">Месяц закрыт ${dshort(r.closed.date)}. Прибыль с запчастей и расходы СТО показаны как на момент закрытия.${r.diff ? ` Сейчас «Итого» было бы ${rub(r.liveItogo)} (разница ${rub(r.diff)}).` : ''}</p>`;
     blk('rev', 'Выручка и прибыль', 'итого ' + rub(r.itogo), `
       ${line('Работы', r.works)}${line('Подрядчик', -r.sub, 'minus')}${line('Никита', -r.nik, 'minus')}${line('Прибыль СТО', r.stoProfit, 'sub')}
-      ${line('Прибыль с продаж запчастей', r.partsProfit)}${line('Расходы СТО', -r.stoExp, 'minus')}${line('Итого', r.itogo, 'total')}
+      ${line('Прибыль с продаж запчастей', r.partsProfit)}${line('Округления и без сдачи', r.rnd || 0, '', 1)}${line('Расходы СТО', -r.stoExp, 'minus')}${line('Итого', r.itogo, 'total')}
       ${line(r.taxMode ? 'Общая выручка (все оплаты клиентов)' : 'Выручка (работы + запчасти)', r.revenue)}
       ${r.taxMode ? line('Оплаты без чека', r.withoutReceipt) + (r.refunds ? line('Возвраты клиентам по чеку', -r.refunds, 'minus') : '') + line('Выручка с чеком', r.withReceipt, 'sub') : ''}
       ${r.noMark ? `<p class="note bad small">${r.noMark} оплат по нарядам без отметки чека — они не попали в выручку.</p>` : ''}`);
@@ -4998,7 +5098,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     'Работы': 'Все работы, сделанные в этом месяце (по дате выполнения работы)',
     'Подрядчик': 'Сколько из работ причитается подрядчику', 'Никита': 'Сколько из работ причитается Никите',
     'Прибыль СТО': 'Работы минус подрядчик и Никита', 'Прибыль с продаж запчастей': 'Цена продажи минус закупка (и масло по цене бочки)',
-    'Расходы СТО': 'Расходник, инструмент и прочее со страницы «Расходы»', 'Итого': 'Прибыль СТО + прибыль с запчастей − расходы СТО',
+    'Расходы СТО': 'Расходник, инструмент и прочее со страницы «Расходы»',
+    'Округления и без сдачи': 'Округления до сотни при оплате без чека и сдача, которую клиенты не взяли. В бланки не печатается', 'Итого': 'Прибыль СТО + прибыль с запчастей ± округления − расходы СТО',
     'Отложить в налоговую (с оплат с чеком)': 'Ставка УСН от выручки с чеком', 'Постоянные расходы — всего': 'Налог, аренда, бухгалтер, свет, взносы, эквайринг',
     'Остаток за месяц': '«Итого» минус налог и постоянные — это делится', 'Налог и постоянные: не уплачено (всего)': 'Начислено с начала официального учёта минус уже оплачено',
     'Касса (наличные)': 'Наличные в кассе', 'Антон (счёт)': 'Сколько денег СТО сейчас на карте Антона', 'Глеб (счёт)': 'Сколько денег СТО сейчас на карте Глеба',
@@ -5033,7 +5134,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function closeMonth() {
     const r = S.monthReport(D, X, ui.month, { live: true });
     D.cfg.closed = D.cfg.closed || {};
-    D.cfg.closed[ui.month] = { date: S.todayISO(), works: r.works, stoProfit: r.stoProfit, partsProfit: r.partsProfit, stoExp: r.stoExp, itogo: r.itogo };
+    D.cfg.closed[ui.month] = { date: S.todayISO(), works: r.works, stoProfit: r.stoProfit, partsProfit: r.partsProfit, rnd: r.rnd || 0, stoExp: r.stoExp, itogo: r.itogo };
     ui.confirmClose = false; toast(S.monthLabel(ui.month) + ' закрыт'); changed();
   }
   function trendChart(m) {
@@ -5115,7 +5216,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const E = ui.editor, w = E.order.works[i]; if (!w) return;
     w.name = name; E.wsug = null;
     const wt = D.workTypes.find(x => x.name === name);
-    if (wt && wt.price && !w.sum) w.sum = wt.price;
+    if (wt && wt.price && !w.sum) { if (wHasPct(w)) { w.base = wt.price; w.sum = wMark(wt.price, w); } else w.sum = wt.price; }
     paintEditor(); setTimeout(() => { const t = $('#w-s-' + i); if (t) t.focus(); }, 0);
   }
   function wpTouch(wt) { wt.own = true; delete wt.isNew; }
@@ -5235,6 +5336,13 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <p class="muted small">Для месяца действует последняя строка, у которой «С месяца» не позже него. Новая ставка — новая строка, старые не трогай. Месяц пиши так: 2027-01.</p>
         <div class="scroll"><table class="tbl params"><thead><tr><th>С месяца</th><th class="r">УСН, %</th><th class="r">Доп. взнос, %</th><th class="r">Аренда</th><th class="r">Бухгалтер</th><th class="r">Свет</th><th class="r">Взносы за год</th><th class="r">Эквайринг карта, %</th><th class="r">Эквайринг QR, %</th><th class="r">Терминал</th><th></th></tr></thead>
         <tbody>${ps.map((p, i) => `<tr>${cell(i, 'from', p.from)}${cell(i, 'usn', p.usn, 'pct')}${cell(i, 'extra', p.extra, 'pct')}${cell(i, 'rent', p.rent)}${cell(i, 'acc', p.acc)}${cell(i, 'elec', p.elec)}${cell(i, 'vznosYear', p.vznosYear)}${cell(i, 'acqCard', p.acqCard, 'pct')}${cell(i, 'acqQr', p.acqQr, 'pct')}${cell(i, 'term', p.term)}<td><button class="x" data-act="pp-del" data-i="${i}" aria-label="Удалить строку">×</button></td></tr>`).join('') || '<tr><td colspan="11" class="muted">Добавь первую строку — с неё начнётся налоговый учёт.</td></tr>'}</tbody></table></div>
+      </section>
+      <section class="block"><div class="block-head"><h3>Наценка на работы</h3></div>
+        <div class="grid g2" style="max-width:520px">
+          <label class="f">Наценка, %<input id="cfg-wpct" class="r" value="${esc(String(wPctCfg()).replace('.', ','))}" data-cfgw="workPct" inputmode="decimal"></label>
+          <label class="f">Округлять цену до<select id="cfg-wround" data-cfgw="workRound">${[[1, 'не округлять'], [10, '10 ₽'], [50, '50 ₽'], [100, '100 ₽']].map(([v, l]) => `<option value="${v}"${wRoundCfg() === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <p class="muted small">В наряде вводишь свою цену работы — клиенту идёт с наценкой. ${wPctCfg() > 0 ? 'Пример: 10 000 → ' + rub(wMark(10000, { pct: wPctCfg() })) + '. ' : ''}У каждой работы кнопкой «+%» наценку можно снять. Новый % касается только новых работ.</p>
       </section>
       <section class="block"><div class="block-head"><h3>Наценка на запчасти</h3></div>
         <div class="scroll"><table class="tbl"><thead><tr><th>Закупка до, ₽</th><th class="r">Наценка, %</th></tr></thead><tbody>
@@ -5486,7 +5594,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'sp-paste-add': { const Sx = ui.sale; Sx.rows = Sx.rows.filter(p => (p.name || '').trim() || p.art || p.sum); Sx.paste.items.filter(x => x.on).forEach(it => { const price = salePrice(it.cost); Sx.rows.push(saleRowNew({ sup: Sx.paste.sup, art: it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price, sum: r2(price * it.qty), no: it.no != null ? it.no : !!Sx.paste.no })); }); Sx.paste = null; paintSale(); break; }
       case 'sy-add': { const t = saleTotals(); ui.sale.pays.push({ id: uid('y'), date: S.todayISO(), amount: t.debt > 0 ? t.debt : null, type: 'Наличные', receipt: null, name: '', note: '', app: true }); paintSale(); break; }
       case 'sy-del': ui.sale.pays.splice(+b.dataset.i, 1); paintSale(); break;
-      case 'sy-rc': ui.sale.pays[+b.dataset.i].receipt = b.dataset.v === '1'; ui.sale.err = ''; paintSale(); break;
+      case 'sy-rc': { const Sx = ui.sale; Sx.pays[+b.dataset.i].receipt = b.dataset.v === '1'; Sx.err = ''; const old = Sx.rows.filter(p => p.kind === 'rnd' && p.auto).reduce((a, p) => a + (p.sum || 0), 0); rndPayAmount(Sx.pays, +b.dataset.i, r2(saleTotals().sum - old)); paintSale(); break; }
+      case 'rnd-del': { const i = +b.dataset.i; if (b.dataset.w === 'ed') { const w = ui.editor.order.works[i]; if (w && w.kind) ui.editor.order.works.splice(i, 1); paintEditor(); } else { const p = ui.sale.rows[i]; if (p && p.kind) ui.sale.rows.splice(i, 1); paintSale(); } break; }
       case 'sfilter': ui.sfilter = b.dataset.k; ui.slimit = 40; render(); break;
       case 's-more': ui.slimit = (ui.slimit || 40) + 60; render(); break;
       case 'toggle-row': { const id = b.dataset.id; if (ui.openRows.has(id)) ui.openRows.delete(id); else ui.openRows.add(id); render(); break; }
@@ -5498,6 +5607,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'save-order': saveOrder(); break;
       case 'rnd-disc': roundApply('disc', b.dataset.w); break;
       case 'rnd-tip': roundApply('tip', b.dataset.w); break;
+      case 'w-pct': { const w = E.order.works[+b.dataset.i]; if (!w) break; w.noPct = !w.noPct; if (w.base == null) w.base = w.sum; w.sum = wMark(w.base, w); paintEditor(); break; }
       case 'add-work': addWork(); E.edRow = { t: 'w', i: E.order.works.length - 1 }; paintEditor(); focusLast('[data-w][data-k="name"]'); break;
       case 'del-work': E.order.works.splice(+b.dataset.i, 1); E.edRow = null; paintEditor(); break;
       case 'add-part': E.parts.push(newPart()); E.edRow = { t: 'p', i: E.parts.length - 1 }; paintEditor(); focusLast('[data-p][data-k="art"]'); break;
@@ -5543,7 +5653,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'cmv-do': moveCars(); break;
       case 'cl-more': ui.climit = (ui.climit || 60) + 100; render(); break;
       case 'del-pay': E.pays.splice(+b.dataset.i, 1); paintEditor(); break;
-      case 'pay-receipt': E.pays[+b.dataset.i].receipt = b.dataset.v === '1'; E.err = ''; paintEditor(); break;
+      case 'pay-receipt': { E.pays[+b.dataset.i].receipt = b.dataset.v === '1'; E.err = ''; const W = E.order.works, old = W.filter(w => w.kind === 'rnd' && w.auto).reduce((a, w) => a + (w.sum || 0), 0); rndPayAmount(E.pays, +b.dataset.i, r2(edTotals().total - old)); paintEditor(); break; }
       case 'close-order': E.order.doneDate = E.doneInput || S.todayISO(); E.order.works.forEach(w => { if (!w.done) w.done = E.order.doneDate; }); paintEditor(); break;
       case 'reopen': { const dd = E.order.doneDate; E.order.works.forEach(w => { if (w.done === dd) w.done = null; }); E.order.doneDate = null; paintEditor(); break; }
       case 'ask-delete': E.confirmDelete = true; paintEditor(); break;
@@ -5800,6 +5910,12 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       if (k === 'from') { if (/^\d{4}-\d{2}$/.test(el.value.trim())) p.from = el.value.trim(); else { toast('Месяц пиши так: 2027-01'); render(); return; } }
       else { const n = numIn(el.value) || 0; p[k] = el.dataset.mode === 'pct' ? r2(n) / 100 : n; }
       toast('Параметры сохранены'); changed(); return;
+    }
+    if (el.dataset.cfgw) {
+      const k = el.dataset.cfgw, n = numIn(el.value);
+      if (k === 'workPct' && (n == null || n < 0 || n > 500)) { toast('Наценка — число от 0 до 500'); render(); return; }
+      D.cfg[k] = k === 'workRound' ? +el.value : r2(n);
+      toast('Наценка на работы сохранена'); changed(); return;
     }
     if (el.dataset.mk != null) {
       const mk = (D.cfg.markup = clone(D.cfg.markup || S.DEFAULT_MARKUP));
