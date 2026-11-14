@@ -121,6 +121,9 @@ li.is-open > .order, li.is-open > .client { border-color: var(--accent); border-
 
 .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
 .st-work { background: var(--work-soft); color: var(--work); }
+.doc-num { display: block; font-size: 11px; font-weight: 600; color: var(--accent); letter-spacing: .02em; }
+.doc-num.big { display: inline-block; font-size: 15px; padding: 2px 8px; border-radius: 6px; background: var(--accent-soft); vertical-align: middle; }
+.st-sched { background: var(--accent-soft); color: var(--accent); }
 .st-done { background: var(--ok-soft); color: var(--ok); }
 .st-bad { background: var(--bad-soft); color: var(--bad); }
 .warn-t { color: var(--work); font-weight: 600; }
@@ -594,7 +597,11 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 .logo-prev { height: 44px; width: auto; background: #fff; border-radius: 6px; padding: 2px 6px; border: 1px solid var(--line); }
 #printArea { display: none; }
 @media print {
-  @page { size: A4 portrait; margin: 0; }   /* без полей браузер не печатает дату, время и адрес файла */
+  /* внизу каждого листа справа «Лист 1 из 2»; свои поля страницы заменяют дату/адрес, которые печатает браузер */
+  @page :first { margin-top: 0; }
+  @page { size: A4 portrait; margin: 7mm 0 9mm 0;
+    @top-left { content: ""; } @top-center { content: ""; } @top-right { content: ""; } @bottom-left { content: ""; } @bottom-center { content: ""; }
+    @bottom-right { content: "Лист " counter(page) " из " counter(pages); font: 8pt Arial, sans-serif; color: #555; padding-right: 12mm; vertical-align: top; } }
   html, body { background: #fff !important; }
   body > *:not(#printArea) { display: none !important; }
   #printArea { display: block !important; }
@@ -625,6 +632,17 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 .zn-t td.c { text-align: center; }
 .zn-t td.nw { white-space: nowrap; }
 .zn-t td.r { text-align: right; white-space: nowrap; }
+.zn-t2 { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 3mm; font-size: 9pt; line-height: 1.3; }
+.zn-t2 col.cn { width: 8mm; } .zn-t2 col.cw { width: 38mm; } .zn-t2 col.cq { width: 16mm; } .zn-t2 col.cp { width: 24mm; } .zn-t2 col.cs { width: 26mm; }
+.zn-t2 thead { display: table-header-group; }
+.zn-t2 th { background: #f1f1f1; font-weight: 400; font-size: 9pt; padding: 1.1mm 1.5mm; text-align: left; vertical-align: middle; }
+.zn-t2 th.r { text-align: right; } .zn-t2 th.c, .zn-t2 td.c { text-align: center; }
+.zn-t2 td { padding: .9mm 1.5mm; border-bottom: .5pt solid #e2e2e2; vertical-align: middle; overflow-wrap: anywhere; }
+.zn-t2 td.n, .zn-t2 th.n { text-align: center; color: #888; }
+.zn-t2 td.r { text-align: right; white-space: nowrap; }
+.zn-t2 .mut { color: #666; } .zn-t2 td.b { font-family: Arial, sans-serif; font-weight: 600; }
+.zn-t2 .sub { font-size: 7pt; color: #777; line-height: 1.15; }
+.zn-t2 tr, .zn-t2 td { break-inside: avoid; page-break-inside: avoid; }
 .zn-blk { break-inside: avoid; page-break-inside: avoid; display: block; }
 .zn-t thead tr { break-after: avoid; }
 .zn-t tr, .zn-t td { break-inside: avoid; page-break-inside: avoid; }
@@ -2592,7 +2610,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       if (!q) return true;
       /* поиск внутри выбранного фильтра: клиент, машина, номер, а также запчасти (артикул, название, бренд) */
       const words = q.split(/\s+/);
-      const head = [o.num, o.client, o.car, o.plate, o.vin, o.phone, o.note].join(' ').toLowerCase();
+      const head = [o.num, o.docNum, o.client, o.car, o.plate, o.vin, o.phone, o.note].join(' ').toLowerCase();
       const parts = o.num != null ? X.partsByOrder[o.num] || [] : [];
       if (words.every(w => head.includes(w))) return true;
       const hp = parts.filter(p => { const hay = head + ' ' + [p.art, p.name, p.brand].join(' ').toLowerCase(), an = rkNorm(p.art); return words.every(w => hay.includes(w) || (rkNorm(w).length >= 3 && an.includes(rkNorm(w)))); });
@@ -2618,12 +2636,12 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       ${list.length > shown.length ? `<button class="btn wide" data-act="more">Показать ещё (${list.length - shown.length})</button>` : ''}`;
   }
   function orderCard(o, t, hp) {
-    const st = !o.doneDate ? ['st-work', 'В работе'] : t.debt > 5 ? ['st-debt', 'Долг'] : ['st-done', 'Сдан'];
+    const st = !o.doneDate ? (inSched(o) ? ['st-sched', 'Запись'] : ['st-work', 'В работе']) : t.debt > 5 ? ['st-debt', 'Долг'] : ['st-done', 'Сдан'];
     const date = o.doneDate ? 'сдан ' + dshort(o.doneDate) : o.start ? 'с ' + dshort(o.start) : '';
     const open = ui.openRows.has(o.id);
     return `<li class="${open ? 'is-open' : ''}"><div class="order" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}">
       <span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span>
-      <span class="o-num">${o.num != null ? '№ ' + o.num : 'б/н'}</span>
+      <span class="o-num">${o.num != null ? '№ ' + o.num : 'б/н'}${o.docNum ? `<small class="doc-num" title="Официальный номер (оплата с чеком)">${esc(o.docNum)}</small>` : ''}</span>
       <span class="o-main"><b>${esc(orderWho(o) || 'Без имени')}</b><span class="muted">${esc(o.car)}</span>${hp && hp.length ? `<span class="hit small">${hp.slice(0, 3).map(p => esc([p.art, p.name, p.brand].filter(Boolean).join(' · '))).join('; ')}${hp.length > 3 ? ' и ещё ' + (hp.length - 3) : ''}</span>` : ''}</span>
       <span class="o-plate">${plate(o.plate)}</span>
       <span class="o-meta"><span class="pill ${st[0]}">${st[1]}</span>${t.waiting ? `<span class="pill st-wait">нет запчастей: ${t.waiting}</span>` : ''}<span class="muted small">${date || ''}</span></span>
@@ -2739,7 +2757,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     <div class="sheet" role="dialog" aria-modal="true" aria-label="Заказ-наряд">
       <header class="sheet-head">
         <button class="btn ghost hb" data-act="close-editor" aria-label="Закрыть"><span class="hl">Закрыть</span><span class="hi" aria-hidden="true">✕</span></button>
-        <h2>Заказ-наряд <span class="o-num big">${o.num != null ? '№ ' + o.num : 'б/н'}</span></h2>
+        <h2>Заказ-наряд <span class="o-num big">${o.num != null ? '№ ' + o.num : 'б/н'}</span>${o.docNum ? ` <span class="doc-num big" title="Официальный номер (оплата с чеком)">${esc(o.docNum)}</span>` : ''}</h2>
         <button class="btn ghost small dens-t" data-act="dense-toggle" title="Вид строк работ и запчастей">${ui.dense ? 'Подробно' : 'Компактно'}</button>
         ${eyeBtn()}
         <button class="btn hb" data-act="print-draft" title="Печать заказ-наряда" aria-label="Печать"><span class="hl">Печать</span><svg class="hi" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/></svg></button>
@@ -2748,7 +2766,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       <div class="sheet-body">
         ${E.err ? `<div class="note bad">${esc(E.err)}</div>` : ''}${(() => { const sv = D.orders.find(x => x.id === o.id), m = sv && sv.doneDate ? S.monthOf(sv.doneDate) : null; return m && isLockedM(m) ? `<div class="note">🔒 <span><b>${esc(S.monthLabel(m))} закрыт</b> — наряд только для просмотра. Принять оплату долга сегодняшним днём можно. Исправить сам наряд: «Отчёт» → «Открыть для правки».</span></div>` : ''; })()}
         <section class="block">
-          <div class="block-head"><h3>Клиент и машина</h3><span class="pill ${o.doneDate ? 'st-done' : 'st-work'}">${o.doneDate ? 'Сдан ' + dshort(o.doneDate) : 'В работе'}</span></div>
+          <div class="block-head"><h3>Клиент и машина</h3><span class="pill ${o.doneDate ? 'st-done' : inSched(o) ? 'st-sched' : 'st-work'}">${o.doneDate ? 'Сдан ' + dshort(o.doneDate) : inSched(o) ? 'Запись' : 'В работе'}</span></div>
           ${clientBlock(E, o)}
         </section>
 
@@ -3458,6 +3476,22 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function later() { clearTimeout(later.t); later.t = setTimeout(() => paintEditor(), 400); }
 
+  /* Официальный номер наряда «26/0001»: выдаётся, когда в наряде сохранена первая оплата с чеком. Год — по дате этой оплаты.
+     Номер остаётся за нарядом навсегда; внутренний номер (482…) тоже остаётся — по нему связаны оплаты и запчасти. */
+  const hasReceipt = pays => (pays || []).some(p => p.receipt === true && (+p.amount || 0) > 0 && !p.refund);
+  function docNext(yy) {
+    const used = D.orders.map(o => o.docNum).filter(x => x && x.startsWith(yy + '/')).map(x => +x.split('/')[1] || 0);
+    const n = Math.max(+((D.cfg.docSeq || {})[yy]) || 0, 0, ...used) + 1;
+    return { n, num: yy + '/' + String(n).padStart(4, '0') };
+  }
+  function docYearOf(pays) { const d = (pays || []).filter(p => p.receipt === true && (+p.amount || 0) > 0 && !p.refund).map(p => p.date || S.todayISO()).sort()[0] || S.todayISO(); return d.slice(2, 4); }
+  function docAssign(o, pays) {
+    if (o.docNum || !hasReceipt(pays)) return null;
+    const yy = docYearOf(pays), x = docNext(yy);
+    o.docNum = x.num; D.cfg.docSeq = Object.assign({}, D.cfg.docSeq || {}, { [yy]: x.n });
+    return x.num;
+  }
+  const numTxt = o => (o.num != null ? '№ ' + o.num : 'б/н') + (o.docNum ? ' · ' + o.docNum : '');
   function saveOrder() {
     ui.stash = { editor: ui.editor };
     const E = ui.editor, o = E.order;
@@ -3506,6 +3540,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     (E.detached || []).forEach(p => { p.order = null; if (p.saleWas) { Object.assign(p, p.saleWas); if (!p.saleWas.cid) delete p.cid; } delete p.saleWas; delete p.fromSale; delete p.keepMonth; D.parts.push(p); if (p.link) D.pays.forEach(y => { if (y.link === p.link) y.order = null; }); });
     (E.detachedPays || []).forEach(y => { y.order = null; D.pays.push(y); });
     D.parts.forEach(p => { if (touched.has(p.blk)) p.edited = true; });
+    const docNew = docAssign(o, E.pays);
+    if (docNew) setTimeout(() => toast('Наряду присвоен номер ' + docNew + ' (оплата с чеком)'), 400);
     D.orders = D.orders.filter(x => x.id !== o.id).concat([o]);
     if (E.schedId) { const sc = D.schedule.find(x => x.id === E.schedId); if (sc) sc.oid = o.id; }
     E.parts.forEach(p => {
@@ -3540,6 +3576,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
 
   /* ----- Запись ----- */
   /* наряд в работе у того же клиента на ту же машину (не сданный) */
+  /* наряд стоит на странице «Запись»: к нему привязана запись или дата приёма впереди */
+  function inSched(o) { const t = S.todayISO(); return !!o && !o.doneDate && ((o.start && o.start > t) || D.schedule.some(x => x.oid === o.id && (x.date || '') > t)); }
   function schedOpenOrder(s, p, c) {
     const used = new Set(D.schedule.filter(x => x.oid && x.id !== s.id).map(x => x.oid));
     return D.orders.filter(o => !o.doneDate && !used.has(o.id) && (p ? o.cid === p.id : low(o.client) === low(s.client)) && (!c || !o.carId || o.carId === c.id) && (!(s.car || '') || low(o.car || '') === low(s.car || '') || (c && o.carId === c.id)))
@@ -3591,14 +3629,21 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const P = prn();
     const money = v => fmt(v, 2);
     const d = o.doneDate || o.start || S.todayISO();
-    const dateTxt = +d.slice(8, 10) + '\u00a0' + S.MONTHS_GEN[+d.slice(5, 7) - 1] + ' ' + d.slice(0, 4) + '\u00a0г.';
+    const dateNum = d.slice(8, 10) + '.' + d.slice(5, 7) + '.' + d.slice(0, 4);
     /* в бланк идут все запчасти наряда, в том числе ещё не полученные; возвраты — нет */
     const pr = parts.filter(p => !p.ret);
     /* «Сдача» (клиент не взял сдачу) в бланк не печатается: оплачено показываем без неё */
     const isTip = x => x.kind === 'noch' || (!x.kind && low((x.name || '').trim()) === 'сдача');
     const tip = r2(works.filter(isTip).reduce((a, w) => a + (w.sum || 0), 0) + pr.filter(isTip).reduce((a, p) => a + (p.sum || 0), 0));
     const wk = works.filter(w => ((w.name || '').trim() || w.sum) && !isTip(w) && !w.kind).map(w => Object.assign({}, w));
-    const prP = pr.filter(p => !isTip(p) && !p.kind).map(p => Object.assign({}, p));
+    const prP0 = pr.filter(p => !isTip(p) && !p.kind).map(p => Object.assign({}, p));
+    /* одинаковые позиции (тот же артикул/название, цена, получено или нет) печатаем одной строкой; в программе строки остаются как есть */
+    const prP = [], seen = new Map();
+    prP0.forEach(p => {
+      const k = (String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase() || low(p.name || '')) + '|' + low(p.name || '') + '|' + r2(+p.price || 0) + '|' + low(p.sup) + '|' + !!p.no;
+      const m = seen.get(k);
+      if (m) { m.qty = r2((+m.qty || 0) + (+p.qty || 0)); m.sum = r2((m.sum || 0) + (p.sum || 0)); } else { seen.set(k, p); prP.push(p); }
+    });
     /* округление в бланк отдельно не печатаем: прячем в самой дорогой запчасти с количеством 1 (цена = сумме, пересчитать нечего),
        нет такой — в самой дорогой работе; нет и её — печатаем строку «Округление» над итогом */
     let rndLine = 0;
@@ -3613,17 +3658,18 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     /* заказчик — только имя, без прозвища */
     const who = (o.cid && X.clientById[o.cid] ? X.clientById[o.cid].name : o.client || '').trim();
     /* исполнитель с ИНН — только если по наряду пробит чек; иначе просто «Станция технического обслуживания» */
-    const withReceipt = P.ipMode === 'always' || (pays || []).some(p => p.receipt === true && (+p.amount || 0) > 0);
+    const withReceipt = hasReceipt(pays);
+    const docN = withReceipt ? (o.docNum || docNext(docYearOf(pays)).num) : null;
     const logo = P.logo || 'data:image/png;base64,' + LOGO_B64;
     const oilArts = new Set(D.stock.filter(x => x.oil).map(x => String(x.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase()));
     const unit = p => (low(p.sup) === 'склад' && oilArts.has(String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase())) ? 'л' : 'шт.';
     const reason = (o.reason || '').trim(), advice = (o.advice || '').trim();
     const phone = (o.phone || (o.cid && X.clientById[o.cid] ? X.clientById[o.cid].phone : '') || '').trim();
     return `<div class="zn">
-      <div class="zn-band"><div class="zn-org">${withReceipt ? `Исполнитель: ${esc(P.org)}${P.inn || P.ogrn ? '<br>' + (P.inn ? 'ИНН: ' + esc(P.inn) : '') + (P.inn && P.ogrn ? '&nbsp;&nbsp;&nbsp;' : '') + (P.ogrn ? 'ОГРНИП: ' + esc(P.ogrn) : '') : ''}` : 'Станция технического обслуживания'}<br>Адрес: ${esc(P.addr)}<br>Тел.: ${esc(P.phone)}</div>
-        <div class="zn-circle"><img class="zn-logo" src="${logo}" alt="Логотип"></div></div>
+      ${withReceipt ? `<div class="zn-band"><div class="zn-org">${withReceipt ? `Исполнитель: ${esc(P.org)}${P.inn || P.ogrn ? '<br>' + (P.inn ? 'ИНН: ' + esc(P.inn) : '') + (P.inn && P.ogrn ? '&nbsp;&nbsp;&nbsp;' : '') + (P.ogrn ? 'ОГРНИП: ' + esc(P.ogrn) : '') : ''}` : 'Станция технического обслуживания'}<br>Адрес: ${esc(P.addr)}<br>Тел.: ${esc(P.phone)}</div>
+        <div class="zn-circle"><img class="zn-logo" src="${logo}" alt="Логотип"></div></div>` : ''}
       <div class="zn-head">
-        <h1>Заказ-наряд на ремонт от<br>${esc(dateTxt)}</h1>
+        <h1>Заказ-наряд на ремонт${docN ? ' №\u00a0' + esc(docN) : ''}<br>от ${esc(dateNum)}</h1>
         <div class="zn-car c3">
           <div><small>Заказчик</small><b>${esc(who || '—')}</b></div>
           <div><small>Автомобиль</small><b>${esc(o.car || '—')}</b></div>
@@ -3633,10 +3679,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <div><small>Гос. номер</small><b>${esc(o.plate || '—')}</b></div>
         </div>
       </div>
-      ${wk.length ? `<table class="zn-t"><colgroup><col class="cn"><col><col class="cs"></colgroup><thead><tr><th class="n">№<br>п/п</th><th class="l">Список выполненных работ</th><th>Стоимость,<br>руб</th></tr></thead>
-        <tbody>${wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td class="l">${esc(w.name)}</td><td class="r b">${money(w.sum)}</td></tr>`).join('')}</tbody></table>` : ''}
-      ${prP.length ? `<table class="zn-t"><colgroup><col class="cn"><col><col class="cb"><col class="cq"><col class="cp"><col class="cs"></colgroup><thead><tr><th class="n">№<br>п/п</th><th class="l">Список запчастей и расходных материалов</th><th>Бренд</th><th>Кол-во</th><th>Цена,<br>руб</th><th>Сумма,<br>руб</th></tr></thead>
-        <tbody>${prP.map((p, i) => `<tr><td class="n">${i + 1}</td><td class="l">${esc(p.name || p.art)}</td><td class="c">${esc(p.brand)}</td><td class="c nw">${fmt(p.qty, p.qty % 1 ? 2 : 0)} ${unit(p)}</td><td class="r">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${wk.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cw"></colgroup><thead><tr><th class="n">№</th><th>Выполненные работы</th><th class="r">Стоимость, ₽</th></tr></thead>
+        <tbody>${wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td>${esc(w.name)}</td><td class="r b">${(+w.sum || 0) > 0.004 ? money(w.sum) : '<span class="mut">входит в стоимость</span>'}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${prP.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cq"><col class="cp"><col class="cs"></colgroup><thead><tr><th class="n">№</th><th>Запасные части и материалы</th><th class="c">Кол-во</th><th class="r">Цена, ₽</th><th class="r">Сумма, ₽</th></tr></thead>
+        <tbody>${prP.map((p, i) => { const sub = [p.brand || '', p.art || ''].filter(Boolean).join(' · '); return `<tr><td class="n">${i + 1}</td><td>${esc(p.name || p.art)}${sub && p.name ? `<div class="sub">${esc(sub)}</div>` : ''}</td><td class="c">${fmt(p.qty, p.qty % 1 ? 2 : 0)}${unit(p) === 'л' ? '\u00a0л' : ''}</td><td class="r mut">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`; }).join('')}</tbody></table>` : ''}
       <div class="zn-blk"><div class="zn-sum">${rndLine ? `<div><span>Округление:</span><b>${rndLine > 0 ? '+' : '−'}${money(Math.abs(rndLine))}&nbsp;₽</b></div>` : ''}<div class="zn-total"><span>Итоговая стоимость ремонта:</span><b>${money(total)}&nbsp;₽</b></div>
         <div><span>Оплачено:</span><b>${money(paid)}&nbsp;₽</b></div>
         <div class="zn-due"><span>${due < -0.005 ? 'Переплата:' : 'К оплате:'}</span><b>${money(Math.abs(due))}&nbsp;₽</b></div></div>
@@ -4244,7 +4290,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       <div class="d-col"><h4>Машины</h4>${p.cars.length ? `<table class="dt"><tbody>${p.cars.map(c => `<tr><td>${esc(c.car || 'без названия')}</td><td>${c.plate ? plate(c.plate) : ''}</td><td class="mono small">${esc(c.vin)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted small">Машин нет.</p>'}
         ${p.phone ? `<p class="small">Телефон: <b>${esc(p.phone)}</b></p>` : ''}</div>
       <div class="d-col"><h4>Последние наряды${st.count > 6 ? ` <span class="muted">(6 из ${st.count})</span>` : ''}</h4>${orders.length ? `<table class="dt"><tbody>${orders.map(o => { const t = S.orderTotals(o, X); const car = p.cars.find(c => c.id === o.carId);
-        return `<tr><td class="nowrap">${o.num != null ? '№\u00a0' + o.num : 'б/н'}</td><td class="nowrap">${dshort(o.start || o.doneDate)}</td><td>${esc(car ? car.car : o.car)}</td><td class="r nowrap muted">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</td><td class="r nowrap"><b>${rub(t.total)}</b>${o.doneDate && t.debt > 5 ? ` <span class="neg small">долг ${rub(t.debt)}</span>` : !o.doneDate ? ' <span class="pill st-work">в работе</span>' : ''}</td></tr>`; }).join('')}</tbody></table>` : '<p class="muted small">Нарядов нет.</p>'}</div>
+        return `<tr><td class="nowrap">${o.num != null ? '№\u00a0' + o.num : 'б/н'}${o.docNum ? '<br><small class="muted">' + esc(o.docNum) + '</small>' : ''}</td><td class="nowrap">${dshort(o.start || o.doneDate)}</td><td>${esc(car ? car.car : o.car)}</td><td class="r nowrap muted">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</td><td class="r nowrap"><b>${rub(t.total)}</b>${o.doneDate && t.debt > 5 ? ` <span class="neg small">долг ${rub(t.debt)}</span>` : !o.doneDate ? ' ' + (inSched(o) ? '<span class="pill st-sched">запись</span>' : '<span class="pill st-work">в работе</span>') : ''}</td></tr>`; }).join('')}</tbody></table>` : '<p class="muted small">Нарядов нет.</p>'}</div>
       <div class="d-actions"><button class="btn small primary" data-act="cl-open" data-id="${esc(p.id)}">Открыть карточку</button></div>
     </div>`;
   }
@@ -4291,7 +4337,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     let total = 0, debt = 0;
     const rows = orders.map(o => { const t = S.orderTotals(o, X); total += t.total; if (o.doneDate && t.debt > 5) debt += t.debt; const car = d.cars.find(c => c.id === o.carId);
       const open = ui.openRows.has(o.id), hh = hits[o.id];
-      return `<li class="${open ? 'is-open' : ''}${hh ? ' clq-hit' : ''}"><div class="hist" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="o-num">${o.num != null ? '№\u00a0' + o.num : 'б/н'}</span><span>${dshort(o.start || o.doneDate)}</span><span>${esc(car ? car.car : o.car)}</span><span class="mil">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</span><span class="r"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 && o.doneDate ? ` <span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : !o.doneDate ? ' <span class="pill st-work">в работе</span>' : ''}</span></div>${hh ? `<ul class="clq-found">${hh.ps.map(p => clqLine(p)).join('')}${hh.ws.map(w => clqLine(w, true)).join('')}</ul>` : ''}${open ? orderDetail(o, t) : ''}</li>`; }).join('');
+      return `<li class="${open ? 'is-open' : ''}${hh ? ' clq-hit' : ''}"><div class="hist" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="o-num">${o.num != null ? '№\u00a0' + o.num : 'б/н'}${o.docNum ? '<small class="doc-num">' + esc(o.docNum) + '</small>' : ''}</span><span>${dshort(o.start || o.doneDate)}</span><span>${esc(car ? car.car : o.car)}</span><span class="mil">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</span><span class="r"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 && o.doneDate ? ` <span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : !o.doneDate ? ' ' + (inSched(o) ? '<span class="pill st-sched">запись</span>' : '<span class="pill st-work">в работе</span>') : ''}</span></div>${hh ? `<ul class="clq-found">${hh.ps.map(p => clqLine(p)).join('')}${hh.ws.map(w => clqLine(w, true)).join('')}</ul>` : ''}${open ? orderDetail(o, t) : ''}</li>`; }).join('');
     const used = new Set(orders.map(o => o.carId));
     return `<div class="toolbar"><button class="btn ghost" data-act="cl-back">‹ Все клиенты</button></div>
       ${ui.cerr ? `<div class="note bad">${esc(ui.cerr)}</div>` : ''}
@@ -5451,8 +5497,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <label class="f span2">Адрес<input id="prn-addr" value="${esc(prn().addr)}" data-prn="addr"></label>
           <label class="f">Телефон<input id="prn-phone" value="${esc(prn().phone)}" data-prn="phone"></label>
         </div>
-        <div class="f"><span>Шапка наряда</span><div class="seg" style="justify-self:start"><button class="${prn().ipMode !== 'always' ? 'on' : ''}" data-act="prn-ip" data-k="auto">Без ИП</button><button class="${prn().ipMode === 'always' ? 'on' : ''}" data-act="prn-ip" data-k="always">С ИП</button></div></div>
-        <p class="muted small">${prn().ipMode === 'always' ? 'ИП, ИНН и ОГРНИП печатаются всегда.' : 'Пишется «Станция технического обслуживания». Если в наряде есть оплата с чеком — ИП, ИНН и ОГРНИП добавятся сами.'}</p>
+        <p class="muted small">Шапка с ИП, ИНН, ОГРНИП и номер наряда печатаются сами, если в наряде есть оплата с чеком. Без чека — бланк без шапки и без номера.</p>
         <label class="f">Текст внизу заказ-наряда<textarea id="prn-footer" class="paste-box" data-prn="footer">${esc(prn().footer)}</textarea></label>
         <div class="actions"><img class="logo-prev" src="${prn().logo || 'data:image/png;base64,' + LOGO_B64}" alt="Логотип"><label class="btn small file">Заменить логотип…<input type="file" id="prn-logo" accept="image/*" data-act="prn-logo"></label>${prn().logo ? '<button class="btn small ghost" data-act="prn-logo-reset">Вернуть AG Service</button>' : ''}</div>
         <p class="muted small">Печать — кнопка «Печать» в наряде или в раскрытой строке наряда. В окне печати можно выбрать принтер или «Сохранить как PDF».</p>
@@ -6226,6 +6271,22 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         o.num = nn;
         o.memo = ((o.memo ? o.memo + '\n' : '') + `Номер изменён с № ${old} на № ${nn} при объединении с другим компьютером ${today} (оба наряда завели без интернета).`).trim();
         out.push([old, nn, [o.client, o.car].filter(Boolean).join(', ')]);
+      });
+    });
+    /* официальные номера 26/0001: если два компьютера выдали один и тот же — у «своего» берём следующий свободный */
+    const tDoc = new Map(((theirs && theirs.orders) || []).filter(o => o.docNum).map(o => [o.id, o.docNum]));
+    const byDoc = {};
+    (data.orders || []).forEach(o => { if (o.docNum) (byDoc[o.docNum] = byDoc[o.docNum] || []).push(o); });
+    Object.keys(byDoc).forEach(dn => {
+      const os = byDoc[dn]; if (os.length < 2) return;
+      const keep = os.find(o => tDoc.get(o.id) === dn) || os[0];
+      os.forEach(o => {
+        if (o === keep) return;
+        const yy = dn.split('/')[0], used = (data.orders || []).map(x => x.docNum).filter(x => x && x.startsWith(yy + '/')).map(x => +x.split('/')[1] || 0);
+        const n = Math.max(0, ...used, +(((data.cfg || {}).docSeq || {})[yy]) || 0) + 1, nd = yy + '/' + String(n).padStart(4, '0');
+        o.docNum = nd; data.cfg = data.cfg || {}; data.cfg.docSeq = Object.assign({}, data.cfg.docSeq || {}, { [yy]: n });
+        o.memo = ((o.memo ? o.memo + '\n' : '') + `Официальный номер изменён с ${dn} на ${nd} при объединении с другим компьютером ${today}.`).trim();
+        out.push([dn, nd, [o.client, o.car].filter(Boolean).join(', ')]);
       });
     });
     return out;
