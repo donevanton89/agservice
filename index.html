@@ -88,7 +88,9 @@ main.wrap { padding-block: 16px 64px; display: grid; gap: 14px; grid-template-co
 
 .orders { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .order { width: 100%; text-align: left; cursor: pointer; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 12px 14px;
-  display: grid; grid-template-columns: 14px 72px minmax(0, 1fr) 150px 150px; grid-template-areas: "arr num main plate sum" "arr num meta meta sum"; gap: 4px 14px; align-items: center; }
+  display: grid; grid-template-columns: 14px 72px minmax(0, 1fr) 150px 150px; grid-template-areas: "arr num main plate sum" "arr num meta plate sum"; gap: 4px 14px; align-items: center; }
+/* номер наряда, стрелка и госномер — по центру строки по высоте */
+.order > .arr, .order > .o-num, .order > .o-plate { align-self: center; padding-top: 0; }
 .arr { grid-area: arr; color: var(--muted); font-size: 13px; align-self: start; padding-top: 3px; }
 li.is-open > .order, li.is-open > .client { border-color: var(--accent); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .detail { border: 1px solid var(--accent); border-top: 0; border-radius: 0 0 var(--r) var(--r); background: var(--surface-2); padding: 12px 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
@@ -110,6 +112,7 @@ li.is-open > .order, li.is-open > .client { border-color: var(--accent); border-
 .o-sum { grid-area: sum; display: grid; justify-items: end; text-align: right; }
 @media (max-width: 620px) {
   .order { grid-template-columns: 12px 58px minmax(0, 1fr) auto; grid-template-areas: "arr num main sum" "arr num plate sum" "arr num meta meta"; }
+  .order > .o-plate { align-self: start; }
   .o-num { font-size: 15px; }
 }
 
@@ -2600,13 +2603,17 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   function viewOrders() {
     const q = ui.q.trim().toLowerCase();
     const rows = D.orders.map(o => ({ o, t: S.orderTotals(o, X) }));
-    const counts = { open: 0, debt: 0, wait: 0 };
-    rows.forEach(({ o, t }) => { if (!o.doneDate) counts.open++; if (o.doneDate && t.debt > 5) counts.debt++; if (t.waiting) counts.wait++; });
+    const counts = { open: 0, debt: 0, wait: 0, ip: 0 };
+    /* «ИП» — наряды с оплатой по чеку (у новых есть официальный номер 26/…) */
+    const rcNums = new Set(D.pays.filter(p => p.receipt === true && (+p.amount || 0) > 0 && p.order != null).map(p => p.order));
+    const isIP = o => !!o.docNum || (o.num != null && rcNums.has(o.num));
+    rows.forEach(({ o, t }) => { if (!o.doneDate) counts.open++; if (o.doneDate && t.debt > 5) counts.debt++; if (t.waiting) counts.wait++; if (isIP(o)) counts.ip++; });
     const hits = {};
     const list = rows.filter(({ o, t }) => {
       if (ui.filter === 'open' && o.doneDate) return false;
       if (ui.filter === 'debt' && !(o.doneDate && t.debt > 5)) return false;
       if (ui.filter === 'wait' && !t.waiting) return false;
+      if (ui.filter === 'ip' && !isIP(o)) return false;
       if (!q) return true;
       /* поиск внутри выбранного фильтра: клиент, машина, номер, а также запчасти (артикул, название, бренд) */
       const words = q.split(/\s+/);
@@ -2631,7 +2638,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
         <button class="btn primary" data-act="new-order">+ Новый наряд</button>
       </div>
       ${soon.length ? `<div class="soon"><span class="muted small">Записаны:</span>${soon.map(s => `<span class="soon-i"><b>${dshort(s.date)}</b> ${esc(s.client)} · ${esc(s.car)}</span>`).join('')}<button class="link small" data-act="tab" data-k="sched">все</button></div>` : ''}
-      <div class="chips">${chip('open', 'В работе', counts.open)}${chip('debt', 'С долгом', counts.debt)}${chip('wait', 'Ждут запчасти', counts.wait)}${chip('all', 'Все', null)}</div>
+      <div class="chips">${chip('open', 'В работе', counts.open)}${chip('debt', 'С долгом', counts.debt)}${chip('wait', 'Ждут запчасти', counts.wait)}${chip('ip', 'ИП', counts.ip)}${chip('all', 'Все', null)}</div>
       ${shown.length ? `<ul class="orders">${shown.map(({ o, t }) => orderCard(o, t, hits[o.id])).join('')}</ul>` : `<p class="muted pad">${ui.filter === 'open' && !q ? 'Сейчас машин в работе нет.' : 'Ничего не нашлось.'}${q && ui.filter !== 'all' ? ' <button class="link small" data-act="filter" data-k="all">Искать во всех нарядах</button>' : ''}</p>`}
       ${list.length > shown.length ? `<button class="btn wide" data-act="more">Показать ещё (${list.length - shown.length})</button>` : ''}`;
   }
