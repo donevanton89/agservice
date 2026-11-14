@@ -232,7 +232,6 @@ ul.plain.ret-rows > li.sel { background: var(--accent-soft); }
 .cc-row .f { width: 200px; margin: 0; }
 .cc-list { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 4px; }
 .cc-list li { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); font-size: 13px; }
-.tbl.pays tr.cc-day td { background: var(--accent-soft); }
 .chk-line { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; user-select: none; }
 .chk-line input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 
@@ -4610,7 +4609,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     return `<section class="block cc-box"><div class="block-head"><h3>Пересчёт кассы</h3><button class="x" data-act="cash-chk-open" aria-label="Закрыть">×</button></div>
       <div class="cc-row"><label class="f">Дата пересчёта<input id="cc-date" type="date" value="${esc(v)}" data-ccdate="1"></label><button class="btn primary" data-act="cash-chk-add">Отметить</button></div>
       ${cc.length ? `<ul class="plain cc-list">${cc.map(d => `<li><span>${dshort(d)}</span><button class="x sm" data-act="cash-chk-del" data-d="${esc(d)}" aria-label="Удалить" title="Удалить отметку">×</button></li>`).join('')}</ul>` : '<p class="muted small">Отметок ещё нет.</p>'}
-      <p class="muted small">Строки «Денег» в дни пересчёта подсвечены цветом.</p></section>`;
+</section>`;
   }
   function payRefWhy(p) {
     if (p.order != null) return 'Оплата из наряда № ' + p.order + ' — правится в наряде.';
@@ -4623,7 +4622,6 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const T = S.today(D, X);
     const m = ui.payMonth;
     const q = ui.payQ.trim().toLowerCase();
-    const ccSet = new Set(D.cfg.cashChecks || []);
     const list = D.pays.filter(p => S.monthOf(p.date) === m && (!q || (p.name + ' ' + p.note + ' ' + p.type + ' ' + (TYPE_S[p.type] || '') + ' ' + (p.order ?? '')).toLowerCase().includes(q)))
       .sort((a, b) => b.date.localeCompare(a.date) || (b.id > a.id ? 1 : -1));
     const inSum = list.filter(p => p.amount > 0).reduce((s, p) => s + p.amount, 0), outSum = list.filter(p => p.amount < 0).reduce((s, p) => s + p.amount, 0);
@@ -4635,7 +4633,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     };
     return `
       <div class="kpis">
-        ${(() => { const cc = (D.cfg.cashChecks || []).slice().sort().reverse(); return `<button type="button" class="kpi kpi-btn${ui.cashChk ? ' on' : ''}" data-act="cash-chk-open" title="${esc((cc.length ? 'Пересчёт кассы:\n' + cc.slice(0, 10).map(dshort).join('\n') + '\n\n' : 'Пересчётов кассы ещё не было.\n\n') + 'Нажми, чтобы отметить пересчёт.')}"><span>Касса (наличные)${cc.length ? ` <span class="kpi-hint">пересчёт ${dshort(cc[0])}</span>` : ''}</span><b class="${T.mon.cash < 0 ? 'neg' : ''}">${rub(T.mon.cash)}</b></button>`; })()}${card('Антон', T.mon.anton, 'доля', wHint('anton'))}${card('Глеб', T.mon.gleb, 'доля', wHint('gleb'))}
+        ${(() => { const cc = (D.cfg.cashChecks || []).slice().sort().reverse(); return `<button type="button" class="kpi kpi-btn${ui.cashChk ? ' on' : ''}" data-act="cash-chk-open" title="${esc((cc.length ? 'Пересчёт кассы:\n' + cc.slice(0, 10).map(dshort).join('\n') + '\n\n' : 'Пересчётов кассы ещё не было.\n\n') + 'Нажми, чтобы отметить пересчёт.')}"><span>Касса (наличные)</span><b class="${T.mon.cash < 0 ? 'neg' : ''}">${rub(T.mon.cash)}</b></button>`; })()}${card('Антон', T.mon.anton, 'доля', wHint('anton'))}${card('Глеб', T.mon.gleb, 'доля', wHint('gleb'))}
         ${card('Копилка', T.mon.piggy, '', wHint('piggy'))}${card('Масло/антифриз', T.oilFund, '', wHint('oil') + ' Сюда же прибавляется себестоимость проданного масла.')}${card(W_IP, T.mon.ip, '', wHint('ip'))}
       </div>
       ${cashChkBox()}
@@ -4643,7 +4641,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       <div class="toolbar">${monthNav(m, 'pay-month')}<input id="pq" class="search" type="search" placeholder="Фильтр: назначение, примечание, тип" value="${esc(ui.payQ)}" data-act="pay-search" autocomplete="off"></div>
       <p class="muted small">За месяц: пришло <b class="pos">${rub(inSum)}</b>, ушло <b class="neg">${rub(-outSum)}</b>, строк ${list.length}. Наведи на строку — покажет, что она изменила.</p>
       <div class="scroll"><table class="tbl pays"><thead><tr><th>Дата</th><th>Назначение</th><th>Примечание</th><th>Тип</th><th>Чек</th><th>Наряд</th><th class="r">Сумма</th><th></th></tr></thead><tbody>
-      ${list.map(p => `<tr class="${ccSet.has(p.date) ? 'cc-day' : ''}" title="${esc(tipOf(p) + (payEditable(p) ? '' : '\n' + payRefWhy(p)))}"><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${esc(p.name)}${p.tr ? ' <span class="muted small">перевод</span>' : ''}</td><td class="muted">${esc(p.note)}</td><td>${esc(TYPE_S[p.type] || p.type || '—')}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order != null ? `<a class="ord-link" role="button" tabindex="0" data-act="pay-go" data-id="${esc(p.id)}">${esc(String(p.order))}</a>` : ''}</td>
+      ${list.map(p => `<tr title="${esc(tipOf(p) + (payEditable(p) ? '' : '\n' + payRefWhy(p)))}"><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${esc(p.name)}${p.tr ? ' <span class="muted small">перевод</span>' : ''}</td><td class="muted">${esc(p.note)}</td><td>${esc(TYPE_S[p.type] || p.type || '—')}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order != null ? `<a class="ord-link" role="button" tabindex="0" data-act="pay-go" data-id="${esc(p.id)}">${esc(String(p.order))}</a>` : ''}</td>
         <td class="r ${p.amount < 0 ? 'neg' : 'pos'}"><b>${p.amount > 0 ? '+' : ''}${fmt(p.amount, Math.round(p.amount) === p.amount ? 0 : 2)}</b></td>
         <td class="r nowrap">${!payEditable(p) ? '' : isLockedM(S.monthOf(p.date)) ? `<span class="muted" title="${esc(S.monthLabel(S.monthOf(p.date)))} закрыт — менять нельзя. «Отчёт» → «Открыть для правки»">🔒</span>` : ui.payDel === p.id ? `<button class="btn small danger" data-act="pay-del-yes" data-id="${esc(p.id)}">Удалить${p.tr ? ' обе строки' : ''}</button><button class="btn small ghost" data-act="pay-del-no">Нет</button>` : `<span class="acts"><button class="link small" data-act="pay-edit" data-id="${esc(p.id)}">Изменить</button><button class="x" data-act="pay-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">В этом месяце платежей нет.</td></tr>'}
       </tbody></table></div>`;
