@@ -216,9 +216,23 @@ h3.sec { margin: 6px 2px -4px; font-size: 15px; display: flex; gap: 8px; align-i
 ul.plain.ret-rows > li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: 6px 12px; align-items: center; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 ul.plain.ret-rows > li.sel { background: var(--accent-soft); }
 @media (max-width: 560px) { ul.plain.ret-rows > li { grid-template-columns: 26px minmax(0, 1fr) auto; } ul.plain.ret-rows > li > .acts { grid-column: 2 / 4; justify-self: start; } }
-.totals .rnd-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.totals .rnd-row span { flex: 1; }
-.totals .rnd-row b { font-weight: 500; }
+.totals .rnd-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.totals .rnd-chip { display: inline-flex; align-items: center; gap: 6px; }
+.totals .rnd-chip b { font-weight: 600; color: var(--ink); }
+.rc-seg { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+.rc-seg .seg { min-width: 180px; display: flex; }
+.rc-seg .seg button { flex: 1 1 0; }
+.calc-row { display: grid; grid-template-columns: 160px 220px minmax(0, 1fr); gap: 10px 12px; align-items: end; margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
+.calc-info { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 36px; font-size: 14px; }
+.calc-btns { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 700px) { .calc-row { grid-template-columns: 1fr 1fr; } .calc-info { grid-column: 1 / -1; } }
+.kpi-btn { font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.kpi-btn:hover, .kpi-btn.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cc-row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.cc-row .f { width: 200px; margin: 0; }
+.cc-list { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 4px; }
+.cc-list li { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); font-size: 13px; }
+.tbl.pays tr.cc-day td { background: var(--accent-soft); }
 .chk-line { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; user-select: none; }
 .chk-line input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 
@@ -2655,6 +2669,8 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       confirmDelete: false, err: '', paste: null,
     };
     ui.editor.origParts = clone(ui.editor.parts);
+    if (preset && preset.schedId) { ui.editor.schedId = preset.schedId; delete ui.editor.order.schedId; }
+    ui.editor.rc = rcOf(ui.editor.pays);
     ui.editor.picking = isNew && !o.cid;
     ui.editor.pickQ = '';
     ui.editor.origPays = clone(ui.editor.pays);
@@ -2798,6 +2814,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
 
         <section class="block">
           <div class="block-head"><h3>Оплаты</h3><span class="muted">оплачено ${rub(t.paid)}</span></div>
+          ${rcSegHTML('ed')}
           <div class="lines">
           ${E.pays.map((p, i) => p.app && p.refund ? `
             <div class="line pay refund">
@@ -2805,10 +2822,6 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
               <label class="f">Дата<input id="y-d-${i}" type="date" value="${esc(p.date)}" data-y="${i}" data-k="date"></label>
               <label class="f num">Отдал, ₽<input id="y-a-${i}" value="${esc(p.amount == null ? '' : nv(Math.abs(p.amount)))}" data-y="${i}" data-k="amount" inputmode="decimal"></label>
               <label class="f">Как отдал<select id="y-t-${i}" data-y="${i}" data-k="kind">${payKinds(true, p).map(k => `<option value="${k.k}"${payKind(p) === k.k ? ' selected' : ''}>${k.label.replace('Перевод', 'Переводом от').replace('Антону', 'Антона').replace('Глебу', 'Глеба')}</option>`).join('')}</select></label>
-              <div class="f"><span>Чек возврата пробит</span><div class="seg">
-                <button class="${p.receipt === true ? 'on' : ''}" data-act="pay-receipt" data-i="${i}" data-v="1">Да</button>
-                <button class="${p.receipt === false ? 'on' : ''}" data-act="pay-receipt" data-i="${i}" data-v="0">Нет</button>
-              </div></div>
               <button class="x" data-act="del-pay" data-i="${i}" aria-label="Удалить возврат">×</button>
             </div>` : !p.app ? `
             <div class="line pay ro-line"><span>${dshort(p.date)}</span><b>${rub(p.amount)}</b><span>${esc(p.type)}</span><span>чек: ${p.receipt === true ? 'да' : p.receipt === false ? 'нет' : '—'}</span><span class="muted small">из «Платежей»</span></div>` : `
@@ -2816,14 +2829,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
               <label class="f">Дата<input id="y-d-${i}" type="date" value="${esc(p.date)}" data-y="${i}" data-k="date"></label>
               <label class="f num">Сумма, ₽<input id="y-a-${i}" value="${esc(nv(p.amount))}" data-y="${i}" data-k="amount" inputmode="decimal"></label>
               <label class="f">Как платил<select id="y-t-${i}" data-y="${i}" data-k="kind">${payKinds(false, p).map(k => `<option value="${k.k}"${payKind(p) === k.k ? ' selected' : ''}>${k.label}</option>`).join('')}</select></label>
-              <div class="f"><span>Чек пробит</span><div class="seg">
-                <button class="${p.receipt === true ? 'on' : ''}" data-act="pay-receipt" data-i="${i}" data-v="1">Да</button>
-                <button class="${p.receipt === false ? 'on' : ''}" data-act="pay-receipt" data-i="${i}" data-v="0">Нет</button>
-              </div></div>
               <button class="x" data-act="del-pay" data-i="${i}" aria-label="Удалить оплату">×</button>
             </div>`).join('')}
           </div>
-          <div class="actions"><button class="btn small" data-act="add-pay">+ Оплата</button><button class="btn small ghost" data-act="add-refund">− Вернуть клиенту</button></div>
+          ${calcHTML('ed')}
+          <div class="actions"><button class="btn small ghost" data-act="add-refund">− Вернуть клиенту</button></div>
           <p class="muted small">Оплаты и возвраты сразу попадают в «Деньги» (как строка в листе «Платежи»). Возврат с чеком уменьшает выручку для налога. Если исходная оплата была с чеком, при возврате пробей чек возврата.</p>
         </section>
 
@@ -2831,10 +2841,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           ${totBar(t)}
           <div><span>Работы</span><b>${rub(r2(t.works - o.works.filter(w => w.kind).reduce((a, w) => a + (w.sum || 0), 0)))}</b></div>
           <div><span>Запчасти</span><b>${rub(t.parts)}</b>${t.partsWait > 0 ? `<small class="muted" title="Запчасти с отметкой «НЕТ» — заказаны, но ещё не пришли. Они уже входят в сумму.">ещё не пришло: ${rub(t.partsWait)}</small>` : ''}</div>
-          ${rndRowsHTML(o.works, 'ed')}
-          <div class="big"><span>Итого</span><b>${rub(t.total)}</b></div>
+          ${(() => { const c = payCalc('ed'); return `<div class="big"><span>К оплате</span><b>${rub(c.target)}</b>${c.rounded ? `<small class="muted">${fmt(c.base, 2)} → округлено</small>` : ''}</div>
           <div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
-          <div class="big ${t.debt > 5 ? 'neg' : t.debt < -5 ? 'pos' : ''}"><span>${t.debt < -5 ? 'Переплата' : 'Долг'}</span><b>${rub(Math.abs(t.debt))}</b></div>
+          <div class="big ${c.rem > 0.004 ? 'neg' : c.rem < -0.004 ? 'pos' : ''}"><span>${c.rem < -0.004 ? 'Переплата' : 'Осталось'}</span><b>${rub(Math.abs(c.rem))}</b></div>`; })()}
+          ${rndRowsHTML(o.works, 'ed')}
           ${roundBtns(t, 'ed')}
         </section>
 
@@ -3497,6 +3507,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     (E.detachedPays || []).forEach(y => { y.order = null; D.pays.push(y); });
     D.parts.forEach(p => { if (touched.has(p.blk)) p.edited = true; });
     D.orders = D.orders.filter(x => x.id !== o.id).concat([o]);
+    if (E.schedId) { const sc = D.schedule.find(x => x.id === E.schedId); if (sc) sc.oid = o.id; }
     E.parts.forEach(p => {
       if (p.link) D.pays.forEach(y => { if (y.link === p.link) y.order = o.num; });
       delete p.fromSale;
@@ -3528,13 +3539,21 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
 
   /* ----- Запись ----- */
+  /* наряд в работе у того же клиента на ту же машину (не сданный) */
+  function schedOpenOrder(s, p, c) {
+    const used = new Set(D.schedule.filter(x => x.oid && x.id !== s.id).map(x => x.oid));
+    return D.orders.filter(o => !o.doneDate && !used.has(o.id) && (p ? o.cid === p.id : low(o.client) === low(s.client)) && (!c || !o.carId || o.carId === c.id) && (!(s.car || '') || low(o.car || '') === low(s.car || '') || (c && o.carId === c.id)))
+      .sort((a, b) => (b.start || '').localeCompare(a.start || ''))[0] || null;
+  }
   function viewSched() {
     const f = ui.schedForm || (ui.schedForm = { date: S.todayISO(), client: '', car: '', note: '' });
     const list = D.schedule.slice().sort((a, b) => a.date.localeCompare(b.date));
-    const futOrders = D.orders.filter(o => o.start && o.start > S.todayISO() && !o.doneDate).map(o => ({ date: o.start, order: o }));
+    const linkedIds = new Set(D.schedule.map(x => x.oid).filter(Boolean));
+    const linkO = new Map(); list.forEach(sc => { const o = sc.oid && D.orders.find(x => x.id === sc.oid); if (o) linkO.set(sc.id, o); });
+    const futOrders = D.orders.filter(o => o.start && o.start > S.todayISO() && !o.doneDate && !linkedIds.has(o.id)).map(o => ({ date: o.start, order: o }));
     const fut = list.filter(s => s.date >= S.todayISO()).concat(futOrders).sort((a, b) => a.date.localeCompare(b.date)), past = list.filter(s => s.date < S.todayISO()).reverse();
-    const orow = o => `<li class="sc-li"><span>${dshort(o.start)}</span><span><b>${esc(orderWho(o))}</b> · ${esc(o.car)} <span class="pill st-wait">наряд${o.num != null ? ' № ' + o.num : ''}</span>${o.works && o.works.some(w => w.name) ? ' · <span class="muted">' + esc(o.works.filter(w => w.name).map(w => w.name).join(', ')) + '</span>' : ''}</span><button class="btn small" data-act="open-order" data-id="${esc(o.id)}">Открыть наряд</button><button class="x" aria-hidden="true" tabindex="-1" style="visibility:hidden">×</button></li>`;
-    const row = s => s.order ? orow(s.order) : `<li class="sc-li"><span>${dshort(s.date)}</span><span><b>${esc(s.client)}</b> · ${esc(s.car)}${s.note ? ' · <span class="muted">' + esc(s.note) + '</span>' : ''}</span><button class="btn small" data-act="sched-order" data-id="${esc(s.id)}">Открыть наряд</button><button class="x" data-act="sched-del" data-id="${esc(s.id)}" aria-label="Удалить">×</button></li>`;
+    const orow = (o, d, sid) => `<li class="sc-li"><span>${dshort(d || o.start)}</span><span><b>${esc(orderWho(o))}</b> · ${esc(o.car)} <span class="pill st-wait">наряд${o.num != null ? ' № ' + o.num : ''}</span>${o.works && o.works.some(w => w.name) ? ' · <span class="muted">' + esc(o.works.filter(w => w.name).map(w => w.name).join(', ')) + '</span>' : ''}</span><button class="btn small" data-act="open-order" data-id="${esc(o.id)}">Открыть наряд</button>${sid ? `<button class="x" data-act="sched-del" data-id="${esc(sid)}" aria-label="Удалить запись" title="Удалить запись (наряд останется)">×</button>` : '<button class="x" aria-hidden="true" tabindex="-1" style="visibility:hidden">×</button>'}</li>`;
+    const row = s => s.order ? orow(s.order) : linkO.has(s.id) ? orow(linkO.get(s.id), s.date, s.id) : `<li class="sc-li"><span>${dshort(s.date)}</span><span><b>${esc(s.client)}</b> · ${esc(s.car)}${s.note ? ' · <span class="muted">' + esc(s.note) + '</span>' : ''}</span><button class="btn small" data-act="sched-order" data-id="${esc(s.id)}">Открыть наряд</button><button class="x" data-act="sched-del" data-id="${esc(s.id)}" aria-label="Удалить">×</button></li>`;
     return `<section class="block form"><div class="block-head"><h3>Записать на ремонт</h3></div>
       <div class="grid g4">
         <label class="f">Дата<input id="sc-date" type="date" value="${esc(f.date)}" data-scf="date"></label>
@@ -3833,6 +3852,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       if (Math.abs(ui.sale.legacyPaid) < 0.005) ui.sale.legacyPaid = 0;
     }
     if (!rows.length) ui.sale.rows.push(saleRowNew());
+    ui.sale.rc = rcOf(ui.sale.pays);
     paintSale(true);
   }
   /* Скидка / Без сдачи: закрыть разницу между суммой и оплатой отдельной строкой */
@@ -3891,7 +3911,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     else if (p.receipt === true && Math.abs((+p.amount || 0) - r2(R - other)) < 0.005) p.amount = r2(totalNo - other);
   }
   function rndRowsHTML(lines, where) {
-    return lines.map((w, i) => w.kind ? `<div class="rnd-row"><span>${esc(RND_LBL[w.kind] || w.name)} <small class="muted">· только для тебя, в бланк не печатается</small></span><b>${(w.sum > 0 ? '+' : '') + rub(w.sum)}</b><button class="x sm" data-act="rnd-del" data-w="${where}" data-i="${i}" aria-label="Убрать">×</button></div>` : '').join('');
+    const items = lines.map((w, i) => w.kind ? `<span class="rnd-chip">${esc(RND_LBL[w.kind] || w.name)} <b>${(w.sum > 0 ? '+' : '') + rub(w.sum)}</b><button class="x sm" data-act="rnd-del" data-w="${where}" data-i="${i}" aria-label="Убрать" title="Убрать">×</button></span>` : '').join('');
+    return items ? `<div class="rnd-row">${items}<small class="muted">только для тебя, в бланк не печатается</small></div>` : '';
   }
   /* «без сдачи»: при оплате без чека сначала округляем счёт до сотни, остальное — сдача */
   function nochAmount(where) {
@@ -3901,6 +3922,86 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const totalNo = r2(total - sumK('rnd') - sumK('noch')), paidEff = r2(t.paid - sumK('noch'));
     const real = pays.filter(p => (+p.amount || 0) > 0 && !p.refund), R = real.length && real.every(p => p.receipt === false) ? rndTarget(totalNo) : null;
     return r2(paidEff - (R != null ? R : totalNo));
+  }
+  /* ===== Расчёт «как на кассе»: чек — один на весь наряд/продажу; «Клиент дал» → сдача ===== */
+  const kindIsSup = p => { const kk = payKinds().find(x => x.k === payKind(p)); return !!(kk && kk.sup); };
+  function rcOf(pays) { const v = pays.filter(p => !kindIsSup(p) && p.receipt != null).map(p => p.receipt); return v.length ? v[v.length - 1] : null; }
+  /* сколько ещё к оплате: при «чек: нет» — до ровной сотни */
+  function payCalc(where) {
+    const ed = where === 'ed', lines = ed ? ui.editor.order.works : ui.sale.rows, X0 = ed ? ui.editor : ui.sale;
+    const t = ed ? edTotals() : saleTotals(), total = ed ? t.total : t.sum;
+    const sumK = k => lines.filter(x => x.kind === k && (k !== 'rnd' || x.auto)).reduce((a, x) => a + (x.sum || 0), 0);
+    const noch = sumK('noch'), base = r2(total - sumK('rnd') - noch), paidEff = r2(t.paid - noch);
+    const R = X0.rc === false ? rndTarget(base) : null, target = R != null ? R : base;
+    return { t, base, target, rounded: R != null, noch, paid: t.paid, rem: r2(target - paidEff) };
+  }
+  function calcHTML(where) {
+    const ed = where === 'ed', X0 = ed ? ui.editor : ui.sale, C = X0.calc || (X0.calc = { given: '', kind: 'cash' }), c = payCalc(where);
+    const g = numIn(String(C.given || '')), kinds = payKinds(false, null);
+    const kk = kinds.find(x => x.k === C.kind) || kinds[0];
+    let info = '', btns = '';
+    if (X0.rc == null && !kk.sup) info = `<span class="neg">Сначала отметь выше: чек пробит или нет.</span>`;
+    else if (g > 0) {
+      const rest = r2(c.rem - g);
+      if (c.rem <= 0.004) { info = `Наряд уже оплачен — это будет переплата.`; btns = `<button class="btn small" data-act="calc-pay" data-w="${where}" data-m="all">Записать ${rub(g)}</button>`; }
+      else if (rest > 0.004) { info = `После оплаты останется: <b>${rub(rest)}</b>`; btns = `<button class="btn small primary" data-act="calc-pay" data-w="${where}" data-m="all">Записать оплату ${rub(g)}</button>`; }
+      else if (rest < -0.004) { info = `Сдача: <b class="pos">${rub(-rest)}</b>`; btns = `<button class="btn small primary" data-act="calc-pay" data-w="${where}" data-m="change">Сдачу выдал</button><button class="btn small" data-act="calc-pay" data-w="${where}" data-m="noch" title="Клиент оставил сдачу — это доход СТО, в бланк не печатается">Без сдачи</button>`; }
+      else { info = `Ровно, без сдачи.`; btns = `<button class="btn small primary" data-act="calc-pay" data-w="${where}" data-m="all">Записать оплату ${rub(g)}</button>`; }
+    } else info = c.rem > 0.004 ? `К оплате осталось <b>${rub(c.rem)}</b> — впиши, сколько дал клиент.` : '';
+    const pre = ed ? 'cg' : 'scg';
+    return `<div class="calc-row">
+      <label class="f num">Клиент дал, ₽<input id="${pre}-given" value="${esc(C.given || '')}" data-calc="${where}" data-k="given" inputmode="decimal" placeholder="${c.rem > 0.004 ? fmt(c.rem, c.rem % 1 ? 2 : 0) : ''}"></label>
+      <label class="f">Как платил<select id="${pre}-kind" data-calc="${where}" data-k="kind">${kinds.map(k => `<option value="${k.k}"${kk.k === k.k ? ' selected' : ''}>${k.label}</option>`).join('')}</select></label>
+      <div class="calc-info"><span id="${pre}-info">${info}</span><span class="calc-btns" id="${pre}-btns">${btns}</span></div></div>`;
+  }
+  function rcSegHTML(where) {
+    const X0 = where === 'ed' ? ui.editor : ui.sale;
+    return `<div class="rc-seg"><span>Чек пробит:</span><div class="seg"><button class="${X0.rc === true ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="1">Да</button><button class="${X0.rc === false ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="0">Нет</button></div><span class="muted small">${X0.rc === false ? 'без чека — сумма округляется до сотни' : X0.rc === true ? 'точная сумма, как на терминале' : 'один раз на все оплаты'}</span></div>`;
+  }
+  function calcCommit(where, mode) {
+    const ed = where === 'ed', X0 = ed ? ui.editor : ui.sale, C = X0.calc || {}, c = payCalc(where);
+    const g = numIn(String(C.given || '')); if (!(g > 0)) return;
+    const kk = payKinds().find(x => x.k === C.kind) || PAY_KINDS[0];
+    if (X0.rc == null && !kk.sup) { toast('Отметь: чек пробит или нет'); return; }
+    const amount = mode === 'change' ? c.rem : g;
+    const pay = { id: uid('y'), date: S.todayISO(), amount: r2(amount), type: kk.type, to: kk.name || null, receipt: kk.sup ? false : X0.rc, name: '', note: '', app: true };
+    if (ed) pay.order = ui.editor.order.num;
+    X0.pays.push(pay);
+    if (mode === 'noch' && g - c.rem > 0.004) {
+      const d = r2(g - c.rem);
+      if (ed) ui.editor.order.works.push({ id: uid('w'), name: RND_LBL.noch, kind: 'noch', sum: d, sub: 0, nik: 0, done: ui.editor.order.doneDate || null });
+      else ui.sale.rows.push(saleRowNew({ sup: '', name: RND_LBL.noch, kind: 'noch', cost: 0, qty: 1, price: d, sum: d, no: false }));
+    }
+    X0.calc = { given: '', kind: C.kind };
+    toast(mode === 'change' ? 'Записано ' + rub(amount) + ', сдача ' + rub(g - amount) : mode === 'noch' ? 'Записано ' + rub(g) + ', без сдачи ' + rub(g - c.rem) : 'Оплата ' + rub(g) + ' записана');
+    ed ? paintEditor() : paintSale();
+  }
+  function calcInput(el) {
+    const where = el.dataset.calc, X0 = where === 'ed' ? ui.editor : ui.sale; if (!X0) return;
+    const C = X0.calc || (X0.calc = { given: '', kind: 'cash' }); C[el.dataset.k] = el.value;
+    const pre = where === 'ed' ? 'cg' : 'scg', tmp = document.createElement('div'); tmp.innerHTML = calcHTML(where);
+    ['info', 'btns'].forEach(k => { const a = $('#' + pre + '-' + k), b = tmp.querySelector('#' + pre + '-' + k); if (a && b) a.innerHTML = b.innerHTML; });
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !e.target.dataset || e.target.dataset.calc == null) return;
+    const where = e.target.dataset.calc, pre = where === 'ed' ? 'cg' : 'scg', btn = $('#' + pre + '-btns .btn');
+    if (btn) { e.preventDefault(); btn.click(); }
+  });
+  function rcAll(where, v) {
+    const ed = where === 'ed', X0 = ed ? ui.editor : ui.sale; X0.rc = v; X0.err = '';
+    X0.pays.forEach(p => { if (!kindIsSup(p)) p.receipt = v; });
+    /* последняя оплата закрывала наряд — подгоняем её под новую сумму (ровную или точную) */
+    const lines0 = ed ? ui.editor.order.works : ui.sale.rows, nl = lines0.find(x => x.kind === 'noch');
+    if (nl) {
+      /* есть «без сдачи» — подгоняем его, а не оплату: клиент отдал те же деньги */
+      ed ? edRndSync() : saRndSync();
+      const c = payCalc(where), v = r2((nl.sum || 0) - c.rem);
+      if (v > 0.004) { nl.sum = v; if (!ed) nl.price = v; } else lines0.splice(lines0.indexOf(nl), 1);
+      ed ? paintEditor() : paintSale(); return;
+    }
+    const i = X0.pays.map((p, j) => (p.refund ? -1 : j)).filter(j => j >= 0).pop();
+    if (i != null) { const lines = ed ? ui.editor.order.works : ui.sale.rows, old = lines.filter(x => x.kind === 'rnd' && x.auto).reduce((a, x) => a + (x.sum || 0), 0), noch = lines.filter(x => x.kind === 'noch').reduce((a, x) => a + (x.sum || 0), 0); rndPayAmount(X0.pays, i, r2((ed ? edTotals().total : saleTotals().sum) - old - noch)); }
+    ed ? paintEditor() : paintSale();
   }
   function roundBtns(t, where) {
     if (!(t.paid > 0) || t.debt > -0.01) return '';
@@ -3978,7 +4079,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <div class="actions"><button class="btn small" data-act="sp-add">+ Запчасть</button><button class="btn small primary-t" data-act="sp-paste">Загрузить запчасти</button></div>
           ${!Sx.id && Sx.rows.some(p => (p.name || '').trim() || p.art) ? `<div class="stk-bar flat"><span>Это для машины? Перенеси в наряд:</span><span class="rk-to"><select id="sa-ord" aria-label="Наряд"><option value="">наряд…</option>${D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num).map(o => `<option value="${o.num}">№ ${o.num} · ${esc(orderWho(o))}</option>`).join('')}</select><button class="btn small" data-act="sale-to-order">В наряд</button><button class="btn small" data-act="sale-to-new">+ Новый наряд</button></span></div>` : ''}
         </section>
-        <section class="block"><div class="block-head"><h3>Оплата</h3><span class="muted">оплачено ${rub(t.paid)}</span></div>
+        <section class="block"><div class="block-head"><h3>Оплата</h3><span class="muted">оплачено ${rub(t.paid)}</span></div>${own ? '' : rcSegHTML('sa')}
           ${own ? `<label class="f chk"><input type="checkbox" id="sa-personal" data-sa="personal" ${Sx.personal ? 'checked' : ''}> Списать ${rub(t.sum)} с доли ${esc(Sx.client)} (как в Excel: минус, безнал, «${esc(Sx.client)}»)</label>
             ${!Sx.personal && Sx.legacyPaid ? `<label class="f" style="max-width:260px">Оплачено раньше, ₽<input id="sa-legacy" value="${esc(nv(Sx.legacyPaid))}" data-sa="legacyPaid" inputmode="decimal"></label>` : ''}` : `
             ${Sx.legacyPaid ? `<label class="f" style="max-width:260px">Оплачено раньше, ₽<input id="sa-legacy" value="${esc(nv(Sx.legacyPaid))}" data-sa="legacyPaid" inputmode="decimal"></label>` : ''}
@@ -3986,13 +4087,13 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
               <label class="f">Дата<input id="sy-d-${i}" type="date" value="${esc(p.date)}" data-sy="${i}" data-k="date"></label>
               <label class="f num">Сумма, ₽<input id="sy-a-${i}" value="${esc(nv(p.amount))}" data-sy="${i}" data-k="amount" inputmode="decimal"></label>
               <label class="f">Как платил<select id="sy-t-${i}" data-sy="${i}" data-k="kind">${payKinds(false, p).map(k => `<option value="${k.k}"${payKind(p) === k.k ? ' selected' : ''}>${k.label}</option>`).join('')}</select></label>
-              <div class="f"><span>Чек пробит</span><div class="seg"><button class="${p.receipt === true ? 'on' : ''}" data-act="sy-rc" data-i="${i}" data-v="1">Да</button><button class="${p.receipt === false ? 'on' : ''}" data-act="sy-rc" data-i="${i}" data-v="0">Нет</button></div></div>
               <button class="x" data-act="sy-del" data-i="${i}" aria-label="Удалить оплату">×</button></div>`).join('')}</div>
-            <button class="btn small" data-act="sy-add">+ Оплата</button>`}
+            ${calcHTML('sa')}`}
           ${t.costOther ? `<label class="f" style="max-width:420px">Закупку (${rub(t.costOther)}) в магазине оплатил<select id="sa-sup" data-sa="supHow"><option value="none"${Sx.supHow === 'none' ? ' selected' : ''}>Внесу сам в «Деньги»</option>${Object.entries(HOW).map(([k, h]) => `<option value="${k}"${Sx.supHow === k ? ' selected' : ''}>${h[2]}</option>`).join('')}</select></label>` : ''}
         </section>
-        <section class="block totals${ui.totOpen ? ' open' : ''}">${totBar({ total: t.sum, debt: t.debt })}${rndRowsHTML(Sx.rows, 'sa')}<div><span>Сумма</span><b>${rub(t.sum)}</b></div><div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
-          <div class="big ${t.debt > 5 ? 'neg' : t.debt < -5 ? 'pos' : ''}"><span>${t.debt < -5 ? 'Переплата' : 'Долг'}</span><b>${rub(Math.abs(t.debt))}</b></div>
+        <section class="block totals${ui.totOpen ? ' open' : ''}">${totBar({ total: t.sum, debt: t.debt })}${own ? `<div><span>Сумма</span><b>${rub(t.sum)}</b></div><div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
+          <div class="big ${t.debt > 5 ? 'neg' : t.debt < -5 ? 'pos' : ''}"><span>${t.debt < -5 ? 'Переплата' : 'Долг'}</span><b>${rub(Math.abs(t.debt))}</b></div>` : (() => { const c = payCalc('sa'); return `<div class="big"><span>К оплате</span><b>${rub(c.target)}</b>${c.rounded ? `<small class="muted">${fmt(c.base, 2)} → округлено</small>` : ''}</div><div><span>Оплачено</span><b>${rub(t.paid)}</b></div>
+          <div class="big ${c.rem > 0.004 ? 'neg' : c.rem < -0.004 ? 'pos' : ''}"><span>${c.rem < -0.004 ? 'Переплата' : 'Осталось'}</span><b>${rub(Math.abs(c.rem))}</b></div>${rndRowsHTML(Sx.rows, 'sa')}`; })()}
           ${own ? '' : roundBtns(t, 'sa')}</section>
         <div class="actions"><span class="grow"></span>${Sx.id ? (Sx.confirmDelete ? '<span class="small">Удалить продажу со всеми строками и оплатами?</span><button class="btn danger" data-act="sale-del">Да, удалить</button><button class="btn ghost" data-act="sale-del-no">Нет</button>' : '<button class="btn ghost danger-t" data-act="sale-del-ask">Удалить продажу</button>') : ''}</div>
       </div></div>`);
@@ -4502,6 +4603,15 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     changed();
   }
 
+  /* пересчёт кассы: даты храним в D.cfg.cashChecks, строки «Денег» в эти дни подсвечены (как цветом в Excel) */
+  function cashChkBox() {
+    if (!ui.cashChk) return '';
+    const cc = (D.cfg.cashChecks || []).slice().sort().reverse(), v = ui.cashChkDate || S.todayISO();
+    return `<section class="block cc-box"><div class="block-head"><h3>Пересчёт кассы</h3><button class="x" data-act="cash-chk-open" aria-label="Закрыть">×</button></div>
+      <div class="cc-row"><label class="f">Дата пересчёта<input id="cc-date" type="date" value="${esc(v)}" data-ccdate="1"></label><button class="btn primary" data-act="cash-chk-add">Отметить</button></div>
+      ${cc.length ? `<ul class="plain cc-list">${cc.map(d => `<li><span>${dshort(d)}</span><button class="x sm" data-act="cash-chk-del" data-d="${esc(d)}" aria-label="Удалить" title="Удалить отметку">×</button></li>`).join('')}</ul>` : '<p class="muted small">Отметок ещё нет.</p>'}
+      <p class="muted small">Строки «Денег» в дни пересчёта подсвечены цветом.</p></section>`;
+  }
   function payRefWhy(p) {
     if (p.order != null) return 'Оплата из наряда № ' + p.order + ' — правится в наряде.';
     if (p.link && X.sales.find(g => g.link === p.link)) return 'Оплата из продажи — правится в продаже.';
@@ -4513,6 +4623,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const T = S.today(D, X);
     const m = ui.payMonth;
     const q = ui.payQ.trim().toLowerCase();
+    const ccSet = new Set(D.cfg.cashChecks || []);
     const list = D.pays.filter(p => S.monthOf(p.date) === m && (!q || (p.name + ' ' + p.note + ' ' + p.type + ' ' + (TYPE_S[p.type] || '') + ' ' + (p.order ?? '')).toLowerCase().includes(q)))
       .sort((a, b) => b.date.localeCompare(a.date) || (b.id > a.id ? 1 : -1));
     const inSum = list.filter(p => p.amount > 0).reduce((s, p) => s + p.amount, 0), outSum = list.filter(p => p.amount < 0).reduce((s, p) => s + p.amount, 0);
@@ -4524,14 +4635,15 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     };
     return `
       <div class="kpis">
-        ${card('Касса (наличные)', T.mon.cash, '', wHint('cash'))}${card('Антон', T.mon.anton, 'доля', wHint('anton'))}${card('Глеб', T.mon.gleb, 'доля', wHint('gleb'))}
+        ${(() => { const cc = (D.cfg.cashChecks || []).slice().sort().reverse(); return `<button type="button" class="kpi kpi-btn${ui.cashChk ? ' on' : ''}" data-act="cash-chk-open" title="${esc((cc.length ? 'Пересчёт кассы:\n' + cc.slice(0, 10).map(dshort).join('\n') + '\n\n' : 'Пересчётов кассы ещё не было.\n\n') + 'Нажми, чтобы отметить пересчёт.')}"><span>Касса (наличные)${cc.length ? ` <span class="kpi-hint">пересчёт ${dshort(cc[0])}</span>` : ''}</span><b class="${T.mon.cash < 0 ? 'neg' : ''}">${rub(T.mon.cash)}</b></button>`; })()}${card('Антон', T.mon.anton, 'доля', wHint('anton'))}${card('Глеб', T.mon.gleb, 'доля', wHint('gleb'))}
         ${card('Копилка', T.mon.piggy, '', wHint('piggy'))}${card('Масло/антифриз', T.oilFund, '', wHint('oil') + ' Сюда же прибавляется себестоимость проданного масла.')}${card(W_IP, T.mon.ip, '', wHint('ip'))}
       </div>
+      ${cashChkBox()}
       ${payFormHTML()}
       <div class="toolbar">${monthNav(m, 'pay-month')}<input id="pq" class="search" type="search" placeholder="Фильтр: назначение, примечание, тип" value="${esc(ui.payQ)}" data-act="pay-search" autocomplete="off"></div>
       <p class="muted small">За месяц: пришло <b class="pos">${rub(inSum)}</b>, ушло <b class="neg">${rub(-outSum)}</b>, строк ${list.length}. Наведи на строку — покажет, что она изменила.</p>
       <div class="scroll"><table class="tbl pays"><thead><tr><th>Дата</th><th>Назначение</th><th>Примечание</th><th>Тип</th><th>Чек</th><th>Наряд</th><th class="r">Сумма</th><th></th></tr></thead><tbody>
-      ${list.map(p => `<tr title="${esc(tipOf(p) + (payEditable(p) ? '' : '\n' + payRefWhy(p)))}"><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${esc(p.name)}${p.tr ? ' <span class="muted small">перевод</span>' : ''}</td><td class="muted">${esc(p.note)}</td><td>${esc(TYPE_S[p.type] || p.type || '—')}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order != null ? `<a class="ord-link" role="button" tabindex="0" data-act="pay-go" data-id="${esc(p.id)}">${esc(String(p.order))}</a>` : ''}</td>
+      ${list.map(p => `<tr class="${ccSet.has(p.date) ? 'cc-day' : ''}" title="${esc(tipOf(p) + (payEditable(p) ? '' : '\n' + payRefWhy(p)))}"><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${esc(p.name)}${p.tr ? ' <span class="muted small">перевод</span>' : ''}</td><td class="muted">${esc(p.note)}</td><td>${esc(TYPE_S[p.type] || p.type || '—')}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order != null ? `<a class="ord-link" role="button" tabindex="0" data-act="pay-go" data-id="${esc(p.id)}">${esc(String(p.order))}</a>` : ''}</td>
         <td class="r ${p.amount < 0 ? 'neg' : 'pos'}"><b>${p.amount > 0 ? '+' : ''}${fmt(p.amount, Math.round(p.amount) === p.amount ? 0 : 2)}</b></td>
         <td class="r nowrap">${!payEditable(p) ? '' : isLockedM(S.monthOf(p.date)) ? `<span class="muted" title="${esc(S.monthLabel(S.monthOf(p.date)))} закрыт — менять нельзя. «Отчёт» → «Открыть для правки»">🔒</span>` : ui.payDel === p.id ? `<button class="btn small danger" data-act="pay-del-yes" data-id="${esc(p.id)}">Удалить${p.tr ? ' обе строки' : ''}</button><button class="btn small ghost" data-act="pay-del-no">Нет</button>` : `<span class="acts"><button class="link small" data-act="pay-edit" data-id="${esc(p.id)}">Изменить</button><button class="x" data-act="pay-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">В этом месяце платежей нет.</td></tr>'}
       </tbody></table></div>`;
@@ -5595,6 +5707,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'sy-add': { const t = saleTotals(); ui.sale.pays.push({ id: uid('y'), date: S.todayISO(), amount: t.debt > 0 ? t.debt : null, type: 'Наличные', receipt: null, name: '', note: '', app: true }); paintSale(); break; }
       case 'sy-del': ui.sale.pays.splice(+b.dataset.i, 1); paintSale(); break;
       case 'sy-rc': { const Sx = ui.sale; Sx.pays[+b.dataset.i].receipt = b.dataset.v === '1'; Sx.err = ''; const old = Sx.rows.filter(p => p.kind === 'rnd' && p.auto).reduce((a, p) => a + (p.sum || 0), 0); rndPayAmount(Sx.pays, +b.dataset.i, r2(saleTotals().sum - old)); paintSale(); break; }
+      case 'cash-chk-open': ui.cashChk = !ui.cashChk; ui.cashChkDate = null; render(); break;
+      case 'cash-chk-add': { const v = ui.cashChkDate || S.todayISO(); const a = new Set(D.cfg.cashChecks || []); if (a.has(v)) { toast('Эта дата уже отмечена'); break; } a.add(v); D.cfg.cashChecks = [...a].sort(); toast('Пересчёт кассы ' + dshort(v) + ' отмечен'); changed(); break; }
+      case 'cash-chk-del': D.cfg.cashChecks = (D.cfg.cashChecks || []).filter(d => d !== b.dataset.d); changed(); break;
+      case 'rc-all': rcAll(b.dataset.w, b.dataset.v === '1'); break;
+      case 'calc-pay': calcCommit(b.dataset.w, b.dataset.m); break;
       case 'rnd-del': { const i = +b.dataset.i; if (b.dataset.w === 'ed') { const w = ui.editor.order.works[i]; if (w && w.kind) ui.editor.order.works.splice(i, 1); paintEditor(); } else { const p = ui.sale.rows[i]; if (p && p.kind) ui.sale.rows.splice(i, 1); paintSale(); } break; }
       case 'sfilter': ui.sfilter = b.dataset.k; ui.slimit = 40; render(); break;
       case 's-more': ui.slimit = (ui.slimit || 40) + 60; render(); break;
@@ -5747,10 +5864,17 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'sched-del': D.schedule = D.schedule.filter(s => s.id !== b.dataset.id); changed(); break;
       case 'sched-order': {
         const s = D.schedule.find(x => x.id === b.dataset.id);
+        /* у записи уже есть наряд — открываем его, новый не создаём */
+        const linked = s.oid && D.orders.find(o => o.id === s.oid);
+        if (linked) { openOrder(linked.id); break; }
         let p = s.cid && X.clientById[s.cid];
         if (!p) { const r = X.crows.find(x => low(label(x.p)) === low(s.client) && (!s.car || (x.c && low(x.c.car) === low(s.car)))); if (r) { p = r.p; s.carId = r.c && r.c.id; } }
         const c = p && p.cars.find(x => x.id === s.carId);
-        openOrder(null, p ? { cid: p.id, carId: c ? c.id : null, client: p.name, note: p.nick, phone: p.phone, car: c ? c.car : s.car, plate: c ? c.plate : '', vin: c ? c.vin : '' } : { client: s.client, car: s.car });
+        /* у клиента на эту машину уже есть наряд в работе — привязываем запись к нему */
+        const open = schedOpenOrder(s, p, c);
+        if (open) { s.oid = open.id; changed(); openOrder(open.id); toast('Запись привязана к наряду № ' + open.num); break; }
+        const start = s.date > S.todayISO() ? s.date : S.todayISO();
+        openOrder(null, Object.assign(p ? { cid: p.id, carId: c ? c.id : null, client: p.name, note: p.nick, phone: p.phone, car: c ? c.car : s.car, plate: c ? c.plate : '', vin: c ? c.vin : '' } : { client: s.client, car: s.car }, { start, schedId: s.id }));
         break;
       }
       case 'pp-add': {
@@ -5813,6 +5937,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   });
   document.addEventListener('input', e => {
     const el = e.target;
+    if (el.dataset.calc) { calcInput(el); return; }
     if (el.closest('#editor')) { onEditorInput(el); return; }
     if (el.closest('#saleEd')) { onSaleInput(el); return; }
     const a = el.dataset.act;
@@ -5834,6 +5959,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.cf) { ui.cdraft[el.dataset.cf] = el.value; return; }
     if (el.dataset.cc) { const c = ui.cdraft.cars.find(x => x.id === el.dataset.cc); c[el.dataset.k] = el.value; return; }
     if (el.dataset.rsel) { ui.retSel = ui.retSel || new Set(); if (el.checked) ui.retSel.add(el.dataset.rsel); else ui.retSel.delete(el.dataset.rsel); render(); return; }
+    if (el.dataset.ccdate) { ui.cashChkDate = el.value; return; }
     if (el.dataset.cldebt) { ui.clDebt = el.checked; render(); return; }
     if (el.dataset.wsel) { ui.waitSel = ui.waitSel || new Set(); if (el.checked) ui.waitSel.add(el.dataset.wsel); else ui.waitSel.delete(el.dataset.wsel); render(); return; }
     if (el.dataset.wday) { ui.waitSel = ui.waitSel || new Set(); el.dataset.wday.split(',').forEach(id => el.checked ? ui.waitSel.add(id) : ui.waitSel.delete(id)); render(); return; }
