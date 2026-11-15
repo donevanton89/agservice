@@ -280,7 +280,13 @@ ul.plain.ret-rows > li.sel { background: var(--accent-soft); }
 .tbl tr:last-child td { border-bottom: 0; }
 .tbl tr.sum td { font-weight: 700; background: var(--surface-2); }
 .tbl input { width: 100%; min-width: 64px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
-.tbl.params input { min-width: 78px; }
+.tbl.params input { width: 96px; min-width: 78px; text-align: center; }
+.tbl.params th, .tbl.params th.r { text-align: center; }
+.tbl.params input[type=month] { min-width: 150px; }
+.tbl.params .fx-h { white-space: nowrap; }
+.tbl.params .fx-h .x { margin-left: 2px; vertical-align: middle; }
+.fx-add { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.fx-add .f { width: 260px; margin: 0; }
 
 ul.plain { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
 ul.plain li { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
@@ -1467,6 +1473,9 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       const pr = paramsFor(cfg, month);
       const rate = (pr.usn || 0) + (pr.extra || 0);
       const fixed = { rent: pr.rent || 0, acc: pr.acc || 0, elec: pr.elec || 0, term: pr.term || 0, vznos: (pr.vznosYear || 0) / 12, acqCard: card * (pr.acqCard || 0), acqQr: qr * (pr.acqQr || 0) };
+      /* свои виды постоянных расходов (Настройки → «+ Вид расхода»): cfg.fixedExtra [{k, name}], суммы — в строке периода pr.x[k] */
+      const fixedExtra = (cfg.fixedExtra || []).map(e => ({ k: e.k, name: e.name, sum: r2(+((pr.x || {})[e.k]) || 0) }));
+      fixedExtra.forEach(e => { fixed['x_' + e.k] = e.sum; });
       const fixedSum = Object.values(fixed).reduce((a, b) => a + b, 0);
       const paidByKind = {};
       let paidFixed = 0;
@@ -1474,7 +1483,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
         if (!inMonth(p) || !X.fixed.has(low(p.name))) return;
         paidFixed -= p.amount; paidByKind[low(p.name)] = (paidByKind[low(p.name)] || 0) - p.amount;
       });
-      Object.assign(out, { params: pr, rate, tax: r2(withReceipt * rate), fixed, fixedSum: r2(fixedSum), card: r2(card), qr: r2(qr), paidFixed: r2(paidFixed), paidByKind });
+      Object.assign(out, { params: pr, rate, tax: r2(withReceipt * rate), fixed, fixedExtra, fixedSum: r2(fixedSum), card: r2(card), qr: r2(qr), paidFixed: r2(paidFixed), paidByKind });
       out.rest = r2(itogo - out.tax - fixedSum);
     }
     return out;
@@ -3742,7 +3751,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       ${withReceipt ? `<div class="zn-band"><div class="zn-org">${withReceipt ? `Исполнитель: ${esc(P.org)}${P.inn || P.ogrn ? '<br>' + (P.inn ? 'ИНН: ' + esc(P.inn) : '') + (P.inn && P.ogrn ? '&nbsp;&nbsp;&nbsp;' : '') + (P.ogrn ? 'ОГРНИП: ' + esc(P.ogrn) : '') : ''}` : 'Станция технического обслуживания'}<br>Адрес: ${esc(P.addr)}<br>Тел.: ${esc(P.phone)}</div>
         <div class="zn-circle"><img class="zn-logo" src="${logo}" alt="Логотип"></div></div>` : ''}
       <div class="zn-head">
-        <h1>Заказ-наряд на ремонт${docN ? ' №\u00a0' + esc(docN) : ''}<br>от ${esc(dateNum)}</h1>
+        <h1>Заказ-наряд на ремонт<br>${docN ? '№\u00a0' + esc(docN) + ' ' : ''}от\u00a0${esc(dateNum)}</h1>
         <div class="zn-car c3">
           <div><small>Заказчик</small><b>${esc(who || '—')}</b></div>
           <div><small>Автомобиль</small><b>${esc(o.car || '—')}</b></div>
@@ -5053,7 +5062,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const r = S.monthReport(D, X, m);
     const f = ui.expForm || (ui.expForm = { kind: 'fixed', date: m === NOW_M() ? S.todayISO() : m + '-01', what: (D.cfg.fixedNames || [])[1] || 'Аренда', amount: null, how: 'cash', note: '', sup: '' });
     const kinds = D.cfg.fixedNames || [];
-    const acc = r.taxMode ? { 'налог': r.tax, 'взносы': r.fixed.vznos, 'аренда': r.fixed.rent, 'бухгалтер': r.fixed.acc, 'электричество': r.fixed.elec, 'аренда терминала': r.fixed.term, 'эквайринг': r.fixed.acqCard + r.fixed.acqQr } : null;
+    const acc = r.taxMode ? { 'налог': r.tax, 'взносы': r.fixed.vznos, 'аренда': r.fixed.rent, 'бухгалтер': r.fixed.acc, 'электричество': r.fixed.elec, 'аренда терминала': r.fixed.term, 'эквайринг': r.fixed.acqCard + r.fixed.acqQr, ...Object.fromEntries((r.fixedExtra || []).map(e => [low(e.name), e.sum])) } : null;
     const xq = (ui.xq || '').trim().toLowerCase(), xall = !!ui.xqAll;
     let found = '';
     if (xq) {
@@ -5283,7 +5292,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         ${line('Ставка УСН «Доходы»', pct(r.params.usn))}${r.params.extra ? line('Добавка на взносы', pct(r.params.extra)) : ''}
         ${line('Отложить в налоговую (с оплат с чеком)', -r.tax, 'minus')}
         ${line('Аренда', -r.fixed.rent, 'minus', 1)}${line('Бухгалтер', -r.fixed.acc, 'minus', 1)}${line('Электричество', -r.fixed.elec, 'minus', 1)}${line('Аренда терминала', -r.fixed.term, 'minus', 1)}
-        ${line('Фиксированные взносы (за месяц)', -r.fixed.vznos, 'minus', 1)}
+        ${line('Фиксированные взносы (за месяц)', -r.fixed.vznos, 'minus', 1)}${(r.fixedExtra || []).map(e => line(esc(e.name), -e.sum, 'minus', 1)).join('')}
         ${line('Эквайринг карта ' + pct(r.params.acqCard) + ' с ' + rub(r.card), -r.fixed.acqCard, 'minus', 1)}${line('Эквайринг QR ' + pct(r.params.acqQr) + ' с ' + rub(r.qr), -r.fixed.acqQr, 'minus', 1)}
         ${line('Постоянные расходы — всего', -r.fixedSum, 'sub')}
         ${line('Остаток за месяц', r.rest, 'total' + (r.rest < 0 ? ' neg' : ''))}
@@ -5441,7 +5450,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       ${M ? `<div class="note"><span>Работа «${esc(M.to)}» уже есть в прайсе. Объединить с ней «${esc(D.workTypes[M.from].name)}»? Старые наряды не меняются, просто в прайсе останется одна строка.</span>
         <div class="actions"><button class="btn small primary" data-act="wp-merge-yes">Объединить</button><button class="btn small ghost" data-act="wp-merge-no">Отмена</button></div></div>` : ''}
       ${list.length ? `<div class="scroll"><table class="tbl wp"><thead><tr><th>Работа</th><th class="r">Цена, ₽</th><th class="r">Делали</th><th class="r">Обычно брали</th><th></th></tr></thead><tbody>
-        ${list.slice(0, lim).map(({ wt, i, st }) => `<tr${wt.isNew ? ' class="wp-new"' : ''}><td><input id="wp-n-${i}" value="${esc(wt.name)}" data-wp="${i}" data-k="name" aria-label="Название работы">${(wt.aliases || []).length ? `<div class="muted small">также: ${esc(wt.aliases.join('; '))}</div>` : ''}${!wt.price && st.count ? '<div class="small warn-t">без цены</div>' : ''}</td>
+        ${list.slice(0, lim).map(({ wt, i, st }) => `<tr${wt.isNew ? ' class="wp-new"' : ''}><td><input id="wp-n-${i}" value="${esc(wt.name)}" data-wp="${i}" data-k="name" aria-label="Название работы">${(wt.aliases || []).length ? `<div class="muted small">также: ${esc(wt.aliases.join('; '))}</div>` : ''}</td>
           <td class="r"><input id="wp-p-${i}" class="r" value="${esc(nv(wt.price))}" data-wp="${i}" data-k="price" inputmode="decimal" aria-label="Цена"></td>
           <td class="r">${st.count || '<span class="muted">—</span>'}</td><td class="r">${st.typ ? `<button class="link small" data-act="wp-use" data-i="${i}" title="Поставить эту цену">${rub(st.typ)}</button>` : '<span class="muted">—</span>'}</td>
           <td><button class="x" data-act="wp-del" data-i="${i}" aria-label="Удалить из прайса">×</button></td></tr>`).join('')}
@@ -5552,7 +5561,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function viewSettings() {
     const ps = (D.cfg.params || []).slice().sort((a, b) => (a.from < b.from ? -1 : 1));
-    const cell = (i, k, v, mode) => `<td><input id="pp-${i}-${k}" value="${esc(mode === 'pct' ? nv(v ? v * 100 : 0) : nv(v))}" data-pp="${i}" data-k="${k}" data-mode="${mode || ''}" inputmode="decimal" class="${k === 'from' ? '' : 'r'}"></td>`;
+    const cell = (i, k, v, mode) => k === 'from'
+      ? `<td><input id="pp-${i}-from" type="month" value="${esc(v || '')}" data-pp="${i}" data-k="from"></td>`
+      : `<td><input id="pp-${i}-${k}" value="${esc(mode === 'pct' ? nv(v ? v * 100 : 0) : nv(v))}" data-pp="${i}" data-k="${k}" data-mode="${mode || ''}" inputmode="decimal"></td>`;
+    const fxE = D.cfg.fixedExtra || [];
+    const xcell = (i, e, p) => `<td><input id="pp-${i}-x-${e.k}" value="${esc(nv((p.x || {})[e.k]))}" data-pp="${i}" data-k="x" data-x="${e.k}" inputmode="decimal"></td>`;
     const mk = D.cfg.markup || S.DEFAULT_MARKUP;
     return `${restoreNoteHTML()}
       <section class="block"><div class="block-head"><h3>Оформление</h3></div>
@@ -5586,10 +5599,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <label class="btn file">Выбрать Работа.xlsm…<input type="file" id="xl-reload" accept=".xlsm,.xlsx" data-act="xl-reload"></label>
         ${D.cfg.importedAt ? `<p class="muted small">Последняя загрузка из Excel: ${new Date(D.cfg.importedAt).toLocaleString('ru-RU')}</p>` : ''}
       </section>`}
-      <section class="block"><div class="block-head"><h3>Налог и постоянные расходы по периодам</h3><button class="btn small" data-act="pp-add">+ Новый период</button></div>
-        <p class="muted small">Для месяца действует последняя строка, у которой «С месяца» не позже него. Новая ставка — новая строка, старые не трогай. Месяц пиши так: 2027-01.</p>
-        <div class="scroll"><table class="tbl params"><thead><tr><th>С месяца</th><th class="r">УСН, %</th><th class="r">Доп. взнос, %</th><th class="r">Аренда</th><th class="r">Бухгалтер</th><th class="r">Свет</th><th class="r">Взносы за год</th><th class="r">Эквайринг карта, %</th><th class="r">Эквайринг QR, %</th><th class="r">Терминал</th><th></th></tr></thead>
-        <tbody>${ps.map((p, i) => `<tr>${cell(i, 'from', p.from)}${cell(i, 'usn', p.usn, 'pct')}${cell(i, 'extra', p.extra, 'pct')}${cell(i, 'rent', p.rent)}${cell(i, 'acc', p.acc)}${cell(i, 'elec', p.elec)}${cell(i, 'vznosYear', p.vznosYear)}${cell(i, 'acqCard', p.acqCard, 'pct')}${cell(i, 'acqQr', p.acqQr, 'pct')}${cell(i, 'term', p.term)}<td><button class="x" data-act="pp-del" data-i="${i}" aria-label="Удалить строку">×</button></td></tr>`).join('') || '<tr><td colspan="11" class="muted">Добавь первую строку — с неё начнётся налоговый учёт.</td></tr>'}</tbody></table></div>
+      <section class="block"><div class="block-head"><h3>Налог и постоянные расходы по периодам</h3><span class="actions" style="margin:0"><button class="btn small" data-act="pp-add">+ Новый период</button><button class="btn small" data-act="fx-add-open">+ Вид расхода</button></span></div>
+        ${ui.fxAdd ? `<div class="fx-add"><label class="f">Название нового расхода<input id="fx-name" value="${esc(ui.fxName || '')}" data-fxname="1" placeholder="например, Интернет" autocomplete="off"></label><button class="btn primary" data-act="fx-add">Добавить</button><button class="btn ghost" data-act="fx-add-open">Отмена</button></div>` : ''}
+        <p class="muted small">Для месяца действует последняя строка, у которой «С месяца» не позже него. Новая ставка — новая строка, старые не трогай. Новый вид расхода появится колонкой во всех строках; суммы в рублях за месяц. Платить его — в «Деньгах» или «Расходах», назначение с тем же названием.</p>
+        <div class="scroll"><table class="tbl params"><thead><tr><th>С месяца</th><th class="r">УСН, %</th><th class="r">Доп. взнос, %</th><th class="r">Аренда</th><th class="r">Бухгалтер</th><th class="r">Свет</th><th class="r">Взносы за год</th><th class="r">Эквайринг карта, %</th><th class="r">Эквайринг QR, %</th><th class="r">Терминал</th>${fxE.map(e => `<th class="fx-h">${esc(e.name)}<button class="x sm" data-act="fx-del" data-k="${esc(e.k)}" aria-label="Убрать вид расхода" title="Убрать «${esc(e.name)}»">×</button></th>`).join('')}<th></th></tr></thead>
+        <tbody>${ps.map((p, i) => `<tr>${cell(i, 'from', p.from)}${cell(i, 'usn', p.usn, 'pct')}${cell(i, 'extra', p.extra, 'pct')}${cell(i, 'rent', p.rent)}${cell(i, 'acc', p.acc)}${cell(i, 'elec', p.elec)}${cell(i, 'vznosYear', p.vznosYear)}${cell(i, 'acqCard', p.acqCard, 'pct')}${cell(i, 'acqQr', p.acqQr, 'pct')}${cell(i, 'term', p.term)}${fxE.map(e => xcell(i, e, p)).join('')}<td><button class="x" data-act="pp-del" data-i="${i}" aria-label="Удалить строку">×</button></td></tr>`).join('') || '<tr><td colspan="11" class="muted">Добавь первую строку — с неё начнётся налоговый учёт.</td></tr>'}</tbody></table></div>
       </section>
       <section class="block"><div class="block-head"><h3>Наценка на работы</h3></div>
         <div class="grid g2" style="max-width:520px">
@@ -6024,6 +6038,23 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         openOrder(null, Object.assign(p ? { cid: p.id, carId: c ? c.id : null, client: p.name, note: p.nick, phone: p.phone, car: c ? c.car : s.car, plate: c ? c.plate : '', vin: c ? c.vin : '' } : { client: s.client, car: s.car }, { start, schedId: s.id }));
         break;
       }
+      case 'fx-add-open': ui.fxAdd = !ui.fxAdd; ui.fxName = ''; render(); if (ui.fxAdd) setTimeout(() => { const t = $('#fx-name'); if (t) t.focus(); }, 30); break;
+      case 'fx-add': {
+        const name = (ui.fxName || '').trim(); if (!name) { toast('Впиши название'); break; }
+        const fx = D.cfg.fixedNames || (D.cfg.fixedNames = S.DEFAULT_FIXED.slice());
+        if (fx.some(x => low(x) === low(name)) || (D.cfg.fixedExtra || []).some(x => low(x.name) === low(name))) { toast('Такой расход уже есть'); break; }
+        D.cfg.fixedExtra = (D.cfg.fixedExtra || []).concat([{ k: uid('f'), name }]);
+        D.cfg.fixedNames = fx.concat([name]);
+        ui.fxAdd = false; ui.fxName = ''; toast('Добавлен расход «' + name + '» — впиши сумму в нужные периоды'); changed(); break;
+      }
+      case 'fx-del': {
+        const k = b.dataset.k, e = (D.cfg.fixedExtra || []).find(x => x.k === k); if (!e) break;
+        if ((D.cfg.params || []).some(p => +((p.x || {})[k]) > 0)) { toast('Сначала поставь 0 во всех строках «' + e.name + '» — иначе изменятся отчёты прошлых месяцев'); break; }
+        D.cfg.fixedExtra = D.cfg.fixedExtra.filter(x => x.k !== k);
+        if (!D.pays.some(p => low(p.name) === low(e.name))) D.cfg.fixedNames = (D.cfg.fixedNames || []).filter(n => low(n) !== low(e.name));
+        (D.cfg.params || []).forEach(p => { if (p.x) delete p.x[k]; });
+        toast('Расход «' + e.name + '» убран'); changed(); break;
+      }
       case 'pp-add': {
         const ps = D.cfg.params || (D.cfg.params = []);
         const last = ps.slice().sort((a, c) => (a.from < c.from ? -1 : 1)).pop();
@@ -6108,6 +6139,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.rsel) { ui.retSel = ui.retSel || new Set(); if (el.checked) ui.retSel.add(el.dataset.rsel); else ui.retSel.delete(el.dataset.rsel); render(); return; }
     if (el.dataset.ccdate) { ui.cashChkDate = el.value; return; }
     if (el.dataset.cctime) { ui.cashChkTime = el.value; return; }
+    if (el.dataset.fxname) { ui.fxName = el.value; return; }
     if (el.dataset.cldebt) { ui.clDebt = el.checked; render(); return; }
     if (el.dataset.wsel) { ui.waitSel = ui.waitSel || new Set(); if (el.checked) ui.waitSel.add(el.dataset.wsel); else ui.waitSel.delete(el.dataset.wsel); render(); return; }
     if (el.dataset.wday) { ui.waitSel = ui.waitSel || new Set(); el.dataset.wday.split(',').forEach(id => el.checked ? ui.waitSel.add(id) : ui.waitSel.delete(id)); render(); return; }
@@ -6182,6 +6214,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       const ps = D.cfg.params.slice().sort((x, y) => (x.from < y.from ? -1 : 1));
       const p = ps[+el.dataset.pp], k = el.dataset.k;
       if (k === 'from') { if (/^\d{4}-\d{2}$/.test(el.value.trim())) p.from = el.value.trim(); else { toast('Месяц пиши так: 2027-01'); render(); return; } }
+      else if (k === 'x') { const n = numIn(el.value) || 0; p.x = Object.assign({}, p.x || {}, { [el.dataset.x]: n }); }
       else { const n = numIn(el.value) || 0; p[k] = el.dataset.mode === 'pct' ? r2(n) / 100 : n; }
       toast('Параметры сохранены'); changed(); return;
     }
