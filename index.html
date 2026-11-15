@@ -239,6 +239,14 @@ ul.plain.ret-rows > li.sel { background: var(--accent-soft); }
 .cc-row .f.cc-time { width: 130px; }
 .cc-list { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 10px 0 4px; }
 .cc-list li { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); font-size: 13px; }
+.base-box .bb-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.base-box .actions { margin-top: 12px; }
+.bb-more { margin-top: 10px; }
+.bb-more > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.bb-more[open] > summary { margin-bottom: 6px; }
+.rl-box { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.rl-list li { display: grid; grid-template-columns: 140px 90px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 560px) { .rl-list li { grid-template-columns: 1fr auto; } .rl-list li > .muted { grid-column: 1 / -1; } }
 .chk-line { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; user-select: none; }
 .chk-line input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 
@@ -2363,7 +2371,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       const [h] = await window.showOpenFilePicker(opt); const f = await h.getFile();
       const data = JSON.parse(await f.text());
       if (!data || (!data.orders && !data.pays)) throw new Error('в файле нет данных учёта');
-      ui.copyRestore = { name: f.name, data }; ui.tab = 'log'; render(); window.scrollTo(0, 0);
+      ui.copyRestore = { name: f.name, data }; if (ui.tab !== 'settings') ui.tab = 'log'; ui.restoreList = null; render(); window.scrollTo(0, 0);
     } catch (e) { if (e.name !== 'AbortError') toast('Файл не подходит: ' + e.message); }
   }
   function copyRestoreDo() {
@@ -2562,13 +2570,71 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       <p class="muted small">База хранится на твоём Яндекс Диске в папке «Приложения/AGservice». Работает на компьютерах и на телефоне, без интернета и света изменения ждут на устройстве и отправляются сами.</p>
     </div>`;
   }
+  /* «База и копии»: одна панель вместо трёх. Основная база — на Яндекс Диске, копии — там же (папка «Копии») и в папке этого компьютера */
   function cloudSettingsHTML() {
-    return `<section class="block"><div class="block-head"><h3>База на Яндекс Диске</h3></div>
-      <ul class="plain kv"><li><span>Где</span><b>Яндекс Диск → Приложения/AGservice</b></li><li><span>Последняя отправка</span><b>${cl.last ? cl.last.toLocaleString('ru-RU') : '—'}</b></li><li><span>Сейчас</span><b>${cl.needLogin ? 'нужно войти в Яндекс' : cl.offline ? 'нет связи, изменения ждут на устройстве' : cl.pending ? 'ждёт отправки' : 'всё отправлено'}</b></li></ul>
-      <div class="actions"><button class="btn" data-act="cloud-sync">Отправить / проверить сейчас</button><button class="btn" data-act="download">Скачать копию базы</button>
+    const C = ui.copyInfo, CC = ui.cloudCopies, RL = ui.restoreList;
+    if (CC === undefined) { ui.cloudCopies = null; cloudCopiesList().then(() => { if (ui.tab === 'settings') render(); }); }
+    const st = cl.needLogin ? '<span class="neg">нужно войти в Яндекс</span>' : cl.offline ? 'нет связи — изменения ждут на устройстве' : cl.err ? '<span class="neg">' + esc(cl.err) + '</span>' : cl.pending || cl.busy ? 'отправляется…' : 'всё отправлено' + (cl.last ? ' ' + cl.last.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '') + ' ✓';
+    const dsk = CC && CC.count ? `на Диске: последняя ${dshort(CC.last)} (всего ${CC.count})` : CC === null ? 'на Диске: …' : 'на Диске: пока нет';
+    const pc = typeof window.showDirectoryPicker !== 'function' ? 'на компьютере: работает в Chrome или Edge' : C && C.name ? `на компьютере: ${C.last ? 'последняя ' + dshort((C.last.match(/\d{4}-\d{2}-\d{2}/) || [''])[0]) + ' (всего ' + (C.count || 0) + ')' : 'папка «' + esc(C.name) + '»'}` : 'на компьютере: <button class="link" data-act="copy-pick">выбрать папку</button>';
+    return `<section class="block base-box"><div class="block-head"><h3>База и копии</h3></div>
+      <div class="bb-line"><span><b>База: Яндекс Диск</b> <span class="muted">· ${st}</span></span><button class="btn small" data-act="cloud-sync">Отправить сейчас</button></div>
+      <div class="bb-line"><span><b>Копии</b> <span class="muted">· ${dsk} · ${pc}</span></span></div>
+      ${C && C.needPerm ? `<div class="note"><span>Браузер просит разрешение записывать копии в папку «${esc(C.name)}».</span><div class="actions"><button class="btn small primary" data-act="copy-perm">Разрешить</button></div></div>` : ''}
+      ${C && C.err ? `<p class="neg small">Не получилось сделать копию на компьютере: ${esc(C.err)}</p>` : ''}
+      <div class="actions"><button class="btn" data-act="copy-both">Сделать копию сейчас</button><button class="btn" data-act="restore-open">Восстановить из копии…</button><button class="btn" data-act="download">Скачать базу файлом</button></div>
+      ${RL ? restoreListHTML(RL) : ''}
+      <details class="bb-more"><summary>Ещё (редко нужно)</summary><div class="actions">
         <label class="btn ghost file">Заменить базу на Диске файлом…<input type="file" accept=".json" data-act="cloud-upload"></label>
+        ${hasFS ? '<button class="btn ghost" data-act="open-base">Открыть другую базу (файл)</button>' : ''}
+        ${typeof window.showDirectoryPicker === 'function' ? `<button class="btn ghost" data-act="copy-pick">Папка для копий на компьютере${C && C.name ? ' («' + esc(C.name) + '»)' : ''}…</button>` : ''}
         <button class="btn ghost" data-act="ya-logout">Выйти из Яндекса на этом устройстве</button></div>
-      <p class="muted small">Изменения сначала сохраняются на этом устройстве, потом через пару секунд уходят на Диск. Если внести с двух устройств, пока одно было без связи, программа объединит изменения сама. Раз в день копия базы кладётся в «Приложения/AGservice/Копии» (хранятся последние ${CLOUD_KEEP}).</p></section>`;
+        <p class="muted small">Изменения сначала сохраняются на этом устройстве и через пару секунд уходят на Диск; с двух устройств программа объединит сама. Раз в день копия кладётся на Диск (папка «Приложения/AGservice/Копии») и в папку на компьютере, хранятся последние ${CLOUD_KEEP}.${C && C.name ? ' Плюс на компьютере файл «' + esc(MIRROR_NAME) + '» — переписывается через пару минут после изменений.' : ''}</p></details>
+    </section>`;
+  }
+  function restoreListHTML(RL) {
+    if (RL.loading) return '<div class="rl-box"><p class="muted small">Ищу копии…</p></div>';
+    const items = RL.items || [];
+    return `<div class="rl-box"><div class="block-head"><h4>Выбери копию</h4><button class="x" data-act="restore-close" aria-label="Закрыть">×</button></div>
+      ${items.length ? `<ul class="plain rl-list">${items.map((x, i) => `<li><span>${x.date ? dshort(x.date) : esc(x.name)}${x.time ? ' <span class="muted small">' + esc(x.time) + '</span>' : ''}</span><span class="pill ${x.src === 'disk' ? 'st-sched' : 'st-done'}">${x.src === 'disk' ? 'Диск' : 'компьютер'}</span><span class="muted small">${esc(x.note || '')}</span><button class="btn small" data-act="restore-pick" data-i="${i}">Восстановить</button></li>`).join('')}</ul>` : '<p class="muted small">Копий не нашёл.</p>'}
+      ${RL.err ? `<p class="neg small">${esc(RL.err)}</p>` : ''}
+      <div class="actions"><button class="link small" data-act="copy-restore">Выбрать другой файл…</button></div></div>`;
+  }
+  async function cloudCopiesList() {
+    try {
+      const list = await yaApi('/resources?path=' + encodeURIComponent(CLOUD_COPIES) + '&limit=200&fields=_embedded.items.name,_embedded.items.path');
+      const items = ((list && list._embedded && list._embedded.items) || []).filter(x => /^AGservice-база \d{4}-\d{2}-\d{2}\.json\.gz$/.test(x.name)).sort((a, b) => a.name.localeCompare(b.name));
+      ui.cloudCopies = { last: items.length ? items[items.length - 1].name.match(/\d{4}-\d{2}-\d{2}/)[0] : '', count: items.length, items };
+    } catch (e) { ui.cloudCopies = { last: '', count: 0, items: [], err: e.message }; }
+    return ui.cloudCopies;
+  }
+  async function restoreOpen() {
+    ui.restoreList = { loading: true }; render();
+    const out = []; let err = '';
+    const cc = await cloudCopiesList();
+    (cc.items || []).forEach(x => out.push({ src: 'disk', name: x.name, path: x.path, date: x.name.match(/\d{4}-\d{2}-\d{2}/)[0], note: 'копия за день' }));
+    if (cc.err) err = 'Диск: ' + cc.err;
+    if (copyDir) {
+      try {
+        if (await copyPerm(true)) for await (const [n, h] of copyDir.entries()) {
+          if (h.kind !== 'file') continue;
+          if (COPY_RE.test(n)) out.push({ src: 'pc', name: n, date: n.match(/\d{4}-\d{2}-\d{2}/)[0], note: 'копия за день' });
+          else if (n === MIRROR_NAME) { const f = await h.getFile(); const d = new Date(f.lastModified); out.push({ src: 'pc', name: n, date: d.toISOString().slice(0, 10), time: d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }), note: 'страховочная (самая свежая)', mt: f.lastModified }); }
+        }
+      } catch (e) { err = (err ? err + '; ' : '') + 'компьютер: ' + (e.message || e.name); }
+    }
+    out.sort((a, b) => (b.date + (b.time || '00:00')).localeCompare(a.date + (a.time || '00:00')) || (a.src === 'pc' ? -1 : 1));
+    ui.restoreList = { items: out, err }; render();
+  }
+  async function restorePick(i) {
+    const x = ui.restoreList && ui.restoreList.items[i]; if (!x) return;
+    try {
+      toast('Загружаю копию…');
+      const text = x.src === 'disk' ? await yaGet(x.path) : await (await (await copyDir.getFileHandle(x.name)).getFile()).text();
+      const data = JSON.parse(text);
+      if (!data || (!data.orders && !data.pays)) throw new Error('в файле нет данных учёта');
+      ui.copyRestore = { name: (x.src === 'disk' ? 'Диск: ' : 'компьютер: ') + x.name, data }; ui.restoreList = null; render(); window.scrollTo(0, 0);
+    } catch (e) { toast('Не получилось открыть копию: ' + (e.message || e)); }
   }
   function cloudReplaceHTML() {
     const r = ui.cloudReplace;
@@ -5478,24 +5544,28 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <p class="muted small">Нажми на строку — увидишь все изменения этой записи за день. «Вернуть как было» и «Восстановить» меняют только эту запись, остальное не трогают.</p>
         ${list.length ? out : `<p class="muted">${w.length ? 'Ничего не нашёл.' : 'Пока пусто — здесь появится каждое действие: сохранение наряда, оплата, правка клиента и т. д.'}</p>`}
         ${more ? `<div class="actions"><button class="btn small" data-act="log-more">Показать ещё (${more})</button></div>` : ''}</section>
-      <section class="block"><div class="block-head"><h3>Ежедневные копии</h3></div>${cloud ? `<p class="small">Раз в день программа кладёт копию базы на Яндекс Диск в папку «Приложения/AGservice/Копии» и хранит последние ${CLOUD_KEEP}.</p>` : ''}${copyStatusHTML(true)}</section>`;
+      ${cloud ? `<p class="muted small">Копии базы и восстановление из копии — в «Настройках», блок «База и копии».</p>` : `<section class="block"><div class="block-head"><h3>Ежедневные копии</h3></div>${copyStatusHTML(true)}</section>`}`;
+  }
+  function restoreNoteHTML() {
+    const R = ui.copyRestore; if (!R) return '';
+    return `<div class="note bad"><span>Восстановить базу из копии <b>«${esc(R.name)}»</b>? Всё, что внесено после неё, пропадёт из базы (этот шаг можно отменить ↶).</span><div class="actions"><button class="btn small danger" data-act="copy-restore-yes">Да, восстановить</button><button class="btn small" data-act="copy-restore-no">Отмена</button></div></div>`;
   }
   function viewSettings() {
     const ps = (D.cfg.params || []).slice().sort((a, b) => (a.from < b.from ? -1 : 1));
     const cell = (i, k, v, mode) => `<td><input id="pp-${i}-${k}" value="${esc(mode === 'pct' ? nv(v ? v * 100 : 0) : nv(v))}" data-pp="${i}" data-k="${k}" data-mode="${mode || ''}" inputmode="decimal" class="${k === 'from' ? '' : 'r'}"></td>`;
     const mk = D.cfg.markup || S.DEFAULT_MARKUP;
-    return `
+    return `${restoreNoteHTML()}
       <section class="block"><div class="block-head"><h3>Оформление</h3></div>
         <div class="seg">${THEMES.map(([k, l]) => `<button class="${(ui.theme || '') === k ? 'on' : ''}" data-act="theme" data-k="${k}">${l}</button>`).join('')}</div>
         <p class="muted small">Запоминается на этом компьютере.</p>
       </section>
       ${cloud ? cloudSettingsHTML() : ''}
-      <section class="block"${cloud ? ' hidden' : ''}><div class="block-head"><h3>База</h3></div>
+      ${cloud ? '' : `<section class="block"><div class="block-head"><h3>База</h3></div>
         <ul class="plain kv"><li><span>Файл</span><b>${esc(ui.fileName)}</b></li><li><span>Последнее сохранение</span><b>${ui.savedAt ? ui.savedAt.toLocaleString('ru-RU') : '—'}</b></li></ul>
         <div class="actions">${handle ? `<button class="btn" data-act="save-now">Сохранить сейчас</button>` : `<button class="btn primary" data-act="download">Скачать базу</button>`}
           <button class="btn" data-act="save-copy">Сделать копию базы</button>${hasFS ? `<button class="btn ghost" data-act="open-base">Открыть другую базу</button>` : ''}</div>
       </section>
-      <section class="block"><div class="block-head"><h3>${cloud ? 'Копия базы на этом компьютере' : 'Ежедневные копии'}</h3></div>${copyStatusHTML(false)}</section>
+      <section class="block"><div class="block-head"><h3>Ежедневные копии</h3></div>${copyStatusHTML(false)}</section>`}
       <section class="block"><div class="block-head"><h3>Печать заказ-наряда</h3><button class="btn small" data-act="prn-test">Пробная печать</button></div>
         <div class="grid g3">
           <label class="f span2">Исполнитель<input id="prn-org" value="${esc(prn().org)}" data-prn="org"></label>
@@ -5627,6 +5697,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'copy-now': copyDaily(true).then(() => { if (cloud) mirrorWrite(true); }); break;
       case 'copy-perm': copyDaily(true).then(() => { if (cloud) mirrorWrite(true); }); break;
       case 'copy-restore': copyRestorePick(); break;
+      case 'copy-both': { (async () => { try { await cloudDailyCopy(true); } catch (e) {} await copyDaily(true); if (cloud) await mirrorWrite(true); await cloudCopiesList(); toast('Копия сделана' + (copyDir ? ': на Диске и на компьютере' : ' на Диске')); render(); })(); break; }
+      case 'restore-open': restoreOpen(); break;
+      case 'restore-close': ui.restoreList = null; render(); break;
+      case 'restore-pick': restorePick(+b.dataset.i); break;
       case 'copy-restore-yes': copyRestoreDo(); break;
       case 'copy-restore-no': ui.copyRestore = null; render(); break;
       case 'download': downloadJSON(); break;
@@ -6420,13 +6494,13 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     cl.baseMd5 = m && m.md5; cl.baseJson = json; cl.pending = false; cl.last = new Date(); dirty = false; ui.savedAt = cl.last;
     await idb.set('cl.base', json); await cloudStateSave();
   }
-  async function cloudDailyCopy() {
+  async function cloudDailyCopy(force) {
     const day = S.todayISO();
-    if (lsGet('cl.copyDay') === day) return;
+    if (!force && lsGet('cl.copyDay') === day) return;
     try {
       await yaMkdir(CLOUD_COPIES);
       const name = CLOUD_COPIES + '/AGservice-база ' + day + '.json.gz';
-      if (!(await yaMeta(name))) await yaPut(name, JSON.stringify(D));
+      if (force || !(await yaMeta(name))) await yaPut(name, JSON.stringify(D));
       lsSet('cl.copyDay', day);
       const list = await yaApi('/resources?path=' + encodeURIComponent(CLOUD_COPIES) + '&limit=200&fields=_embedded.items.name,_embedded.items.path');
       const items = ((list && list._embedded && list._embedded.items) || []).filter(x => /^AGservice-база \d{4}-\d{2}-\d{2}\.json\.gz$/.test(x.name)).sort((a, b) => a.name.localeCompare(b.name));
@@ -6509,6 +6583,6 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (isWeb && yaToken() && lsGet('ag.mode') !== 'file') { lsSet('ag.mode', 'cloud'); cloudOpen(); }
   })();
   render();
-  window.__sto = { get D() { return D; }, mergeTest: (b, m, t) => { const r = merge3(b, m, t); return { data: r.data, disputes: r.disputes, renum: mergeRenum(b, m, t, r.data) }; }, rkSet: d => { ui.rk = { data: d, name: 'test' }; ui.rkCheck = true; X._rk = null; render(); }, get ui() { return ui; }, payT: { payEffects, effText }, get X() { return X; }, copyTest: async h => { copyDir = h; copyDoneDay = ''; await copyDaily(true); return ui.copyInfo; }, logRollback: id => logRollback(id), mirrorTest: async h => { copyDir = h; await mirrorWrite(false); return ui.copyInfo; }, open: h => loadFromHandle(h), load: d => { D = normalize(d); reindex(); histReset(); ui.fileName = 'проверка'; render(); }, openOrder };
+  window.__sto = { get D() { return D; }, cloudTest: v => { cloud = v; render(); }, mergeTest: (b, m, t) => { const r = merge3(b, m, t); return { data: r.data, disputes: r.disputes, renum: mergeRenum(b, m, t, r.data) }; }, rkSet: d => { ui.rk = { data: d, name: 'test' }; ui.rkCheck = true; X._rk = null; render(); }, get ui() { return ui; }, payT: { payEffects, effText }, get X() { return X; }, copyTest: async h => { copyDir = h; copyDoneDay = ''; await copyDaily(true); return ui.copyInfo; }, logRollback: id => logRollback(id), mirrorTest: async h => { copyDir = h; await mirrorWrite(false); return ui.copyInfo; }, open: h => loadFromHandle(h), load: d => { D = normalize(d); reindex(); histReset(); ui.fileName = 'проверка'; render(); }, openOrder };
 })();
 </script>
