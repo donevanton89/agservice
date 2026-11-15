@@ -322,8 +322,15 @@ ul.plain.kv li > span:first-child { color: var(--ink); font-size: 14px; flex: 1;
 #rep-grid .fold-h { cursor: pointer; }
 #rep-grid [data-blk].dragging { opacity: .45; outline: 2px dashed var(--accent); outline-offset: 2px; }
 .rep-help { margin: 0 0 6px; }
-#rep-grid { display: block; columns: 3 290px; column-gap: 14px; }
-#rep-grid > [data-blk] { break-inside: avoid; display: inline-block; width: 100%; margin: 0 0 14px; box-sizing: border-box; }
+#rep-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+#rep-grid .rep-col { display: flex; flex-direction: column; gap: 14px; min-height: 80px; border-radius: var(--r); }
+#rep-grid .rep-col > [data-blk] { margin: 0; }
+#rep-grid .rl.rl-z { display: none; }
+#rep-grid .show-z .rl.rl-z { display: flex; color: var(--muted); }
+#rep-grid .rz-tog { margin-top: 8px; color: var(--muted); }
+body.rep-dragging #rep-grid .rep-col { outline: 2px dashed var(--line); outline-offset: 4px; min-height: 160px; }
+@media (max-width: 1000px) { #rep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { #rep-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (hover: none), (max-width: 700px) { .drag-h { display: none; } }
 .wk + .wk { margin-top: 12px; }
 .wk h4 { margin: 4px 0 2px; }
@@ -1655,8 +1662,8 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     importPreview: null, payForm: null, expForm: null, stockForm: null, confirmClose: false, schedForm: null,
   };
   try { const t = localStorage.getItem('sto.tab'); if (t) ui.tab = t; } catch (e) {}
-  try { ui.repOrder = JSON.parse(localStorage.getItem('sto.repOrder') || 'null') || null; ui.repFold = JSON.parse(localStorage.getItem('sto.repFold') || 'null') || {}; } catch (e) { ui.repFold = {}; }
-  function repSave() { try { localStorage.setItem('sto.repOrder', JSON.stringify(ui.repOrder || null)); localStorage.setItem('sto.repFold', JSON.stringify(ui.repFold || {})); } catch (e) {} }
+  try { ui.repLayout = JSON.parse(localStorage.getItem('sto.repLayout') || 'null') || null; ui.repFold = JSON.parse(localStorage.getItem('sto.repFold') || 'null') || {}; ui.repZ = JSON.parse(localStorage.getItem('sto.repZ') || 'null') || {}; } catch (e) { ui.repFold = {}; }
+  function repSave() { try { localStorage.setItem('sto.repLayout', JSON.stringify(ui.repLayout || null)); localStorage.setItem('sto.repFold', JSON.stringify(ui.repFold || {})); localStorage.setItem('sto.repZ', JSON.stringify(ui.repZ || {})); } catch (e) {} }
   const THEMES = [['warm', 'Тёплая'], ['sand', 'Олива'], ['', 'Как в системе']];
   /* «Лампочка»: скрыть закупочные цены, когда клиент смотрит в монитор */
   function eyeBtn() {
@@ -2731,10 +2738,10 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     </div>${open ? orderDetail(o, t) : ''}</li>`;
   }
   function orderDetail(o, t) {
-    const works = o.works.filter(w => w.name || w.sum);
+    const works = o.works.filter(w => (w.name || w.sum) && !w.kind);
     const parts = t.partsList;
     return `<div class="detail">
-      <div class="d-col"><h4>Работы <span class="muted">${rub(t.works)}</span></h4>
+      <div class="d-col"><h4>Работы <span class="muted">${rub(r2(t.works - o.works.filter(w => w.kind).reduce((a, w) => a + (w.sum || 0), 0)))}</span></h4>
         ${works.length ? `<table class="dt"><tbody>${works.map(w => `<tr><td>${esc(w.name || '—')}${w.sub || w.nik ? `<div class="muted small">${w.sub ? 'подрядчик ' + rub(w.sub) : ''}${w.sub && w.nik ? ' · ' : ''}${w.nik ? 'Никита ' + rub(w.nik) : ''}</div>` : ''}</td><td class="r nowrap">${rub(w.sum)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted small">Работ нет.</p>'}</div>
       <div class="d-col"><h4>Запчасти <span class="muted">${rub(t.parts)}</span></h4>
         ${parts.length ? `<table class="dt"><tbody>${parts.map(p => `<tr class="${p.ret ? 'off' : ''}"><td>${esc(p.name || p.art)}<div class="muted small">${esc([p.art, p.brand, p.sup].filter(Boolean).join(' · '))}${p.no ? ' · <span class="warn">НЕТ</span>' : ''}${p.ret ? ' · возврат' : ''}</div></td><td class="r nowrap">${fmt(p.qty, p.qty % 1 ? 2 : 0)} × ${fmt(p.price, 0)}</td><td class="r nowrap"><b>${rub(p.sum)}</b></td></tr>`).join('')}</tbody></table>` : '<p class="muted small">Запчастей нет.</p>'}</div>
@@ -3126,7 +3133,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const E = ui.editor, only = E.attachAsk && E.attachAsk.only, list = only ? [] : attachCandidates();
     return `<div class="paste">
       ${only ? '' : `<div class="block-head"><b>Покупки без наряда</b><input id="att-q" class="search" style="max-width:320px" type="search" placeholder="Поиск: клиент, запчасть, артикул" value="${esc(E.attachQ || '')}" data-act="att-q" autocomplete="off"></div>`}
-      ${E.attachAsk ? (() => { const A = E.attachAsk, ml = S.monthLabel(A.month), ag = X.sales.find(x => x.id === A.id), an = ag ? ag.rows.map(p => p.name || p.art).join(', ') : ''; return `<div class="note"><span><b>Покупка${an ? ' «' + esc(an) + '»' : ''} из закрытого месяца — ${esc(ml)}.</b> Её прибыль уже посчитана за ${esc(ml.toLowerCase())}. Оставить прибыль там? Запчасть всё равно будет в наряде, в печати и в долге.</span>
+      ${E.attachAsk ? (() => { const A = E.attachAsk, ml = S.monthLabel(A.month), ag = X.sales.find(x => x.id === A.id), an = ag ? ag.rows.filter(p => !p.kind).map(p => p.name || p.art).join(', ') : ''; return `<div class="note"><span><b>Покупка${an ? ' «' + esc(an) + '»' : ''} из закрытого месяца — ${esc(ml)}.</b> Её прибыль уже посчитана за ${esc(ml.toLowerCase())}. Оставить прибыль там? Запчасть всё равно будет в наряде, в печати и в долге.</span>
         <div class="actions"><button class="btn small primary" data-act="attach-sale" data-id="${esc(A.id)}" data-keep="1">Да, оставить прибыль за ${esc(ml.toLowerCase())}</button><button class="btn small" data-act="attach-sale" data-id="${esc(A.id)}" data-keep="0">Нет, перенести в наряд (${esc(ml.toLowerCase())} станет «Изменился»)</button><button class="btn small ghost" data-act="attach-ask-no">Отмена</button></div></div>`; })() : ''}
       ${only ? '' : `<p class="muted small">Сверху — покупки этого клиента, ниже — все за последний месяц. Нажми «Добавить», и покупка со всеми строками и оплатами перейдёт в этот наряд.</p>`}
       ${only ? '' : list.length ? `<ul class="plain">${list.map(({ g, mine }) => `<li><span>${dshort(g.date)}</span><span><b>${esc(saleWho(g))}</b>${mine ? ' <span class="pill st-done">этот клиент</span>' : ''} <span class="muted">${esc(g.car)}</span><div class="muted small">${esc(g.rows.map(p => p.name || p.art).join(', '))}</div></span><b class="nowrap">${rub(g.sum)}</b><button class="btn small primary" data-act="attach-sale" data-id="${esc(g.id)}">Добавить</button></li>`).join('')}</ul>` : '<p class="muted small">Подходящих покупок не нашёл. Попробуй поиск.</p>'}
@@ -3639,7 +3646,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       if (p.app) Object.assign(p, { order: o.num, name: p.to || (o.client + ' ' + o.car).trim(), note: p.to ? (o.client + ' ' + o.car).trim() : p.note || '' });
       D.pays.push(p);
     });
-    o.works.forEach(w => { if (w.name && !D.workTypes.some(x => wk(x.name) === wk(w.name) || (x.aliases || []).some(a => wk(a) === wk(w.name)))) D.workTypes.push({ name: w.name.trim(), price: null, isNew: true, own: true }); });
+    o.works.forEach(w => { if (w.name && !w.kind && !D.workTypes.some(x => wk(x.name) === wk(w.name) || (x.aliases || []).some(a => wk(a) === wk(w.name)))) D.workTypes.push({ name: w.name.trim(), price: null, isNew: true, own: true }); });
     ui.editor = null;
     if (ui.cdraft && ui.cdraft.id && person && ui.cdraft.id === person.id) ui.cdraft = clone(person);
     toast('Наряд ' + (o.num != null ? '№ ' + o.num + ' ' : '') + 'сохранён');
@@ -3672,7 +3679,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const linkO = new Map(); list.forEach(sc => { const o = sc.oid && D.orders.find(x => x.id === sc.oid); if (o) linkO.set(sc.id, o); });
     const futOrders = D.orders.filter(o => o.start && o.start > S.todayISO() && !o.doneDate && !linkedIds.has(o.id)).map(o => ({ date: o.start, order: o }));
     const fut = list.filter(s => s.date >= S.todayISO()).concat(futOrders).sort((a, b) => a.date.localeCompare(b.date)), past = list.filter(s => s.date < S.todayISO()).reverse();
-    const orow = (o, d, sid) => `<li class="sc-li"><span>${dshort(d || o.start)}</span><span><b>${esc(orderWho(o))}</b> · ${esc(o.car)} <span class="pill st-wait">наряд${o.num != null ? ' № ' + o.num : ''}</span>${o.works && o.works.some(w => w.name) ? ' · <span class="muted">' + esc(o.works.filter(w => w.name).map(w => w.name).join(', ')) + '</span>' : ''}</span><button class="btn small" data-act="open-order" data-id="${esc(o.id)}">Открыть наряд</button>${sid ? `<button class="x" data-act="sched-del" data-id="${esc(sid)}" aria-label="Удалить запись" title="Удалить запись (наряд останется)">×</button>` : '<button class="x" aria-hidden="true" tabindex="-1" style="visibility:hidden">×</button>'}</li>`;
+    const orow = (o, d, sid) => `<li class="sc-li"><span>${dshort(d || o.start)}</span><span><b>${esc(orderWho(o))}</b> · ${esc(o.car)} <span class="pill st-wait">наряд${o.num != null ? ' № ' + o.num : ''}</span>${o.works && o.works.some(w => w.name && !w.kind) ? ' · <span class="muted">' + esc(o.works.filter(w => w.name && !w.kind).map(w => w.name).join(', ')) + '</span>' : ''}</span><button class="btn small" data-act="open-order" data-id="${esc(o.id)}">Открыть наряд</button>${sid ? `<button class="x" data-act="sched-del" data-id="${esc(sid)}" aria-label="Удалить запись" title="Удалить запись (наряд останется)">×</button>` : '<button class="x" aria-hidden="true" tabindex="-1" style="visibility:hidden">×</button>'}</li>`;
     const row = s => s.order ? orow(s.order) : linkO.has(s.id) ? orow(linkO.get(s.id), s.date, s.id) : `<li class="sc-li"><span>${dshort(s.date)}</span><span><b>${esc(s.client)}</b> · ${esc(s.car)}${s.note ? ' · <span class="muted">' + esc(s.note) + '</span>' : ''}</span><button class="btn small" data-act="sched-order" data-id="${esc(s.id)}">Открыть наряд</button><button class="x" data-act="sched-del" data-id="${esc(s.id)}" aria-label="Удалить">×</button></li>`;
     return `<section class="block form"><div class="block-head"><h3>Записать на ремонт</h3></div>
       <div class="grid g4">
@@ -3928,12 +3935,12 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     return `<li class="${open ? 'is-open' : ''}"><div class="sale" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="s:${esc(g.id)}">
       <span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span>
       <span class="muted small nowrap">${dshort(g.date)}</span>
-      <span class="s-main"><b>${esc(saleWho(g))}</b>${isOwn(g.client) ? ' <span class="pill st-wait">себе</span>' : ''} <span class="muted">${esc(g.car)}</span><span class="muted small s-items">${esc(g.rows.map(p => p.name || p.art).join(', '))}</span></span>
+      <span class="s-main"><b>${esc(saleWho(g))}</b>${isOwn(g.client) ? ' <span class="pill st-wait">себе</span>' : ''} <span class="muted">${esc(g.car)}</span><span class="muted small s-items">${esc(g.rows.filter(p => !p.kind).map(p => p.name || p.art).join(', '))}</span></span>
       <span class="s-sum"><b>${rub(g.sum)}</b>${g.debt > 5 ? `<span class="neg small">долг ${rub(g.debt)}</span>` : g.debt < -5 ? `<span class="pos small">переплата ${rub(-g.debt)}</span>` : ''}${g.wait ? `<span class="warn small">нет: ${g.wait}</span>` : ''}</span>
     </div>${open ? saleDetail(g) : ''}</li>`;
   }
   function saleDetail(g) {
-    return `<div class="detail"><div class="d-col" style="grid-column:1/-1"><table class="dt"><tbody>${g.rows.map(p => `<tr class="${p.ret ? 'off' : ''}"><td>${esc(p.name || p.art)}<div class="muted small">${esc([p.art, p.brand, p.sup].filter(Boolean).join(' · '))}${p.no ? ' · <span class="warn">НЕТ</span>' : ''}${p.ret ? ' · возврат' : ''}</div></td><td class="r nowrap">${fmt(p.qty, p.qty % 1 ? 2 : 0)} × ${fmt(p.price, 0)}</td><td class="r nowrap"><b>${rub(p.sum)}</b></td></tr>`).join('')}</tbody></table>
+    return `<div class="detail"><div class="d-col" style="grid-column:1/-1"><table class="dt"><tbody>${g.rows.filter(p => !p.kind).map(p => `<tr class="${p.ret ? 'off' : ''}"><td>${esc(p.name || p.art)}<div class="muted small">${esc([p.art, p.brand, p.sup].filter(Boolean).join(' · '))}${p.no ? ' · <span class="warn">НЕТ</span>' : ''}${p.ret ? ' · возврат' : ''}</div></td><td class="r nowrap">${fmt(p.qty, p.qty % 1 ? 2 : 0)} × ${fmt(p.price, 0)}</td><td class="r nowrap"><b>${rub(p.sum)}</b></td></tr>`).join('')}</tbody></table>
       <p class="small">Оплачено: <b>${rub(g.paid)}</b></p></div>
       <div class="d-actions"><button class="btn small primary" data-act="sale-open" data-id="${esc(g.id)}">Открыть</button>${isOwn(g.client) ? '' : `<button class="btn small" data-act="sale-mkorder" data-id="${esc(g.id)}">Создать заказ-наряд</button>` + linkControl(g)}</div></div>`;
   }
@@ -3994,6 +4001,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   const RND_LBL = { rnd: 'Округление', noch: 'Без сдачи' };
   /* один раз (13.11.2026): старые строки «Скидка» до 50 ₽ и «Сдача» → служебные «Округление»/«Без сдачи» (закрытые месяцы не трогаем) */
   function rndInit() {
+    /* служебные строки не должны попадать в прайс работ */
+    if (D.workTypes && D.workTypes.some(x => /^(округление|без сдачи)$/i.test((x.name || '').trim()) && !x.price)) D.workTypes = D.workTypes.filter(x => !(/^(округление|без сдачи)$/i.test((x.name || '').trim()) && !x.price));
     if (D.cfg.rndInit) return;
     const conv = (x, m) => {
       if (x.kind || (m && isLockedM(m))) return;
@@ -4006,13 +4015,15 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     D.cfg.rndInit = S.todayISO();
   }
   const RND_MAX = 50;
+  /* округлять можно оплату без чека или наличными (с чеком тоже: чек пробивается на круглую сумму); картой/QR с чеком — точно */
+  const rndOkPay = p => p.receipt === false || p.type === 'Наличные' || p.type === '₽';
   const rnd100 = v => Math.round(r2(v) / 100) * 100;
   function rndTarget(total) { const R = rnd100(total), d = r2(R - total); return Math.abs(d) > 0.004 && Math.abs(d) <= RND_MAX ? R : null; }
   function rndAuto(lines, pays, totalNoRnd, paidSum, add) {
     /* lines — массив строк (работы наряда или строки продажи); убираем старое авто-округление и ставим новое, если подходит */
     for (let i = lines.length - 1; i >= 0; i--) if (lines[i].kind === 'rnd' && lines[i].auto) lines.splice(i, 1);
     const real = pays.filter(p => (+p.amount || 0) > 0 && !p.refund);
-    if (!real.length || !real.every(p => p.receipt === false)) return;
+    if (!real.length || !real.every(rndOkPay)) return;
     const R = rndTarget(totalNoRnd);
     if (R == null || Math.abs(r2(paidSum) - R) > 0.004) return;
     add(r2(R - totalNoRnd));
@@ -4050,8 +4061,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const p = pays[i]; if (!p || p.refund) return;
     const other = r2(pays.reduce((a, x, j) => a + (j !== i && !x.refund ? (+x.amount || 0) : 0), 0)), R = rndTarget(totalNo);
     if (R == null) return;
-    if (p.receipt === false && Math.abs((+p.amount || 0) - r2(totalNo - other)) < 0.005 && pays.every((x, j) => j === i || x.refund || !(+x.amount > 0) || x.receipt === false)) p.amount = r2(R - other);
-    else if (p.receipt === true && Math.abs((+p.amount || 0) - r2(R - other)) < 0.005) p.amount = r2(totalNo - other);
+    if (rndOkPay(p) && Math.abs((+p.amount || 0) - r2(totalNo - other)) < 0.005 && pays.every((x, j) => j === i || x.refund || !(+x.amount > 0) || rndOkPay(x))) p.amount = r2(R - other);
+    else if (!rndOkPay(p) && Math.abs((+p.amount || 0) - r2(R - other)) < 0.005) p.amount = r2(totalNo - other);
   }
   function rndRowsHTML(lines, where) {
     const items = lines.map((w, i) => w.kind ? `<span class="rnd-chip">${esc(RND_LBL[w.kind] || w.name)} <b>${(w.sum > 0 ? '+' : '') + rub(w.sum)}</b><button class="x sm" data-act="rnd-del" data-w="${where}" data-i="${i}" aria-label="Убрать" title="Убрать">×</button></span>` : '').join('');
@@ -4063,7 +4074,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const t = where === 'ed' ? edTotals() : saleTotals(), total = where === 'ed' ? t.total : t.sum;
     const sumK = k => lines.filter(x => x.kind === k && (k !== 'rnd' || x.auto)).reduce((a, x) => a + (x.sum || 0), 0);
     const totalNo = r2(total - sumK('rnd') - sumK('noch')), paidEff = r2(t.paid - sumK('noch'));
-    const real = pays.filter(p => (+p.amount || 0) > 0 && !p.refund), R = real.length && real.every(p => p.receipt === false) ? rndTarget(totalNo) : null;
+    const real = pays.filter(p => (+p.amount || 0) > 0 && !p.refund), R = real.length && real.every(rndOkPay) ? rndTarget(totalNo) : null;
     return r2(paidEff - (R != null ? R : totalNo));
   }
   /* ===== Расчёт «как на кассе»: чек — один на весь наряд/продажу; «Клиент дал» → сдача ===== */
@@ -4076,7 +4087,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const sumK = k => lines.filter(x => x.kind === k && (k !== 'rnd' || x.auto)).reduce((a, x) => a + (x.sum || 0), 0);
     const noch = sumK('noch'), base = r2(total - sumK('rnd') - noch), paidEff = r2(t.paid - noch);
     /* «без сдачи» — округлять незачем: всё сверх точной суммы и так доход СТО */
-    const R = X0.rc === false && !(noch > 0.004) ? rndTarget(base) : null, target = R != null ? R : base;
+    const ck = (payKinds().find(x => x.k === ((X0.calc || {}).kind || 'cash')) || {}).type;
+    const pays0 = X0.pays.filter(p => (+p.amount || 0) > 0 && !p.refund);
+    const canR = X0.rc === false || (X0.rc === true && (ck === 'Наличные') && pays0.every(rndOkPay));
+    const R = canR && !(noch > 0.004) ? rndTarget(base) : null, target = R != null ? R : base;
     return { t, base, target, rounded: R != null, noch, paid: t.paid, rem: r2(target - paidEff) };
   }
   function calcHTML(where) {
@@ -4100,7 +4114,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function rcSegHTML(where) {
     const X0 = where === 'ed' ? ui.editor : ui.sale;
-    return `<div class="rc-seg"><span>Чек пробит:</span><div class="seg"><button class="${X0.rc === true ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="1">Да</button><button class="${X0.rc === false ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="0">Нет</button></div><span class="muted small">${X0.rc === false ? 'без чека — сумма округляется до сотни' : X0.rc === true ? 'точная сумма, как на терминале' : 'один раз на все оплаты'}</span></div>`;
+    return `<div class="rc-seg"><span>Чек пробит:</span><div class="seg"><button class="${X0.rc === true ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="1">Да</button><button class="${X0.rc === false ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="0">Нет</button></div><span class="muted small">${X0.rc === false ? 'без чека — сумма округляется до сотни' : X0.rc === true ? 'наличными — округляется до сотни, картой или QR — точная сумма' : 'один раз на все оплаты'}</span></div>`;
   }
   function calcCommit(where, mode) {
     const ed = where === 'ed', X0 = ed ? ui.editor : ui.sale, C = X0.calc || {}, c = payCalc(where);
@@ -4124,6 +4138,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function calcInput(el) {
     const where = el.dataset.calc, X0 = where === 'ed' ? ui.editor : ui.sale; if (!X0) return;
     const C = X0.calc || (X0.calc = { given: '', kind: 'cash' }); C[el.dataset.k] = el.value;
+    if (el.dataset.k === 'kind') { where === 'ed' ? paintEditor() : paintSale(); return; }
     const pre = where === 'ed' ? 'cg' : 'scg', tmp = document.createElement('div'); tmp.innerHTML = calcHTML(where);
     ['info', 'btns'].forEach(k => { const a = $('#' + pre + '-' + k), b = tmp.querySelector('#' + pre + '-' + k); if (a && b) a.innerHTML = b.innerHTML; });
   }
@@ -4414,8 +4429,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const st = (d.id && X.cstat[d.id]) || { count: 0, orders: [] };
     const mq = clqMatch(ui.clQ), hits = {};
     const ordersAll = st.orders.slice().sort((a, b) => (b.start || b.doneDate || '').localeCompare(a.start || a.doneDate || ''));
-    const orders = !mq ? ordersAll : ordersAll.filter(o => { const ps = (o.num != null ? X.partsByOrder[o.num] || [] : []).filter(mq), ws = (o.works || []).filter(w => mq({ name: w.name })); if (ps.length || ws.length) { hits[o.id] = { ps, ws }; return true; } return false; });
-    const salesAll = (!isNew && X.salesByPerson[d.id]) || [], sales = !mq ? salesAll : salesAll.filter(g => { const ps = g.rows.filter(mq); if (ps.length) { hits[g.id] = { ps, ws: [] }; return true; } return false; });
+    const orders = !mq ? ordersAll : ordersAll.filter(o => { const ps = (o.num != null ? X.partsByOrder[o.num] || [] : []).filter(mq), ws = (o.works || []).filter(w => !w.kind && mq({ name: w.name })); if (ps.length || ws.length) { hits[o.id] = { ps, ws }; return true; } return false; });
+    const salesAll = (!isNew && X.salesByPerson[d.id]) || [], sales = !mq ? salesAll : salesAll.filter(g => { const ps = g.rows.filter(p => !p.kind && mq(p)); if (ps.length) { hits[g.id] = { ps, ws: [] }; return true; } return false; });
     let total = 0, debt = 0;
     const rows = orders.map(o => { const t = S.orderTotals(o, X); total += t.total; if (o.doneDate && t.debt > 5) debt += t.debt; const car = d.cars.find(c => c.id === o.carId);
       const open = ui.openRows.has(o.id), hh = hits[o.id];
@@ -4482,7 +4497,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const ids = [...ui.cmove], cars = d.cars.filter(c => ids.includes(c.id));
     const sl = clMoveSales(d);
     const salesHTML = sl.length ? `<details class="cmv-sales"${(ui.cmvSaleOpen != null ? ui.cmvSaleOpen : sl.some(x => x.on)) ? ' open' : ''}><summary class="small" data-act="cmvs-toggle" data-open="${(ui.cmvSaleOpen != null ? ui.cmvSaleOpen : sl.some(x => x.on)) ? 1 : 0}">Покупки без наряда: переносится ${sl.filter(x => x.on).length} из ${sl.length} — отметь, какие тоже переносить</summary>
-      <ul class="plain">${sl.map(({ g, on }) => `<li><label class="small"><input type="checkbox" data-cmvs="${esc(g.id)}"${on ? ' checked' : ''}> ${dshort(g.date)} · ${rub(g.sum)} · ${esc(g.rows.filter(p => !p.ret).map(p => p.name).slice(0, 3).join(', '))}${g.rows.length > 3 ? '…' : ''}${g.car ? ` <span class="muted">(${esc(g.car)})</span>` : ''}</label></li>`).join('')}</ul></details>` : '';
+      <ul class="plain">${sl.map(({ g, on }) => `<li><label class="small"><input type="checkbox" data-cmvs="${esc(g.id)}"${on ? ' checked' : ''}> ${dshort(g.date)} · ${rub(g.sum)} · ${esc(g.rows.filter(p => !p.ret && !p.kind).map(p => p.name).slice(0, 3).join(', '))}${g.rows.length > 3 ? '…' : ''}${g.car ? ` <span class="muted">(${esc(g.car)})</span>` : ''}</label></li>`).join('')}</ul></details>` : '';
     const st = X.cstat[d.id] || { orders: [] }, nOrd = st.orders.filter(o => ids.includes(o.carId)).length;
     const P = ui.cpick && ui.cpick.mode !== 'merge' ? ui.cpick : null;
     const head = `<b>Отмечено: ${cars.map(c => esc(c.car || 'без названия')).join(', ')}</b> <span class="muted small">(нарядов по ним: ${nOrd} — переедут вместе с машинами)</span>`;
@@ -5267,7 +5282,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const r = S.monthReport(D, X, m);
     const mon = S.money(D, X, m);
     const T = isNow ? S.today(D, X) : null;
-    const line = (l, v, cls = '', z) => (z && typeof v === 'number' && Math.abs(v) < 0.005) ? '' : `<div class="rl ${cls}"><span${REP_TIP[l] ? ` class="tip-t" title="${esc(REP_TIP[l])}"` : ''}>${l}</span><b>${typeof v === 'string' ? v : rub(v)}</b></div>`;
+    const line = (l, v, cls = '', z) => `<div class="rl ${cls}${(z && typeof v === 'number' && Math.abs(v) < 0.005) ? ' rl-z' : ''}"><span${REP_TIP[l] ? ` class="tip-t" title="${esc(REP_TIP[l])}"` : ''}>${l}</span><b>${typeof v === 'string' ? v : rub(v)}</b></div>`;
     const B = [];
     const blk = (k, title, sum, body, def) => B.push({ k, title, sum, body, def });
     const stCls = { 'Закрыт': 'st-done', 'Изменился': 'st-debt', 'Текущий': 'st-work', 'Не закрыт': 'st-wait' }[r.status] || 'st-wait';
@@ -5325,14 +5340,20 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         ${line('Сверка (должна быть 0)', ckHTML(T.check), 'total' + (Math.abs(T.check) > 1 ? ' neg' : ''))}
         ${Math.abs(T.check) > 1 ? '<p class="muted small">Если не 0 — ищи платёж без типа, оплату клиента без отметки чека или опечатку в названии поставщика.</p>' : ''}`, Math.abs(T.check) < 1);
     }
-    const ord = ui.repOrder || [], pos = k => { const i = ord.indexOf(k); return i < 0 ? 1000 : i; };
-    const list = B.map((b, i) => Object.assign(b, { i })).sort((a, b) => (pos(a.k) - pos(b.k)) || (a.i - b.i));
-    const custom = (ui.repOrder && ui.repOrder.length) || Object.keys(ui.repFold || {}).length;
-    h += `<p class="muted small rep-help">Блоки можно перетаскивать мышкой за заголовок и сворачивать щелчком по нему.${custom ? ' <button class="link small" data-act="rep-reset">Вернуть как было</button>' : ''}</p>`;
-    h += `<div class="rep" id="rep-grid">` + list.map(b => {
+    /* три постоянные колонки: блок живёт в своей колонке, при сворачивании соседние колонки не двигаются */
+    const DEF_LAYOUT = [['rev', 'wk'], ['tax', 'mon'], ['nashe', 'sup', 'chk']];
+    const L = (ui.repLayout && ui.repLayout.length === 3 ? ui.repLayout : DEF_LAYOUT).map(c => c.filter(k => B.some(b => b.k === k)));
+    B.forEach(b => { if (!L.some(c => c.includes(b.k))) { const d = DEF_LAYOUT.findIndex(c => c.includes(b.k)); L[d >= 0 ? d : 0].push(b.k); } });
+    const custom = !!ui.repLayout || Object.keys(ui.repFold || {}).length;
+    h += `<p class="muted small rep-help">Блоки можно перетаскивать мышкой за заголовок в любую колонку и сворачивать щелчком по нему.${custom ? ' <button class="link small" data-act="rep-reset">Вернуть как было</button>' : ''}</p>`;
+    const blkHTML = b => {
       const f = ui.repFold || {}, open = b.k in f ? f[b.k] : !b.def;
-      return `<section class="block rep-fold ${open ? 'is-open' : ''}" data-blk="${b.k}"><h3 class="fold-h" data-act="rep-fold" data-k="${b.k}" data-def="${b.def ? 1 : 0}" draggable="true" title="Щелчок — свернуть/развернуть. Тяни мышкой — переставить."><span><span class="drag-h" aria-hidden="true">⋮⋮</span>${open ? '▾' : '▸'} ${b.title}</span>${!open && b.sum ? `<b class="fold-sum">${b.sum}</b>` : ''}</h3>${open ? b.body : ''}</section>`;
-    }).join('') + `</div>`;
+      /* строки с нулём спрятаны; внизу блока — «ещё N строк с нулём» */
+      const nz = (b.body.match(/ rl-z"/g) || []).length, zOn = !!(ui.repZ || {})[b.k];
+      const zLink = open && nz ? `<button class="link small rz-tog" data-act="rep-z" data-k="${b.k}">${zOn ? '▴ скрыть нули' : '▸ ещё ' + nz + ' ' + plural(nz, 'строка', 'строки', 'строк') + ' с нулём'}</button>` : '';
+      return `<section class="block rep-fold ${open ? 'is-open' : ''}${zOn ? ' show-z' : ''}" data-blk="${b.k}"><h3 class="fold-h" data-act="rep-fold" data-k="${b.k}" data-def="${b.def ? 1 : 0}" draggable="true" title="Щелчок — свернуть/развернуть. Тяни мышкой — переставить."><span><span class="drag-h" aria-hidden="true">⋮⋮</span>${open ? '▾' : '▸'} ${b.title}</span>${!open && b.sum ? `<b class="fold-sum">${b.sum}</b>` : ''}</h3>${open ? b.body + zLink : ''}</section>`;
+    };
+    h += `<div class="rep" id="rep-grid">` + L.map((c, ci) => `<div class="rep-col" data-col="${ci}">${c.map(k => blkHTML(B.find(b => b.k === k))).join('')}</div>`).join('') + `</div>`;
     if (!T) h += `<p class="muted small">Поставщики, «Наше» и сверка считаются на сегодня и показываются только для текущего месяца.</p>`;
     h += trendChart(m);
     return h;
@@ -5352,7 +5373,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       return `<div class="wk"><h4>${title}</h4>${row('Было на начало месяца', a.open, '', a.open < 0 ? 'Минус — был аванс' : 'Не выплачено с прошлых месяцев')}${wl}${pl}${left}</div>`;
     };
     return `<div class="wk-block">${one('nik', 'Никита')}${one('sub', 'Подрядчик')}
-      <p class="muted small">Выплату записывай в «Деньгах»: Ушли −, Назначение «Никита» или «Подрядчик», Чек «—». Остаток переходит в следующий месяц. Оплаты Никиты как клиента (в наряде или продаже, с чеком да/нет) сюда не попадают.</p></div>`;
+      <p class="muted small">Выплату записывай в «Деньгах»: Ушли −, Назначение «Никита» или «Подрядчик». Остаток переходит в следующий месяц. Оплаты Никиты как клиента (в наряде или продаже) сюда не попадают.</p></div>`;
   }
   const REP_TIP = {
     'Работы': 'Все работы, сделанные в этом месяце (по дате выполнения работы)',
@@ -5419,7 +5440,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function workHistory() {
     if (X._wh) return X._wh;
     const m = {};
-    D.orders.forEach(o => (o.works || []).forEach(w => { if (!w.name) return; const k = wk(w.name); (m[k] = m[k] || []).push({ sum: +w.sum || 0, d: o.start || o.doneDate || '' }); }));
+    D.orders.forEach(o => (o.works || []).forEach(w => { if (!w.name || w.kind) return; const k = wk(w.name); (m[k] = m[k] || []).push({ sum: +w.sum || 0, d: o.start || o.doneDate || '' }); }));
     return (X._wh = m);
   }
   function workStat(wt) {
@@ -5647,18 +5668,26 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   let repDrag = null, repDragged = false;
   document.addEventListener('dragstart', e => {
     const h = e.target.closest && e.target.closest('#rep-grid .fold-h'); if (!h) return;
-    repDrag = h.closest('[data-blk]'); repDragged = true; repDrag.classList.add('dragging');
+    repDrag = h.closest('[data-blk]'); repDragged = true; repDrag.classList.add('dragging'); document.body.classList.add('rep-dragging');
     try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', repDrag.dataset.blk); } catch (er) {}
   });
   document.addEventListener('dragover', e => {
-    if (!repDrag) return; const t = e.target.closest && e.target.closest('#rep-grid [data-blk]'); if (!t || t === repDrag) return;
-    e.preventDefault(); const g = $('#rep-grid'), items = [...g.children], a = items.indexOf(repDrag), b = items.indexOf(t);
-    if (a < b) t.after(repDrag); else t.before(repDrag);
+    if (!repDrag) return;
+    const col = e.target.closest && e.target.closest('#rep-grid .rep-col'); if (!col) return;
+    e.preventDefault();
+    const t = e.target.closest('#rep-grid [data-blk]');
+    if (t && t !== repDrag) { const r = t.getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) t.before(repDrag); else t.after(repDrag); }
+    else if (!t) {
+      /* над пустым местом колонки: ставим по высоте мыши */
+      const items = [...col.querySelectorAll(':scope > [data-blk]')].filter(x => x !== repDrag);
+      const next = items.find(x => { const r = x.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+      if (next) next.before(repDrag); else col.appendChild(repDrag);
+    }
   });
   document.addEventListener('drop', e => { if (repDrag) e.preventDefault(); });
   document.addEventListener('dragend', () => {
-    if (!repDrag) return; repDrag.classList.remove('dragging');
-    const g = $('#rep-grid'); if (g) ui.repOrder = [...g.children].map(x => x.dataset.blk);
+    if (!repDrag) return; repDrag.classList.remove('dragging'); document.body.classList.remove('rep-dragging');
+    const g = $('#rep-grid'); if (g) ui.repLayout = [...g.querySelectorAll('.rep-col')].map(c => [...c.querySelectorAll(':scope > [data-blk]')].map(x => x.dataset.blk));
     repDrag = null; repSave(); setTimeout(() => { repDragged = false; }, 0); render();
   });
   document.addEventListener('click', e => {
@@ -5761,7 +5790,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'rk-check-pick': rkRead(true).then(d => { if (d) { ui.rkCheck = true; render(); } }); break;
       case 'wait-ok': { const ids = b.dataset.ids.split(','); if (ui.waitSel) ids.forEach(id => ui.waitSel.delete(id)); markArrived(ids); break; }
       case 'rep-fold': { if (repDragged) { repDragged = false; break; } ui.repFold = ui.repFold || {}; const k = b.dataset.k, f = ui.repFold; f[k] = !(k in f ? f[k] : b.dataset.def !== '1'); repSave(); render(); break; }
-      case 'rep-reset': ui.repOrder = null; ui.repFold = {}; repSave(); render(); break;
+      case 'rep-reset': ui.repLayout = null; ui.repFold = {}; ui.repZ = {}; repSave(); render(); break;
+      case 'rep-z': { ui.repZ = ui.repZ || {}; ui.repZ[b.dataset.k] = !ui.repZ[b.dataset.k]; repSave(); render(); break; }
       case 'ret-done': {
         const ids = new Set(b.dataset.ids.split(',')), ps = D.parts.filter(p => ids.has(String(p.id)) && p.ret && !p.retDone); if (!ps.length) break;
         ps.forEach(p => { p.retDone = true; }); if (ui.retSel) ids.forEach(id => ui.retSel.delete(id));
