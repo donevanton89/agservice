@@ -776,6 +776,9 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   #tabs.more-r { -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); mask-image: linear-gradient(90deg, #000 88%, transparent); }
 }
 .close-plan .cp-box{margin:8px 0 2px;max-width:460px}.close-plan .cp-box .rl{padding:3px 0}
+#ck-alert{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:31;background:var(--surface);border:2px solid var(--bad);color:var(--ink);padding:10px 14px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18);display:flex;gap:12px;align-items:center;flex-wrap:wrap;max-width:min(720px,calc(100% - 32px));font-size:14px}
+#ck-alert[hidden]{display:none}#ck-alert .ck-btns{display:flex;gap:6px;margin-left:auto}
+.dup-ask{margin:8px 0}
 </style>
 
 <header class="top">
@@ -794,6 +797,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 <div id="editor" hidden></div>
 <div id="printArea"></div>
 <div id="saleEd" class="overlay" hidden></div>
+<div id="ck-alert" hidden></div>
 <div id="toast" hidden></div>
 <datalist id="dl-clients"></datalist>
 <datalist id="dl-works"></datalist>
@@ -1973,12 +1977,21 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     dirty = true; reindex();
     /* открытая карточка клиента — показать её из восстановленной базы, а не старый черновик */
     if (ui.cdraft) { const c = ui.cdraft.id && D.clients.find(x => x.id === ui.cdraft.id); ui.cdraft = c ? clone(c) : null; ui.cmove = null; ui.cpick = null; ui.cmvSale = null; ui.cmvSaleOpen = null; ui.cerr = ''; ui.cdelAsk = false; }
-    render(); paintUndo();
+    render(); paintUndo(); paintCkAlert();
     idb.set('backup', JSON.stringify(D));
     persist();
     toast((dir < 0 ? 'Отменено: ' : 'Повторено: ') + e.label);
   }
+  /* «Сверка уехала после этой записи»: было 0 — стало не 0 */
+  function paintCkAlert() {
+    const el = $('#ck-alert'); if (!el) return;
+    if (ui.ckAlert && X.T && Math.abs(X.T.check) < 1) ui.ckAlert = null;
+    const a = ui.ckAlert;
+    el.hidden = !a;
+    el.innerHTML = a ? `<span>⚠️ Сверка уехала на <b>${a.d > 0 ? '+' : '−'}${rub(Math.abs(a.d))}</b> после последнего действия («${esc(a.label)}»). Проверь его — или отмени.</span><span class="ck-btns"><button class="btn small" data-act="ck-undo">Отменить</button><button class="btn small ghost" data-act="ck-ok">Понятно</button></span>` : '';
+  }
   function changed(forceLabel) {
+    const ck0 = X && X.T ? { v: X.T.check, m: X.T.month } : null;
     /* замок: правки в закрытом месяце не принимаем */
     if (hist.cur != null) {
       let bad = [];
@@ -1996,16 +2009,18 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     ui.stash = null;
     dirty = true; reindex();
     const json = snap();
+    let ckLabel = null;
     if (hist.cur != null && json !== hist.cur) {
-      const label = forceLabel || histLabel();
+      const label = forceLabel || histLabel(); ckLabel = label;
       const n0 = D.log.length; logStep(hist.cur, label);
       const lid = D.log.length > n0 ? D.log[D.log.length - 1].id : null;
       hist.undo.push({ json: hist.cur, label, lid });
       if (hist.undo.length > HIST_MAX) hist.undo.shift();
       hist.redo = [];
     }
+    if (ck0 && ckLabel && X.T && X.T.month === ck0.m && Math.abs(ck0.v) < 1 && Math.abs(X.T.check) >= 1) ui.ckAlert = { label: ckLabel, d: X.T.check - ck0.v };
     render();
-    hist.cur = json; paintUndo();
+    hist.cur = json; paintUndo(); paintCkAlert();
     if (!cloud) idb.set('backup', JSON.stringify(D));
     persist();
   }
@@ -4796,6 +4811,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <label class="f"><span class="tip-t" title="Только из списка. Оплаты клиентов вносятся в наряде или продаже.">Назначение</span><select id="pf-who" data-pf="who"><option value=""${f.who ? '' : ' selected'}>— выбери —</option>${pfGroups().map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(([v, l]) => `<option value="${esc(v)}"${f.who === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('')}</select></label>
           ${(f.who || '').endsWith('|ЗП') ? `<label class="f">Примечание<input id="pf-note" value="" disabled placeholder="ЗП — ставится само"></label>` : `<label class="f">Примечание<input id="pf-note" value="${esc(f.note)}" data-pf="note" autocomplete="off"></label>`}
         </div>
+        ${payDupHTML(f)}
         <div class="actions"><button class="btn primary" data-act="pay-save">${f.id ? 'Сохранить' : 'Записать'}</button>
         <details class="memo"><summary>Памятка по типам</summary><ul>
           <li><b>Касса (наличные)</b> — деньги в кассу или из кассы.</li>
@@ -4815,11 +4831,24 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const rows = payFormRows();
     return rows ? `<p class="pf-eff" id="pf-eff">Что изменится: <b>${esc(effText(payEffects(rows)))}</b></p>` : `<span id="pf-eff"></span>`;
   }
+  const payDupKey = p => [p.date, low((p.name || '').trim()), r2(+p.amount || 0), p.type].join('|');
+  function payDupHTML(f) {
+    if (!f.dupAsk || f.id) return '';
+    const w = pfWho(f); if (!f.amount || !w.name) return '';
+    const key = payDupKey({ date: f.date, name: w.name, amount: r2(Math.abs(f.amount) * f.dir), type: f.type });
+    if (key !== f.dupAsk) return '';
+    return `<div class="note dup-ask"><span>Такая запись уже есть: <b>${dshort(f.date)} · ${esc(w.name)} · ${rub(r2(Math.abs(f.amount) * f.dir))}</b> (${esc(TYPE_S[f.type] || f.type)}). Записать ещё раз?</span><div class="actions"><button class="btn small primary" data-act="pay-dup-yes">Да, записать</button><button class="btn small ghost" data-act="pay-dup-no">Нет</button></div></div>`;
+  }
   function savePay() {
     const f = ui.payForm;
     const w = pfWho(f);
     if (!f.amount || !f.date || !w.name) { toast('Укажи дату, сумму и назначение из списка'); return; }
     const rec = { id: f.id || uid('y'), date: f.date, order: null, amount: r2(Math.abs(f.amount) * f.dir), type: f.type, receipt: null, name: w.name, note: w.note, app: true };
+    /* защита от двойной записи: такая же дата, назначение, сумма и тип уже есть */
+    if (!f.id) {
+      const key = payDupKey(rec), dup = D.pays.find(p => payDupKey(p) === key);
+      if (dup && f.dupOk !== key) { f.dupAsk = key; render(); return; }
+    }
     if (f.id) {
       const i = D.pays.findIndex(p => p.id === f.id); const old = D.pays[i]; if (old && !old.app) rec.app = false; D.pays[i] = Object.assign({}, old, rec);
       if (old && old.tr) D.pays.forEach(y => { if (y.tr === old.tr && y.id !== old.id) { y.amount = -rec.amount; y.date = rec.date; } });
@@ -6113,6 +6142,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'pf-dir': ui.payForm.dir = +b.dataset.v; render(); break;
       case 'pay-go': { const p = D.pays.find(x => x.id === b.dataset.id); if (!p) break; if (p.order != null) { const o = X.ordersByNum[p.order]; if (o) openOrder(o.id); else toast('Наряд № ' + p.order + ' не найден'); } else { const g = p.link && X.sales.find(x => x.link === p.link); if (g) { ui.tab = 'sales'; try { localStorage.setItem('sto.tab', ui.tab); } catch (er) {} openSale(g.id); render(); } } break; }
       case 'pay-save': savePay(); break;
+      case 'pay-dup-yes': if (ui.payForm) { ui.payForm.dupOk = ui.payForm.dupAsk; ui.payForm.dupAsk = null; savePay(); } break;
+      case 'pay-dup-no': if (ui.payForm) { ui.payForm.dupAsk = null; render(); } break;
+      case 'ck-undo': ui.ckAlert = null; histGo(-1); paintCkAlert(); break;
+      case 'ck-ok': ui.ckAlert = null; paintCkAlert(); break;
       case 'pay-cancel': ui.payForm = payFormNew(); render(); break;
       case 'pay-edit': { const p = D.pays.find(x => x.id === b.dataset.id); ui.payForm = payFormEdit(p); render(); window.scrollTo(0, 0); break; }
       case 'pay-del': ui.payDel = b.dataset.id; render(); break;
