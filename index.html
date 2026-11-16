@@ -50,8 +50,8 @@ header.top .wrap { display: flex; align-items: center; gap: 12px; padding-block:
 .status.ok::before { content: "● "; color: var(--ok); }
 .status.wait::before { content: "● "; color: var(--work); }
 .status.bad { color: var(--bad); background: var(--bad-soft); }
-#tabs { display: flex; gap: 2px; overflow-x: auto; width: 100%; scrollbar-width: none; margin-top: 6px; }
-#tabs > .tab:first-child { margin-left: auto; } #tabs > .tab:last-child { margin-right: auto; }
+#tabs { display: flex; gap: 2px; overflow-x: auto; width: 100%; scrollbar-width: none; margin-top: 6px; justify-content: space-between; }
+#tabs > .tab:first-child { padding-left: 0; } #tabs > .tab:last-child { padding-right: 0; }
 #tabs::-webkit-scrollbar { display: none; }
 .tab { border: 0; background: none; padding: 9px 12px 11px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
 .tab.on { color: var(--ink); border-color: var(--accent); }
@@ -502,6 +502,8 @@ html, body { margin: 0; }
 }
 /* итог наряда прилипает к низу окна */
 #editor .block.totals { position: sticky; bottom: 0; z-index: 6; box-shadow: 0 -6px 18px rgba(0,0,0,.10); }
+/* телефон (и в портрете, и лёжа): итоги не висят поверх, а стоят в конце наряда */
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) { #editor .block.totals { position: static; box-shadow: none; } }
 .dens-t { font-size: 13px; }
 @media (max-width: 560px) { .dens-t { display: none; } }
 .tip-t { cursor: help; }
