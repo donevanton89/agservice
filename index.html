@@ -779,6 +779,9 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 #ck-alert{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:31;background:var(--surface);border:2px solid var(--bad);color:var(--ink);padding:10px 14px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18);display:flex;gap:12px;align-items:center;flex-wrap:wrap;max-width:min(720px,calc(100% - 32px));font-size:14px}
 #ck-alert[hidden]{display:none}#ck-alert .ck-btns{display:flex;gap:6px;margin-left:auto}
 .dup-ask{margin:8px 0}
+.arr-btn{cursor:pointer;display:inline-block;padding:4px 6px;margin:-4px 0 -4px -6px}.art-sel{cursor:text;user-select:text}
+.ip-seg{margin:0 0 10px;max-width:320px}.ip-seg button{flex:1}
+.ip-q{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 2px}.ip-q th{font-weight:600;color:var(--muted);font-size:12px;padding:4px 2px;border-bottom:1px solid var(--line)}.ip-q td{padding:5px 2px;border-bottom:1px solid var(--line)}.ip-q .r{text-align:right}.ip-q .neg{color:var(--bad)}
 </style>
 
 <header class="top">
@@ -1483,8 +1486,23 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     };
     if (taxMode) {
       const pr = paramsFor(cfg, month);
-      const rate = (pr.usn || 0) + (pr.extra || 0);
-      const fixed = { rent: pr.rent || 0, acc: pr.acc || 0, elec: pr.elec || 0, term: pr.term || 0, vznos: (pr.vznosYear || 0) / 12, acqCard: card * (pr.acqCard || 0), acqQr: qr * (pr.acqQr || 0) };
+      const rate = pr.usn || 0;
+      /* взнос 1% с дохода ИП сверх 300 000 ₽ за год: доход = оплаты с чеком с января (+ доход до программы в год старта учёта) */
+      const VZ_LIM = 300000, y = month.slice(0, 4);
+      let yearBefore = y === start.slice(0, 4) ? (+cfg.ipIncomeBefore || 0) : 0;
+      if (!(opts && opts.noVz)) {
+        X._wr = X._wr || {};
+        for (let m = y + '-01'; m < month; m = addMonths(m, 1)) {
+          if (m < start) continue;
+          if (X._wr[m] == null) X._wr[m] = monthReport(D, X, m, { noVz: true }).withReceipt;
+          yearBefore += X._wr[m];
+        }
+      }
+      const yearInc = yearBefore + withReceipt;
+      const vz1 = opts && opts.noVz ? 0 : r2(0.01 * (Math.max(0, yearInc - VZ_LIM) - Math.max(0, yearBefore - VZ_LIM)));
+      /* взносы за дни ИП до начала учёта (регистрация 30.10.2026 → 2 дня октября) — начисляются в первом месяце учёта */
+      const vznosPre = month === start ? r2(+cfg.vznosBefore || 0) : 0;
+      const fixed = { rent: pr.rent || 0, acc: pr.acc || 0, elec: pr.elec || 0, term: pr.term || 0, vznos: (pr.vznosYear || 0) / 12 + vznosPre, acqCard: card * (pr.acqCard || 0), acqQr: qr * (pr.acqQr || 0) };
       /* свои виды постоянных расходов (Настройки → «+ Вид расхода»): cfg.fixedExtra [{k, name}], суммы — в строке периода pr.x[k] */
       const fixedExtra = (cfg.fixedExtra || []).map(e => ({ k: e.k, name: e.name, sum: r2(+((pr.x || {})[e.k]) || 0) }));
       fixedExtra.forEach(e => { fixed['x_' + e.k] = e.sum; });
@@ -1495,7 +1513,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
         if (!inMonth(p) || !X.fixed.has(low(p.name))) return;
         paidFixed -= p.amount; paidByKind[low(p.name)] = (paidByKind[low(p.name)] || 0) - p.amount;
       });
-      Object.assign(out, { params: pr, rate, tax: r2(withReceipt * rate), fixed, fixedExtra, fixedSum: r2(fixedSum), card: r2(card), qr: r2(qr), paidFixed: r2(paidFixed), paidByKind });
+      Object.assign(out, { params: pr, rate, vznosPre, usnTax: r2(withReceipt * rate), vz1, yearInc: r2(yearInc), vzLim: VZ_LIM, tax: r2(withReceipt * rate + vz1), fixed, fixedExtra, fixedSum: r2(fixedSum), card: r2(card), qr: r2(qr), paidFixed: r2(paidFixed), paidByKind });
       out.rest = r2(itogo - out.tax - fixedSum);
     }
     return out;
@@ -1577,6 +1595,36 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     return { kinds: out, tot };
   }
   STO.fixedLedger = fixedLedger;
+
+  /* ИП за период (квартал/год): налоги и взносы — начислено/уплачено/сроки, движение по ИП карте */
+  const IP_TAX = ['налог', 'взносы'];
+  function ipPeriod(D, X, months) {
+    const start = taxStart(D.cfg);
+    const ms = months.filter(m => start && m >= start);
+    const o = { months: ms, inc: 0, usn: 0, vznos: 0, vz1: 0, paid: 0, card: 0, qr: 0, inOther: 0, out: {}, ipStart: 0, ipEnd: 0 };
+    if (!ms.length) return o;
+    ms.forEach(m => {
+      const r = monthReport(D, X, m);
+      o.inc += r.withReceipt || 0; o.usn += r.usnTax || 0; o.vz1 += r.vz1 || 0; o.vznos += (r.fixed && r.fixed.vznos) || 0;
+    });
+    const set = new Set(ms);
+    D.pays.forEach(p => {
+      if (!set.has(monthOf(p.date))) return;
+      const n = low(p.name);
+      if (IP_TAX.includes(n)) o.paid -= p.amount;
+      if (p.type === 'Карта') o.card += p.amount;
+      else if (p.type === 'QR') o.qr += p.amount;
+      else if (p.type === 'безнал' && (n === 'ип карта (антон)' || X.fixed.has(n))) {
+        if (p.amount < 0) { const k = p.name || '—'; o.out[k] = (o.out[k] || 0) + p.amount; } else o.inOther += p.amount;
+      }
+    });
+    o.ipStart = money(D, X, addMonths(ms[0], -1)).ip; o.ipEnd = money(D, X, ms[ms.length - 1]).ip;
+    ['inc', 'usn', 'vznos', 'vz1', 'paid', 'card', 'qr', 'inOther'].forEach(k => { o[k] = r2(o[k]); });
+    Object.keys(o.out).forEach(k => { o.out[k] = r2(o.out[k]); });
+    o.acc = r2(o.usn + o.vznos + o.vz1); o.left = r2(o.acc - o.paid);
+    return o;
+  }
+  STO.ipPeriod = ipPeriod;
 
   /* Счета Никиты и подрядчика: заработал по работам − выплачено, остаток переходит из месяца в месяц.
      Выплата Никите — запись с Назначением «Никита» без отметки чека и без наряда (оплата клиента всегда с чеком да/нет). */
@@ -1730,6 +1778,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     importPreview: null, payForm: null, expForm: null, stockForm: null, confirmClose: false, schedForm: null,
   };
   try { const t = localStorage.getItem('sto.tab'); if (t) ui.tab = t; } catch (e) {}
+  try { ui.ipMode = localStorage.getItem('sto.ipMode') || 'm'; } catch (e) {}
   try { ui.repLayout = JSON.parse(localStorage.getItem('sto.repLayout') || 'null') || null; ui.repFold = JSON.parse(localStorage.getItem('sto.repFold') || 'null') || {}; ui.repZ = JSON.parse(localStorage.getItem('sto.repZ') || 'null') || {}; } catch (e) { ui.repFold = {}; }
   function repSave() { try { localStorage.setItem('sto.repLayout', JSON.stringify(ui.repLayout || null)); localStorage.setItem('sto.repFold', JSON.stringify(ui.repFold || {})); localStorage.setItem('sto.repZ', JSON.stringify(ui.repZ || {})); } catch (e) {} }
   const THEMES = [['warm', 'Тёплая'], ['sand', 'Олива'], ['', 'Как в системе']];
@@ -1814,6 +1863,8 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     X = S.index(D);
     try { jLegacyHide(); } catch (er) {}
     try { oilAddInit(); } catch (er) {}
+    /* взносы ИП за 30–31.10.2026 (регистрация 30.10.2026, учёт с ноября): 57 390 / 12 × 2 / 31 */
+    if (D.cfg.vznosBefore == null) { const st = (D.cfg.params || []).map(p => p.from).sort()[0]; D.cfg.vznosBefore = st === '2026-11' ? 308.55 : 0; }
     try { rndInit(); } catch (er) {}
     freezeOil();
     X.clientById = {}; X.cstat = {};
@@ -5070,7 +5121,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     };
     const oilRow = ({ s, q }) => {
       const open = ui.openRows.has('stk-' + s.id);
-      return `<tr class="stk-row${open ? ' is-open' : ''}${SEL.has(s.id) ? ' sel' : ''}">${chk(s)}<td class="mono" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="stk-${esc(s.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span> ${esc(s.art)}</td><td data-act="toggle-row" data-id="stk-${esc(s.id)}">${esc(s.name)}<div class="muted small">${esc(s.brand)}</div></td>
+      return `<tr class="stk-row${open ? ' is-open' : ''}${SEL.has(s.id) ? ' sel' : ''}">${chk(s)}<td class="mono"><span class="arr arr-btn" role="button" tabindex="0" aria-expanded="${open}" aria-label="Раскрыть" data-act="toggle-row" data-id="stk-${esc(s.id)}">${open ? '▾' : '▸'}</span> <span class="art-sel">${esc(s.art)}</span></td><td data-act="toggle-row" data-id="stk-${esc(s.id)}">${esc(s.name)}<div class="muted small">${esc(s.brand)}</div></td>
       <td class="r ${q < 0 ? 'neg' : q === 0 ? 'muted' : ''}"><b>${fmt(q, q % 1 ? 2 : 0)}</b></td>${oilCostCell(s)}<td class="r">${rub(s.price)}</td>${acts(s)}</tr>${oilBox(s)}${formRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
     };
     const head = `<thead><tr><th class="chkc"></th><th>Артикул</th><th>Название</th><th class="r">Остаток</th><th class="r cst">Закупка</th><th class="r">Цена</th><th></th></tr></thead>`;
@@ -5150,6 +5201,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function stockForm(f) {
     const s = f.id ? D.stock.find(x => x.id === f.id) : null;
+    const noBarrel = f.oil && !oilBuys({ art: f.art, name: f.name, cost: f.cost }).length;
     return `<section class="block form"><div class="block-head"><h3>${s ? 'Позиция склада' : 'Новая позиция'}</h3><button class="link" data-act="stock-cancel">Отмена</button></div>
       <div class="grid g4">
         <label class="f">Артикул<input id="sn-art" class="mono" value="${esc(f.art)}" data-sf="art"></label>
@@ -5158,8 +5210,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <label class="f">Цена продажи<input id="sn-price" value="${esc(nv(f.price))}" data-sf="price" inputmode="decimal"></label>
         <label class="f">Сейчас на складе<input id="sn-qty" value="${esc(nv(f.qty))}" data-sf="qty" inputmode="decimal"></label>
         <label class="f" title="Масла и жидкости — продаются на литры, закупка берётся из бочки + запас, деньги идут в кассу «Масло/антифриз». Остальное — обычные запчасти.">Блок<select id="sn-grp" data-sf="blk">${[['oil', 'Масла и жидкости (касса «Масло/антифриз»)'], ['sto', 'Артикулы для заказов СТО'], ['', 'Запчасти на складе']].map(([v, l]) => `<option value="${v}"${(f.oil ? 'oil' : f.grp === 'sto' ? 'sto' : '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-        ${f.oil ? `<label class="f" title="Используется, только если у позиции нет ни одной покупки бочки. Обычно закупка берётся из бочки, из которой льёшь.">Закупка, если нет бочки<input id="sn-cost" value="${esc(nv(f.cost))}" data-sf="cost" inputmode="decimal"></label>` : ''}
-      </div>${s && f.oil ? `<p class="muted small">Сейчас льёшь из бочки по ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg)} за л → в продажах закупка ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg + oilAddOf(s))} (надбавка ${rub(oilAddOf(s))} — меняется щелчком по цене в колонке «Закупка»).${f.art && f.art !== s.art ? ' <b>Артикул поменяется и во всех продажах и покупках этой позиции.</b>' : ''}</p>` : s && f.art && f.art !== s.art ? '<p class="muted small"><b>Артикул поменяется и во всех продажах и покупках этой позиции.</b></p>' : ''}<div class="grid g4" style="display:none">
+        ${noBarrel ? `<label class="f">Закупка за литр<input id="sn-cost" value="${esc(nv(f.cost))}" data-sf="cost" inputmode="decimal"></label>` : ''}
+      </div>${noBarrel ? `<p class="muted small">Покупки бочки ещё нет — впиши цену литра руками. Когда внесёшь покупку на «СТО (масло/антифриз)», цена будет браться из бочки, а это поле исчезнет.</p>` : ''}${s && f.oil && !noBarrel ? `<p class="muted small">Сейчас льёшь из бочки по ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg)} за л → в продажах закупка ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg + oilAddOf(s))} (надбавка ${rub(oilAddOf(s))} — меняется щелчком по цене в колонке «Закупка»).${f.art && f.art !== s.art ? ' <b>Артикул поменяется и во всех продажах и покупках этой позиции.</b>' : ''}</p>` : s && f.art && f.art !== s.art ? '<p class="muted small"><b>Артикул поменяется и во всех продажах и покупках этой позиции.</b></p>' : ''}<div class="grid g4" style="display:none">
       </div><button class="btn primary" data-act="stock-save">Сохранить</button></section>`;
   }
 
@@ -5379,6 +5431,42 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
 
   /* ----- Отчёт (как лист «Итог») ----- */
+  /* блок «ИП»: квартал / год — налоги и взносы (начислено, уплачено, сроки) и ИП карта */
+  function ipBlockHTML(m, mode) {
+    const y = +m.slice(0, 4), q = Math.floor((+m.slice(5, 7) - 1) / 3);
+    const qMonths = k => [1, 2, 3].map(i => y + '-' + String(k * 3 + i).padStart(2, '0'));
+    const months = mode === 'q' ? qMonths(q) : [].concat(qMonths(0), qMonths(1), qMonths(2), qMonths(3));
+    const P = S.ipPeriod(D, X, months);
+    const L = (l, v, cls) => `<div class="rl${cls ? ' ' + cls : ''}"><span>${l}</span><b class="${v < 0 ? 'neg' : ''}">${typeof v === 'number' ? rub(v) : v}</b></div>`;
+    const title = mode === 'q' ? (q + 1) + ' квартал ' + y : y + ' год';
+    if (!P.months.length) return { sum: '—', html: `<p class="muted small">${title}: налоговый учёт в программе ещё не начат.</p>` };
+    const dl = [];
+    if (mode === 'q') { if (q < 3) dl.push('аванс УСН — до 28.' + ['04', '07', '10'][q] + '.' + y); else dl.push('взносы — до 28.12.' + y, 'УСН за год — до 28.04.' + (y + 1)); }
+    else dl.push('авансы УСН — до 28.04, 28.07, 28.10', 'взносы — до 28.12.' + y, 'УСН за год — до 28.04.' + (y + 1));
+    if (P.vz1 > 0 || mode === 'y') dl.push('взнос 1% сверх 300 000 — до 01.07.' + (y + 1));
+    const reduce = Math.min(P.usn, P.vznos + P.vz1);
+    let h = `<h4>${title} · налоги и взносы</h4>
+      ${L('Доход ИП (оплаты с чеком)', P.inc)}
+      ${L('УСН ' + pct((S.monthReport(D, X, P.months[P.months.length - 1]).params || {}).usn || 0), P.usn)}
+      ${L('Фиксированные взносы', P.vznos)}
+      ${L('Взнос 1% с дохода сверх 300 000', P.vz1)}
+      ${L('Начислено всего', P.acc, 'sub')}
+      ${L('Уплачено («Налог», «Взносы»)', -P.paid)}
+      ${L('Осталось заплатить', P.left, 'total' + (P.left > 0.004 ? ' neg' : ''))}
+      <p class="muted small">Сроки: ${dl.join('; ')}.</p>
+      ${reduce > 0 ? `<p class="muted small">Работников нет — УСН можно уменьшить на взносы (уточни у бухгалтера). Тогда УСН к уплате будет ${rub(P.usn - reduce)} вместо ${rub(P.usn)}. Программа пока откладывает с запасом.</p>` : ''}`;
+    if (mode === 'y') {
+      const rows = [0, 1, 2, 3].map(k => { const Q = S.ipPeriod(D, X, qMonths(k)); const f = v => fmt(v, 0); return Q.months.length ? `<tr><td>${k + 1} кв.</td><td class="r">${f(Q.acc)}</td><td class="r">${f(Q.paid)}</td><td class="r${Q.left > 0.004 ? ' neg' : ''}">${f(Q.left)}</td></tr>` : `<tr class="muted"><td>${k + 1} кв.</td><td class="r">—</td><td class="r">—</td><td class="r">—</td></tr>`; }).join('');
+      h += `<table class="ip-q"><thead><tr><th></th><th class="r">Начислено</th><th class="r">Уплачено</th><th class="r">Осталось</th></tr></thead><tbody>${rows}</tbody></table><p class="muted small">По кварталам, ₽. «—» — учёта в программе ещё не было.</p>`;
+    }
+    const outs = Object.keys(P.out).sort((a, b) => P.out[a] - P.out[b]);
+    h += `<h4>ИП карта</h4>
+      ${L('На начало', P.ipStart)}
+      ${L('Пришло от клиентов: карта', P.card)}${L('Пришло от клиентов: QR', P.qr)}${P.inOther ? L('Пополнения', P.inOther) : ''}
+      ${outs.map(k => L(esc(k), P.out[k])).join('') || '<p class="muted small">Списаний с карты не было.</p>'}
+      ${L('На конец', P.ipEnd, 'total')}`;
+    return { sum: 'осталось ' + rub(P.left), html: h };
+  }
   function viewReport() {
     const m = ui.month, isNow = m === NOW_M();
     const r = S.monthReport(D, X, m);
@@ -5406,11 +5494,16 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (r.taxMode) {
       const u = S.unpaid(D, X, m);
       const k = r.withReceipt ? 100 / r.withReceipt : 0;
-      blk('tax', 'Налоги и постоянные расходы', 'остаток ' + rub(r.rest), `
-        ${line('Ставка УСН «Доходы»', pct(r.params.usn))}${r.params.extra ? line('Добавка на взносы', pct(r.params.extra)) : ''}
-        ${line('Отложить в налоговую (с оплат с чеком)', -r.tax, 'minus')}
+      const ipm = ui.ipMode || 'm';
+      const ipSeg = `<div class="seg ip-seg">${[['m', 'Месяц'], ['q', 'Квартал'], ['y', 'Год']].map(([v, l]) => `<button class="${ipm === v ? 'on' : ''}" data-act="ip-mode" data-v="${v}">${l}</button>`).join('')}</div>`;
+      if (ipm !== 'm') { const P = ipBlockHTML(m, ipm); blk('tax', 'ИП', P.sum, ipSeg + P.html); }
+      else blk('tax', 'ИП', 'остаток ' + rub(r.rest), ipSeg + `
+        ${line('Ставка УСН «Доходы»', pct(r.params.usn))}
+        ${r.vz1 ? line('УСН с оплат с чеком', -r.usnTax, 'minus') + line('Взнос 1% с дохода сверх 300 000 ₽', -r.vz1, 'minus') : ''}
+        ${line('Отложить в налоговую' + (r.vz1 ? ' — всего' : ' (с оплат с чеком)'), -r.tax, r.vz1 ? 'sub' : 'minus')}
+        <div class="muted small" style="margin:2px 0 6px">Доход ИП с начала года: ${rub(r.yearInc)}${r.yearInc < r.vzLim ? ` — до 300 000 ещё ${rub(r.vzLim - r.yearInc)}, взнос 1% не начисляется` : ' — сверх 300 000 идёт взнос 1%'}</div>
         ${line('Аренда', -r.fixed.rent, 'minus', 1)}${line('Бухгалтер', -r.fixed.acc, 'minus', 1)}${line('Электричество', -r.fixed.elec, 'minus', 1)}${line('Аренда терминала', -r.fixed.term, 'minus', 1)}
-        ${line('Фиксированные взносы (за месяц)', -r.fixed.vznos, 'minus', 1)}${(r.fixedExtra || []).map(e => line(esc(e.name), -e.sum, 'minus', 1)).join('')}
+        ${line('Фиксированные взносы (за месяц)', -(r.fixed.vznos - (r.vznosPre || 0)), 'minus', 1)}${r.vznosPre ? line('Взносы за дни до начала учёта (30–31.10)', -r.vznosPre, 'minus') : ''}${(r.fixedExtra || []).map(e => line(esc(e.name), -e.sum, 'minus', 1)).join('')}
         ${line('Эквайринг карта ' + pct(r.params.acqCard) + ' с ' + rub(r.card), -r.fixed.acqCard, 'minus', 1)}${line('Эквайринг QR ' + pct(r.params.acqQr) + ' с ' + rub(r.qr), -r.fixed.acqQr, 'minus', 1)}
         ${line('Постоянные расходы — всего', -r.fixedSum, 'sub')}
         ${line('Остаток за месяц', r.rest, 'total' + (r.rest < 0 ? ' neg' : ''))}
@@ -5755,8 +5848,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       <section class="block"><div class="block-head"><h3>Налог и постоянные расходы по периодам</h3><span class="actions" style="margin:0"><button class="btn small" data-act="pp-add">+ Новый период</button><button class="btn small" data-act="fx-add-open">+ Вид расхода</button></span></div>
         ${ui.fxAdd ? `<div class="fx-add"><label class="f">Название нового расхода<input id="fx-name" value="${esc(ui.fxName || '')}" data-fxname="1" placeholder="например, Интернет" autocomplete="off"></label><button class="btn primary" data-act="fx-add">Добавить</button><button class="btn ghost" data-act="fx-add-open">Отмена</button></div>` : ''}
         <p class="muted small">Для месяца действует последняя строка, у которой «С месяца» не позже него. Новая ставка — новая строка, старые не трогай. Новый вид расхода появится колонкой во всех строках; суммы в рублях за месяц. Платить его — в «Деньгах» или «Расходах», назначение с тем же названием.</p>
-        <div class="scroll"><table class="tbl params"><thead><tr><th>С месяца</th><th class="r">УСН, %</th><th class="r">Доп. взнос, %</th><th class="r">Аренда</th><th class="r">Бухгалтер</th><th class="r">Свет</th><th class="r">Взносы за год</th><th class="r">Эквайринг карта, %</th><th class="r">Эквайринг QR, %</th><th class="r">Терминал</th>${fxE.map(e => `<th class="fx-h">${esc(e.name)}<button class="x sm" data-act="fx-del" data-k="${esc(e.k)}" aria-label="Убрать вид расхода" title="Убрать «${esc(e.name)}»">×</button></th>`).join('')}<th></th></tr></thead>
-        <tbody>${ps.map((p, i) => `<tr>${cell(i, 'from', p.from)}${cell(i, 'usn', p.usn, 'pct')}${cell(i, 'extra', p.extra, 'pct')}${cell(i, 'rent', p.rent)}${cell(i, 'acc', p.acc)}${cell(i, 'elec', p.elec)}${cell(i, 'vznosYear', p.vznosYear)}${cell(i, 'acqCard', p.acqCard, 'pct')}${cell(i, 'acqQr', p.acqQr, 'pct')}${cell(i, 'term', p.term)}${fxE.map(e => xcell(i, e, p)).join('')}<td><button class="x" data-act="pp-del" data-i="${i}" aria-label="Удалить строку">×</button></td></tr>`).join('') || '<tr><td colspan="11" class="muted">Добавь первую строку — с неё начнётся налоговый учёт.</td></tr>'}</tbody></table></div>
+        <div class="scroll"><table class="tbl params"><thead><tr><th>С месяца</th><th class="r">УСН, %</th><th class="r">Аренда</th><th class="r">Бухгалтер</th><th class="r">Свет</th><th class="r">Взносы за год</th><th class="r">Эквайринг карта, %</th><th class="r">Эквайринг QR, %</th><th class="r">Терминал</th>${fxE.map(e => `<th class="fx-h">${esc(e.name)}<button class="x sm" data-act="fx-del" data-k="${esc(e.k)}" aria-label="Убрать вид расхода" title="Убрать «${esc(e.name)}»">×</button></th>`).join('')}<th></th></tr></thead>
+        <tbody>${ps.map((p, i) => `<tr>${cell(i, 'from', p.from)}${cell(i, 'usn', p.usn, 'pct')}${cell(i, 'rent', p.rent)}${cell(i, 'acc', p.acc)}${cell(i, 'elec', p.elec)}${cell(i, 'vznosYear', p.vznosYear)}${cell(i, 'acqCard', p.acqCard, 'pct')}${cell(i, 'acqQr', p.acqQr, 'pct')}${cell(i, 'term', p.term)}${fxE.map(e => xcell(i, e, p)).join('')}<td><button class="x" data-act="pp-del" data-i="${i}" aria-label="Удалить строку">×</button></td></tr>`).join('') || '<tr><td colspan="10" class="muted">Добавь первую строку — с неё начнётся налоговый учёт.</td></tr>'}</tbody></table></div>
+        <p class="muted small">Взнос 1% с дохода сверх 300 000 ₽ за год программа считает сама и прибавляет к налогу. Доход — оплаты с чеком с января.</p>
+        ${(() => { const st = (D.cfg.params || []).map(p => p.from).sort()[0]; return st ? `<div class="grid g2" style="max-width:520px"><label class="f">Доход ИП в ${st.slice(0, 4)} до начала учёта в программе, ₽<input id="cfg-ipbefore" class="r" value="${esc(nv(D.cfg.ipIncomeBefore || 0))}" data-cfgip="ipIncomeBefore" inputmode="decimal"></label><label class="f">Взносы за дни ИП до начала учёта, ₽<input id="cfg-vzbefore" class="r" value="${esc(nv(D.cfg.vznosBefore || 0))}" data-cfgip="vznosBefore" inputmode="decimal"></label></div><p class="muted small">Учёт в программе начат с месяца «${esc(S.monthLabel(st))}». Если раньше в этом году у ИП уже был доход — впиши его, он засчитается в 300 000. Не было — оставь 0. Взносы за дни до начала учёта (у тебя 30–31 октября) прибавятся к взносам первого месяца.</p>` : ''; })()}
       </section>
       <section class="block"><div class="block-head"><h3>Наценка на работы</h3></div>
         <div class="grid g2" style="max-width:520px">
@@ -6142,6 +6237,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'pf-dir': ui.payForm.dir = +b.dataset.v; render(); break;
       case 'pay-go': { const p = D.pays.find(x => x.id === b.dataset.id); if (!p) break; if (p.order != null) { const o = X.ordersByNum[p.order]; if (o) openOrder(o.id); else toast('Наряд № ' + p.order + ' не найден'); } else { const g = p.link && X.sales.find(x => x.link === p.link); if (g) { ui.tab = 'sales'; try { localStorage.setItem('sto.tab', ui.tab); } catch (er) {} openSale(g.id); render(); } } break; }
       case 'pay-save': savePay(); break;
+      case 'ip-mode': ui.ipMode = b.dataset.v; try { localStorage.setItem('sto.ipMode', ui.ipMode); } catch (e) {} render(); break;
       case 'pay-dup-yes': if (ui.payForm) { ui.payForm.dupOk = ui.payForm.dupAsk; ui.payForm.dupAsk = null; savePay(); } break;
       case 'pay-dup-no': if (ui.payForm) { ui.payForm.dupAsk = null; render(); } break;
       case 'ck-undo': ui.ckAlert = null; histGo(-1); paintCkAlert(); break;
@@ -6384,6 +6480,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       else { const n = numIn(el.value) || 0; p[k] = el.dataset.mode === 'pct' ? r2(n) / 100 : n; }
       toast('Параметры сохранены'); changed(); return;
     }
+    if (el.dataset.cfgip) { const n = numIn(el.value); D.cfg[el.dataset.cfgip] = n > 0 ? r2(n) : 0; toast('Сохранено'); changed(); return; }
     if (el.dataset.cfgw) {
       const k = el.dataset.cfgw, n = numIn(el.value);
       if (k === 'workPct' && (n == null || n < 0 || n > 500)) { toast('Наценка — число от 0 до 500'); render(); return; }
