@@ -503,7 +503,7 @@ html, body { margin: 0; }
 /* итог наряда прилипает к низу окна */
 #editor .block.totals { position: sticky; bottom: 0; z-index: 6; box-shadow: 0 -6px 18px rgba(0,0,0,.10); }
 /* телефон (и в портрете, и лёжа): итоги не висят поверх, а стоят в конце наряда */
-@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) { #editor .block.totals { position: static; box-shadow: none; } }
+
 .dens-t { font-size: 13px; }
 @media (max-width: 560px) { .dens-t { display: none; } }
 .tip-t { cursor: help; }
@@ -784,6 +784,13 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 .arr-btn{cursor:pointer;display:inline-block;padding:4px 6px;margin:-4px 0 -4px -6px}.art-sel{cursor:text;user-select:text}
 .ip-seg{margin:0 0 10px;max-width:320px}.ip-seg button{flex:1}
 .ip-q{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 2px}.ip-q th{font-weight:600;color:var(--muted);font-size:12px;padding:4px 2px;border-bottom:1px solid var(--line)}.ip-q td{padding:5px 2px;border-bottom:1px solid var(--line)}.ip-q .r{text-align:right}.ip-q .neg{color:var(--bad)}
+@media (pointer: coarse) and (max-width: 600px), (pointer: coarse) and (max-height: 500px) {
+  #editor .block.totals { position: static; box-shadow: none; }
+  /* телефон: шапка уезжает вместе со страницей, панель «Выбрано» стоит в конце списка — больше места под данные */
+  header.top { position: static; }
+  .stk-bar { position: static; transform: none; width: auto; margin-top: 12px; box-shadow: none; }
+  .stk-bar-pad { display: none; }
+}
 </style>
 
 <header class="top">
@@ -2633,6 +2640,12 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     if (!keep) return;
     const el = document.getElementById(keep.id); if (!el) return;
     if (el.tagName === 'INPUT' && keep.v != null && el.value !== keep.v && /^[\d\s.,\-]*$/.test(keep.v) && numIn(el.value) === numIn(keep.v)) el.value = keep.v;
+    /* телефон: поле пересоздаётся при каждой букве, и клавиатура Android думает, что это начало нового поля → включает заглавную на каждую букву.
+       Первая буква — как обычно (с большой), а дальше в пересозданном поле автозаглавные выключаем; курсор ставим до фокуса. */
+    if ((el.tagName === 'INPUT' && /^(text|search|)$/.test(el.getAttribute('type') || '') && !el.inputMode) || el.tagName === 'TEXTAREA') {
+      if (keep.s > 0) el.setAttribute('autocapitalize', 'none');
+    }
+    try { el.setSelectionRange(keep.s, keep.e); } catch (e) {}
     el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {}
   }
   function numIn(v) { if (v === '' || v == null) return null; const n = parseFloat(String(v).replace(/\s| /g, '').replace(',', '.')); return isNaN(n) ? null : n; }
@@ -5492,7 +5505,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       ${r.taxMode ? line('Оплаты без чека', r.withoutReceipt) + (r.refunds ? line('Возвраты клиентам по чеку', -r.refunds, 'minus') : '') + line('Выручка с чеком', r.withReceipt, 'sub') : ''}
       ${r.noMark ? `<p class="note bad small">${r.noMark} оплат по нарядам без отметки чека — они не попали в выручку.</p>` : ''}`);
     const W = S.workers(D, X, m);
-    if (W) blk('wk', 'Никита и подрядчик', 'Никите ' + rub(W.nik.left), workersBlock(W));
+    if (W) { const wsum = (a, nm) => a.left < -0.005 ? nm + ' аванс ' + rub(-a.left) : nm + ' ' + rub(a.left); blk('wk', 'Никита и подрядчик', wsum(W.nik, 'Никите') + ' · ' + wsum(W.sub, 'подрядчику'), workersBlock(W)); }
     if (r.taxMode) {
       const u = S.unpaid(D, X, m);
       const k = r.withReceipt ? 100 / r.withReceipt : 0;
