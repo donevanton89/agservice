@@ -791,6 +791,10 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   .stk-bar { position: static; transform: none; width: auto; margin-top: 12px; box-shadow: none; }
   .stk-bar-pad { display: none; }
 }
+/* шапка не прыгает: статус и значки фиксированной ширины */
+.status { width: 230px; flex: none; text-align: center; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+#ckbadge { min-width: 128px; text-align: center; box-sizing: border-box; }
+#waitbadge { min-width: 86px; text-align: center; box-sizing: border-box; }
 </style>
 
 <header class="top">
@@ -2688,7 +2692,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     else if (cloud) {
       if (cl.needLogin) { t = 'Войди в Яндекс'; c = 'bad'; }
       else if (cl.busy) { t = 'Отправляю на Диск…'; c = 'wait'; }
-      else if (cl.offline) { t = cl.pending ? 'Нет связи — изменения ждут отправки' : 'Нет связи с Диском'; c = 'wait'; }
+      else if (cl.offline) { t = cl.pending ? 'Нет связи — ждёт отправки' : 'Нет связи с Диском'; c = 'wait'; }
       else if (cl.err) { t = 'Ошибка Диска'; c = 'bad'; }
       else if (cl.pending) { t = 'Ждёт отправки'; c = 'wait'; }
       else t = 'На Диске' + (cl.last ? ' ' + cl.last.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
@@ -2698,7 +2702,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     else if (!handle) { t = dirty ? 'Не сохранено — скачай базу' : 'Без автосохранения'; c = dirty ? 'bad' : 'wait'; }
     else if (saving || dirty) { t = 'Сохраняю…'; c = 'wait'; }
     else t = 'Сохранено' + (ui.savedAt ? ' ' + ui.savedAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
-    el.className = 'status ' + c; el.textContent = t;
+    el.className = 'status ' + c; el.textContent = t; if (!cloud) el.title = t; else if (!el.title.startsWith(t)) el.title = t + ' — ' + el.title;
     $('#fname').textContent = D ? ui.fileName : '';
     const ck = $('#ckbadge'), wb = $('#waitbadge');
     if (!D || !X || !X.T) { ck.hidden = true; if (wb) wb.hidden = true; return; }
@@ -4862,7 +4866,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       ['Зарплата', [['Антон|ЗП', 'Антон — зарплата'], ['Глеб|ЗП', 'Глеб — зарплата'], ['Никита', 'Никита'], ['Подрядчик', 'Подрядчик']]],
       ['Поставщики', sups.map(n => [n, n])],
       ['Налоги и постоянные', fx.map(n => [n, n])],
-      ['Прочее', ['Личные расходы', 'СТО', 'Бонусы'].map(n => [n, n])],
+      ['Прочее', [['Личные расходы', 'Личные расходы']]], /* «СТО» и «Бонусы» — из старого Excel, старые записи остаются */
     ].filter(g => g[1].length);
   }
   /* Назначения, которые подходят к типу платежа: убраны только те, что программа с этим типом не учтёт (сверка уедет) */
