@@ -1682,6 +1682,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
       D.pays.forEach(p => {
         if (low(p.name) !== n) return;
         if (isCash(p.type)) bal -= p.amount;
+        if (p.type === 'Карта' && p.order == null && !p.link) bal -= p.amount; /* оплата поставщику с ИП счёта */
         if (p.type === 'безнал') bal += p.amount;
       });
       D.parts.forEach(p => {
@@ -4843,9 +4844,9 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     return out;
   }
   const effText = ef => ef.length ? ef.map(([l, v]) => l + ' ' + (v > 0 ? '+' : '−') + fmt(Math.abs(v), Math.round(v) === v ? 0 : 2)).join(' · ') : 'ни один кошелёк не меняется';
-  const TYPE_L = { 'Наличные': 'Касса (наличные)', 'безнал': 'Безнал — счёт из «Назначения»', '₽/безнал': 'Касса + счёт из «Назначения»', 'Карта': 'ИП карта (Антон) — терминал', 'QR': 'QR (Антон)' };
+  const TYPE_L = { 'Наличные': 'Касса (наличные)', 'безнал': 'Безнал — счёт из «Назначения»', '₽/безнал': 'Касса + счёт из «Назначения»', 'Карта': 'ИП карта / счёт ИП', 'QR': 'QR (Антон)' };
   const TYPE_S = { 'Наличные': 'Касса', '₽': 'Касса', 'безнал': 'Безнал', '₽/безнал': 'Касса + счёт', 'Карта': 'ИП карта', 'QR': 'QR' };
-  const TYPE_TIP = { 'Наличные': 'Деньги в кассу или из кассы. В «Назначении» — от кого или кому.', 'безнал': 'Меняет счёт, который написан в «Назначении»: Антон, Глеб, Копилка, Масло/антифриз, ИП карта (Антон), Rossko, Mikado, ПП. Если там статья (Аренда, Налог…) — платится с ИП карты.', '₽/безнал': 'Меняет сразу и кассу, и счёт из «Назначения». Например, Антон забрал из кассы в счёт доли: минус, Назначение — Антон.', 'Карта': 'Клиент заплатил картой через терминал — деньги на ИП карте.', 'QR': 'Клиент заплатил по QR — деньги на ИП карте.' };
+  const TYPE_TIP = { 'Наличные': 'Деньги в кассу или из кассы. В «Назначении» — от кого или кому.', 'безнал': 'Меняет счёт, который написан в «Назначении»: Антон, Глеб, Копилка, Масло/антифриз, ИП карта (Антон), Rossko, Mikado, ПП. Аренду, налог и другие статьи плати типом «ИП карта / счёт ИП».', '₽/безнал': 'Меняет сразу и кассу, и счёт из «Назначения». Например, Антон забрал из кассы в счёт доли: минус, Назначение — Антон.', 'Карта': 'Деньги ушли с ИП счёта или пришли на него. В «Назначении» — за что: поставщик, аренда, налог… Оплаты клиентов картой вносятся в наряде.', 'QR': 'Клиент заплатил по QR — деньги на ИП карте.' };
   function payFormNew(prev) { return { id: null, date: prev ? prev.date : S.todayISO(), amount: null, dir: prev ? prev.dir : -1, type: prev ? prev.type : 'Наличные', who: '', note: '', adv: true }; }
   function payFormEdit(p) {
     const zp = low(p.note) === 'зп' && PF_ZP.includes(low(p.name)), nm = pfCanon(p.name) || p.name;
@@ -4864,6 +4865,16 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       ['Прочее', ['Личные расходы', 'СТО', 'Бонусы'].map(n => [n, n])],
     ].filter(g => g[1].length);
   }
+  /* Назначения, которые подходят к типу платежа: убраны только те, что программа с этим типом не учтёт (сверка уедет) */
+  const PF_CASH_ACC = ['Антон', 'Глеб', 'Копилка', 'Личные расходы'];
+  function pfGroupsFor(type) {
+    const G = pfGroups();
+    if (type === '₽/безнал') return G.map(([g, it]) => [g, it.filter(([v]) => PF_CASH_ACC.includes(v))]).filter(g => g[1].length);
+    if (type === 'Наличные' || type === '₽') return G.filter(([g]) => g !== 'Кошельки и доли');
+    if (type === 'Карта' || type === 'QR') return G.filter(([g]) => g !== 'Кошельки и доли' && g !== 'Зарплата');
+    if (type === 'безнал') return G.filter(([g]) => g !== 'Налоги и постоянные'); /* статьи платятся с «ИП карта / счёт ИП» */
+    return G;
+  }
   function pfCanon(name) { const n = low(name); for (const g of pfGroups()) for (const [v] of g[1]) if (!v.includes('|') && low(v) === n) return v; return null; }
   function pfWho(f) { const w = f.who || ''; return w.endsWith('|ЗП') ? { name: w.slice(0, -3), note: 'ЗП' } : { name: w, note: (f.note || '').trim() }; }
   function payEditable(p) { return p.order == null && !p.link && p.receipt == null && !!pfCanon(p.name); }
@@ -4873,17 +4884,17 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <label class="f">Дата<input id="pf-date" type="date" value="${esc(f.date)}" data-pf="date"></label>
           <div class="f"><span>Деньги</span><div class="seg"><button class="${f.dir > 0 ? 'on' : ''}" data-act="pf-dir" data-v="1">Пришли +</button><button class="${f.dir < 0 ? 'on' : ''}" data-act="pf-dir" data-v="-1">Ушли −</button></div></div>
           <label class="f">Сумма, ₽<input id="pf-amount" value="${esc(nv(f.amount))}" data-pf="amount" inputmode="decimal"></label>
-          <label class="f"><span class="tip-t" title="${esc(TYPE_TIP[tp] || '')}">Тип</span><select id="pf-type" data-pf="type">${S.PAY_TYPES.map(t => `<option value="${esc(t)}"${tp === t ? ' selected' : ''} title="${esc(TYPE_TIP[t] || '')}">${esc(TYPE_L[t] || t)}</option>`).join('')}</select></label>
-          <label class="f"><span class="tip-t" title="Только из списка. Оплаты клиентов вносятся в наряде или продаже.">Назначение</span><select id="pf-who" data-pf="who"><option value=""${f.who ? '' : ' selected'}>— выбери —</option>${pfGroups().map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(([v, l]) => `<option value="${esc(v)}"${f.who === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('')}</select></label>
+          <label class="f"><span class="tip-t" title="${esc(TYPE_TIP[tp] || '')}">Тип</span><select id="pf-type" data-pf="type">${S.PAY_TYPES.filter(t => t !== 'QR' || tp === 'QR').map(t => `<option value="${esc(t)}"${tp === t ? ' selected' : ''} title="${esc(TYPE_TIP[t] || '')}">${esc(TYPE_L[t] || t)}</option>`).join('')}</select></label>
+          <label class="f"><span class="tip-t" title="Только из списка. Оплаты клиентов вносятся в наряде или продаже.">Назначение</span><select id="pf-who" data-pf="who"><option value=""${f.who ? '' : ' selected'}>— выбери —</option>${(() => { const G = pfGroupsFor(tp); if (f.who && !G.some(([, it]) => it.some(([v]) => v === f.who))) G.unshift(['Сейчас в записи', [[f.who, f.who.replace('|ЗП', ' — зарплата')]]]); return G; })().map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(([v, l]) => `<option value="${esc(v)}"${f.who === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('')}</select></label>
           ${(f.who || '').endsWith('|ЗП') ? `<label class="f">Примечание<input id="pf-note" value="" disabled placeholder="ЗП — ставится само"></label>` : `<label class="f">Примечание<input id="pf-note" value="${esc(f.note)}" data-pf="note" autocomplete="off"></label>`}
         </div>
         ${payDupHTML(f)}
         <div class="actions"><button class="btn primary" data-act="pay-save">${f.id ? 'Сохранить' : 'Записать'}</button>
         <details class="memo"><summary>Памятка по типам</summary><ul>
           <li><b>Касса (наличные)</b> — деньги в кассу или из кассы.</li>
-          <li><b>Безнал</b> — в «Назначении» чей счёт: Антон, Глеб, Копилка, Масло/антифриз, ИП карта (Антон), Rossko, Mikado, ПП. Статья (Аренда, Налог…) — платится с ИП карты.</li>
-          <li><b>Касса + счёт</b> — меняет и кассу, и счёт того, кто в «Назначении» (Антон забрал из кассы в счёт доли).</li>
-          <li><b>ИП карта — терминал / QR</b> — клиент заплатил на карту или счёт ИП.</li>
+          <li><b>Безнал</b> — в «Назначении» чей счёт: Антон, Глеб, Копилка, Масло/антифриз, ИП карта (Антон), Rossko, Mikado, ПП.</li>
+          <li><b>Касса + счёт</b> — меняет и кассу, и счёт того, кто в «Назначении» (Антон забрал из кассы в счёт доли). Только для Антона, Глеба, Копилки и Личных расходов.</li>
+          <li><b>ИП карта / счёт ИП</b> — заплатил с ИП счёта: поставщику (Rossko, Mikado, ПП), аренду, налог, свет… Одна запись. Оплаты клиентов картой и по QR вносятся в наряде или продаже.</li>
           <li>Зарплата Антону и Глебу: Назначение «Антон — зарплата» или «Глеб — зарплата».</li><li>Выплата Никите или подрядчику: Ушли −, Назначение «Никита» или «Подрядчик». Остаток видно в «Отчёте».</li>
           <li>Оплаты клиентов здесь не вносятся — только в наряде или продаже. В списке ниже они видны для справки без кнопки «Изменить»; номер наряда — ссылка на наряд.</li>
         </ul></details></div>${payPreview()}</section>`;
@@ -6486,7 +6497,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.xf === 'how' || el.dataset.xf === 'what') { ui.expForm[el.dataset.xf] = el.value; if (el.dataset.xf === 'how') ui.expForm.howSet = true; return; }
     if (el.dataset.xf === 'sup') { const f = ui.expForm; f.sup = el.value; if (isBalanceSup(f.sup) && !f.howSet && f.how !== 'debt') { f.how = 'debt'; render(); } return; }
     if (el.dataset.pf === 'who') { ui.payForm.who = el.value; render(); return; }
-    if (el.dataset.pf === 'type') { ui.payForm.type = el.value; const e2 = $('#pf-eff'); if (e2) e2.outerHTML = payPreview(); return; }
+    if (el.dataset.pf === 'type') {
+      const f = ui.payForm; f.type = el.value;
+      if (f.who && !f.id && !pfGroupsFor(f.type).some(([, it]) => it.some(([v]) => v === f.who))) f.who = '';
+      render(); return;
+    }
     if (el.dataset.pp != null) {
       const ps = D.cfg.params.slice().sort((x, y) => (x.from < y.from ? -1 : 1));
       const p = ps[+el.dataset.pp], k = el.dataset.k;
