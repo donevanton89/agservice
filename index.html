@@ -1815,7 +1815,19 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   function setHTML(el, html) {
     if (setHTML.busy) { setTimeout(() => setHTML(el, html), 0); return; }
     setHTML.busy = true;
-    try { el.innerHTML = html; } finally { setHTML.busy = false; }
+    try { el.innerHTML = capOff(html); } finally { setHTML.busy = false; }
+  }
+  /* Телефон: поля пересоздаются на каждой букве, и клавиатура Android ставит заглавную на первые буквы.
+     Поэтому клавиатурные автозаглавные выключены у всех полей с самого создания,
+     а первую букву (кроме поиска) делаем заглавной сами — см. capFirst. */
+  const capOff = html => html.replace(/<(input|textarea)(?![^>]*autocapitalize)/g, '<$1 autocapitalize="none"');
+  function capFirst(e) {
+    const el = e.target;
+    if (!el || !(el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && /^(text|)$/.test(el.getAttribute('type') || '')))) return;
+    if (el.inputMode || el.classList.contains('search') || (el.dataset.act || '').includes('search') || el.id === 'q') return;
+    if (e.inputType && !e.inputType.startsWith('insert')) return;
+    const v = el.value;
+    if (v.length === 1 && /^[a-zа-яё]$/.test(v)) { el.value = v.toUpperCase(); try { el.setSelectionRange(1, 1); } catch (er) {} }
   }
   /* масло: запоминаем закупку в строке продажи, чтобы смена цены в карточке не пересчитывала прошлое */
   const oilPct = () => (D.cfg.oilReserve == null ? 15 : +D.cfg.oilReserve || 0);
@@ -2955,7 +2967,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     return `<button type="button" class="wpct${w.noPct ? '' : ' on'}" data-act="w-pct" data-i="${i}" title="${w.noPct ? 'Без наценки. Нажми, чтобы добавить +' + w.pct + '%' : 'Наценка +' + w.pct + '%: клиенту ' + rub(w.sum || 0) + '. Нажми, чтобы убрать'}">${w.noPct ? 'без %' : '+' + fmt(w.pct, w.pct % 1 ? 1 : 0) + '%' + (w.base != null ? ' = ' + fmt(w.sum || 0) : '')}</button>`;
   }
   function newPart(extra) {
-    return Object.assign({ id: uid('p'), date: S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', order: ui.editor.order.num, art: '', name: '', brand: '', cost: null, qty: 1, price: null, sum: 0, client: '', no: true, ret: false, retDone: false, month: null, paid: null, app: true }, extra || {});
+    return Object.assign({ id: uid('p'), date: S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', order: ui.editor.order.num, art: '', name: '', brand: '', cost: null, qty: 1, qtyNew: true, price: null, sum: 0, client: '', no: true, ret: false, retDone: false, month: null, paid: null, app: true }, extra || {});
   }
   function edTotals() {
     const E = ui.editor, o = Object.assign({}, E.order), num = E.order.num ?? -1;
@@ -3038,7 +3050,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
               <label class="f">Бренд<input id="p-br-${i}" value="${esc(p.brand)}" data-p="${i}" data-k="brand"></label>
               ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="p-cost-${i}" value="${esc(nv(p.cost))}" data-p="${i}" data-k="cost" inputmode="decimal" placeholder="${p.sup === 'Склад' ? 'со склада' : ''}" title="${esc(stockCostTip(p))}"></label>`}
 ${oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="p-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-p="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
-              <label class="f num">Кол-во<input id="p-qty-${i}" value="${esc(nv(p.qty))}" data-p="${i}" data-k="qty" inputmode="decimal"></label>
+              <label class="f num">Кол-во<input id="p-qty-${i}" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-p="${i}" data-k="qty" inputmode="decimal" placeholder="1"></label>
               <label class="f num">Цена<input id="p-pr-${i}" value="${esc(nv(p.price))}" data-p="${i}" data-k="price" inputmode="decimal"></label>
               <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
               <div class="toggles">
@@ -3227,7 +3239,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       <input id="p-name-${i}" value="${esc(p.name)}" data-p="${i}" data-k="name" placeholder="Название" aria-label="Название" title="Название">
       <input id="p-br-${i}" value="${esc(p.brand)}" data-p="${i}" data-k="brand" placeholder="Бренд" aria-label="Бренд" title="Бренд">
       <span class="cst"><input id="p-cost-${i}" class="r" value="${esc(nv(p.cost))}" data-p="${i}" data-k="cost" inputmode="decimal" placeholder="${p.sup === 'Склад' ? 'склад' : 'Закупка'}" aria-label="Закупка" title="${esc(stockCostTip(p))}"></span>
-      <input id="p-qty-${i}" class="r" value="${esc(nv(p.qty))}" data-p="${i}" data-k="qty" inputmode="decimal" placeholder="Кол." aria-label="Кол-во" title="Кол-во">
+      <input id="p-qty-${i}" class="r" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-p="${i}" data-k="qty" inputmode="decimal" placeholder="${p.qtyNew ? '1' : 'Кол.'}" aria-label="Кол-во" title="Кол-во (пусто = 1)">
       <input id="p-pr-${i}" class="r" value="${esc(nv(p.price))}" data-p="${i}" data-k="price" inputmode="decimal" placeholder="Цена" aria-label="Цена" title="Цена">
       <b class="cr-sum">${rub(p.sum)}</b>
       ${partTogglesC(E, p, i)}</div>${ask}`;
@@ -3697,6 +3709,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         return;
       }
       p[k] = numIn(el.value);
+      if (k === 'qty') { if (p.qty == null) { p.qty = 1; p.qtyNew = true; } else delete p.qtyNew; } /* пустое кол-во = 1 */
       if (k === 'oilCost') { p.oilArt = p.art; delete p.oilBase; delete p.oilFrom; if (p.oilCost == null) delete p.oilCost; return; }
       if (k === 'cost') p.price = S.markupPrice(D.cfg, p.cost);
       p.sum = r2((p.price || 0) * (p.qty || 0));
@@ -3735,6 +3748,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   const numTxt = o => (o.num != null ? '№ ' + o.num : 'б/н') + (o.docNum ? ' · ' + o.docNum : '');
   function saveOrder() {
+    if (ui.editor) ui.editor.parts.forEach(p => { delete p.qtyNew; });
     ui.stash = { editor: ui.editor };
     const E = ui.editor, o = E.order;
     o.client = (o.client || '').trim(); o.note = (o.note || '').trim();
@@ -4344,7 +4358,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     return `Добавлена «Сдача» ${rub(n)}: доход СТО, отдельной оплатой без чека — в налог не идёт`;
   }
   function saleRowNew(extra) {
-    return Object.assign({ id: uid('p'), date: ui.sale ? ui.sale.date : S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', order: null, art: '', name: '', brand: '', cost: null, qty: 1, price: null, sum: 0, no: true, ret: false, retDone: false, paid: null, app: true }, extra || {});
+    return Object.assign({ id: uid('p'), date: ui.sale ? ui.sale.date : S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', order: null, art: '', name: '', brand: '', cost: null, qty: 1, qtyNew: true, price: null, sum: 0, no: true, ret: false, retDone: false, paid: null, app: true }, extra || {});
   }
   function salePrice(cost) { return ui.sale && isOwn(ui.sale.client) ? cost : S.markupPrice(D.cfg, cost); }
   function saleTotals() {
@@ -4379,7 +4393,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
               <label class="f grow">Название<input id="sp-name-${i}" value="${esc(p.name)}" data-sp="${i}" data-k="name"></label>
               <label class="f">Бренд<input id="sp-br-${i}" value="${esc(p.brand)}" data-sp="${i}" data-k="brand"></label>
               ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="sp-cost-${i}" value="${esc(nv(p.cost))}" data-sp="${i}" data-k="cost" inputmode="decimal" title="${esc(stockCostTip(p))}"></label>`}${oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="sp-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-sp="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
-              <label class="f num">Кол-во<input id="sp-qty-${i}" value="${esc(nv(p.qty))}" data-sp="${i}" data-k="qty" inputmode="decimal"></label>
+              <label class="f num">Кол-во<input id="sp-qty-${i}" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-sp="${i}" data-k="qty" inputmode="decimal" placeholder="1"></label>
               <label class="f num">Цена<input id="sp-pr-${i}" value="${esc(nv(p.price))}" data-sp="${i}" data-k="price" inputmode="decimal"></label>
               <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
               <div class="toggles">
@@ -4452,6 +4466,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         return;
       }
       p[k] = numIn(el.value);
+      if (k === 'qty') { if (p.qty == null) { p.qty = 1; p.qtyNew = true; } else delete p.qtyNew; } /* пустое кол-во = 1 */
       if (k === 'oilCost') { p.oilArt = p.art; delete p.oilBase; delete p.oilFrom; if (p.oilCost == null) delete p.oilCost; return; }
       if (k === 'cost') p.price = salePrice(p.cost);
       p.sum = r2((p.price || 0) * (p.qty || 0));
@@ -4471,6 +4486,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.act === 'sa-paste-no') { Sx.paste.no = el.checked; return; }
   }
   function saveSale() {
+    if (ui.sale) ui.sale.rows.forEach(p => { delete p.qtyNew; });
     ui.stash = { sale: ui.sale };
     const Sx = ui.sale;
     Sx.client = (Sx.client || '').trim();
@@ -4856,15 +4872,27 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   const TRW = ['Касса', W_IP, 'Антон', 'Глеб', 'Копилка', 'Масло/антифриз'];
   const TRW_TIP = {
     'Касса': 'Наличные в кассе СТО',
-    [W_IP]: 'Карта и расчётный счёт ИП',
-    'Антон': 'Доля Антона. «Касса → Антон» — Антон забрал из кассы в счёт доли. «Антон → Касса» — положил свои в кассу',
-    'Глеб': 'Доля Глеба. «Касса → Глеб» — Глеб забрал из кассы в счёт доли. «Глеб → Касса» — положил свои в кассу',
-    'Копилка': 'Отложенные деньги СТО. Между Копилкой и Антоном, Глебом, Маслом. Потратить из копилки наличными — «Ушли −», тип «Касса», Назначение «Копилка»',
-    'Масло/антифриз': 'Деньги на следующую бочку. Между Маслом и Антоном, Глебом, Копилкой',
+    [W_IP]: 'Карта и расчётный счёт ИП. Касса → ИП карта — внёс наличные на счёт, ИП карта → Касса — снял наличные',
+    'Антон': 'Доля Антона. Например, Антон → Копилка: часть доли Антона отложили в копилку',
+    'Глеб': 'Доля Глеба. Например, Глеб → Антон: часть доли Глеба переписали на Антона',
+    'Копилка': 'Отложенные деньги СТО',
+    'Масло/антифриз': 'Деньги на следующую бочку',
   };
   const trPhys = w => w === 'Касса' || w === W_IP;
   /* куда можно перевести из «from»: Копилку и Масло с Кассой/ИП картаом не связываем — это не перевод, а трата или приход */
-  const trCanTo = (from, to) => from !== to && !((trPhys(from) && (to === 'Копилка' || to === 'Масло/антифриз')) || (trPhys(to) && (from === 'Копилка' || from === 'Масло/антифриз')));
+  /* Перевод — только внутри СТО: Касса ↔ ИП карта, и между Антоном, Глебом, Копилкой, Маслом.
+     Забрал себе / положил свои — это «Ушли −» / «Пришли +» с назначением «Антон — из доли» / «Антон — свои в СТО». */
+  const trCanTo = (from, to) => from !== to && trPhys(from) === trPhys(to);
+  const SH_P = ['Антон', 'Глеб'];
+  /* строка (или пара строк) «Антон/Глеб ↔ Касса/ИП карта» — это выдача из доли или свои деньги в СТО */
+  function shareOf(p) {
+    const t = trFromOld(p); if (!t) return null;
+    if (trPhys(t.from) && SH_P.includes(t.to)) return { person: t.to, phys: t.from, dir: -1 };
+    if (trPhys(t.to) && SH_P.includes(t.from)) return { person: t.from, phys: t.to, dir: 1 };
+    return null;
+  }
+  const isTrRow = p => !!trFromOld(p) && !shareOf(p);
+  const shLabel = (person, dir) => person + (dir < 0 ? ' — из доли' : ' — свои в СТО');
   function trRows(from, to, sum, date, note, tr) {
     const X0 = r2(Math.abs(sum)), base = { date, order: null, receipt: null, note: note || '', app: true, tr, trFrom: from, trTo: to };
     const R = (type, name, amount) => Object.assign({}, base, { type, name, amount });
@@ -4885,6 +4913,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function payFormNew(prev) { return { id: null, date: prev ? prev.date : S.todayISO(), amount: null, dir: prev ? prev.dir : -1, type: prev ? prev.type : 'Наличные', who: '', note: '', from: prev ? prev.from : '', to: prev ? prev.to : '', adv: true }; }
   function payFormEdit(p) {
+    const sh = shareOf(p);
+    if (sh) return { id: p.id, tr: p.tr || null, date: p.date, amount: Math.abs(p.amount), dir: sh.dir, type: sh.phys === 'Касса' ? 'Наличные' : 'Карта', who: sh.person + '|ДОЛЯ', note: p.note || '', adv: true };
     const t = trFromOld(p);
     if (t) return { id: p.id, tr: p.tr || null, date: p.date, amount: Math.abs(p.amount), dir: 0, type: 'Наличные', who: '', note: p.note || '', from: t.from, to: t.to, adv: true };
     if (p.type === '₽/безнал') return { id: p.id, date: p.date, amount: Math.abs(p.amount), dir: p.amount < 0 ? -1 : 1, type: 'Наличные', who: pfCanon(p.name) || p.name, note: p.note || '', adv: true };
@@ -4898,7 +4928,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const sups = [...new Set([...(D.cfg.balanceSuppliers || []), ...(D.cfg.suppliers || [])])];
     return [
       ['Кошельки и доли', S.ACCOUNTS.map(n => [n, n])],
-      ['Зарплата', [['Антон|ЗП', 'Антон — зарплата'], ['Глеб|ЗП', 'Глеб — зарплата'], ['Никита', 'Никита'], ['Подрядчик', 'Подрядчик']]],
+      ['Антон и Глеб', [['Антон|ДОЛЯ', 'Антон — доля'], ['Антон|ЗП', 'Антон — зарплата'], ['Глеб|ДОЛЯ', 'Глеб — доля'], ['Глеб|ЗП', 'Глеб — зарплата']]],
+      ['Никита и подрядчик', [['Никита', 'Никита'], ['Подрядчик', 'Подрядчик']]],
       ['Поставщики', sups.map(n => [n, n])],
       ['Налоги и постоянные', fx.map(n => [n, n])],
       ['Прочее', [['Личные расходы', 'Личные расходы']]], /* «СТО» и «Бонусы» — из старого Excel, старые записи остаются */
@@ -4906,40 +4937,48 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   /* Назначения, которые подходят к типу платежа: убраны только те, что программа с этим типом не учтёт (сверка уедет) */
   const PF_OPT_TIP = { 'Копилка': 'Ушли − : потратил деньги копилки наличными из кассы. Пришли + : положил в кассу деньги для копилки', 'Личные расходы': 'Мелочи на СТО: чай, вода и т.п.' };
+  function pfOptTip(v, f, tp) {
+    const who = v.split('|')[0];
+    if (v.endsWith('|ДОЛЯ')) return f.dir < 0 ? who + ' забрал себе из уже начисленной доли (её видно в карточке «' + who + ' доля» вверху). Доля уменьшится на эту сумму' : who + ' положил свои деньги в СТО. Доля вырастет: СТО ему должна больше';
+    if (v.endsWith('|ЗП')) return 'Аванс зарплаты ' + (who === 'Антон' ? 'Антону' : 'Глебу') + ' в этом месяце, пока месяц не закрыт. При закрытии месяца вычтется из его ЗП («уже взял …»)';
+    return tp === 'Наличные' ? PF_OPT_TIP[v] || '' : '';
+  }
+  const pfOptLabel = (v, l, f) => v.endsWith('|ДОЛЯ') ? shLabel(v.split('|')[0], f.dir < 0 ? -1 : 1) : l;
   const PF_CASH_ACC = ['Антон', 'Глеб', 'Копилка', 'Личные расходы'];
   function pfGroupsFor(type) {
     const G = pfGroups();
     if (type === '₽/безнал') return G.map(([g, it]) => [g, it.filter(([v]) => PF_CASH_ACC.includes(v))]).filter(g => g[1].length);
+    if (type === 'безнал') return G.map(([g, it]) => [g, it.filter(([v]) => !v.endsWith('|ДОЛЯ'))]).filter(g => g[1].length && g[0] !== 'Налоги и постоянные');
     if (type === 'Наличные' || type === '₽') return G.map(([g, it]) => g === 'Кошельки и доли' ? [g, it.filter(([v]) => v === 'Копилка')] : [g, it]).filter(g => g[1].length);
-    if (type === 'Карта' || type === 'QR') return G.filter(([g]) => g !== 'Кошельки и доли' && g !== 'Зарплата');
+    if (type === 'Карта' || type === 'QR') return G.map(([g, it]) => g === 'Антон и Глеб' ? [g, it.filter(([v]) => v.endsWith('|ДОЛЯ'))] : [g, it]).filter(([g, it]) => it.length && g !== 'Кошельки и доли' && g !== 'Никита и подрядчик');
     if (type === 'безнал') return G.filter(([g]) => g !== 'Налоги и постоянные'); /* статьи платятся с «ИП карта / счёт ИП» */
     return G;
   }
   function pfCanon(name) { const n = low(name); for (const g of pfGroups()) for (const [v] of g[1]) if (!v.includes('|') && low(v) === n) return v; return null; }
-  function pfWho(f) { const w = f.who || ''; return w.endsWith('|ЗП') ? { name: w.slice(0, -3), note: 'ЗП' } : { name: w, note: (f.note || '').trim() }; }
+  function pfWho(f) { const w = f.who || ''; return w.endsWith('|ЗП') ? { name: w.slice(0, -3), note: 'ЗП' } : w.endsWith('|ДОЛЯ') ? { name: w.slice(0, -5), note: (f.note || '').trim(), share: true } : { name: w, note: (f.note || '').trim() }; }
   function payEditable(p) { return p.order == null && !p.link && p.receipt == null && (!!p.trFrom || !!pfCanon(p.name)); }
   function payFormHTML() {
     const f = ui.payForm, tp = f.type === '₽' ? 'Наличные' : f.type;
     return `<section class="block form"><div class="block-head"><h3>${f.id ? 'Изменить платёж' : 'Новый платёж'}</h3>${f.id ? '<button class="link" data-act="pay-cancel">Отмена</button>' : ''}</div><div class="grid g4">
           <label class="f">Дата<input id="pf-date" type="date" value="${esc(f.date)}" data-pf="date"></label>
-          <div class="f"><span>Деньги</span><div class="seg seg3"><button class="${f.dir > 0 ? 'on' : ''}" data-act="pf-dir" data-v="1" title="Деньги пришли со стороны: возврат, бонус, что-то продали">Пришли +</button><button class="${f.dir < 0 ? 'on' : ''}" data-act="pf-dir" data-v="-1" title="Деньги ушли на сторону: поставщику, аренда, зарплата, личные расходы">Ушли −</button><button class="${f.dir === 0 ? 'on' : ''}" data-act="pf-dir" data-v="0" title="Переложить между своими: Касса, ИП карта, Антон, Глеб, Копилка, Масло. Деньги СТО не прибавляются и не убавляются">Перевод ⇄</button></div></div>
+          <div class="f"><span>Деньги</span><div class="seg seg3"><button class="${f.dir > 0 ? 'on' : ''}" data-act="pf-dir" data-v="1" title="Деньги пришли в СТО: возврат от поставщика, бонус, Антон или Глеб положили свои">Пришли +</button><button class="${f.dir < 0 ? 'on' : ''}" data-act="pf-dir" data-v="-1" title="Деньги ушли из СТО: поставщику, аренда, зарплата, Антон или Глеб забрали из доли, личные расходы">Ушли −</button><button class="${f.dir === 0 ? 'on' : ''}" data-act="pf-dir" data-v="0" title="Деньги остаются в СТО: Касса ↔ ИП карта, или между Антоном, Глебом, Копилкой, Маслом. Забрал себе — это «Ушли −», Назначение «Антон — из доли»">Перевод ⇄</button></div></div>
           <label class="f">Сумма, ₽<input id="pf-amount" value="${esc(nv(f.amount))}" data-pf="amount" inputmode="decimal"></label>
           ${f.dir === 0 ? `<label class="f"><span class="tip-t" title="Откуда ушли деньги">Откуда</span><select id="pf-from" data-pf="from"><option value="">— выбери —</option>${TRW.map(w => `<option value="${esc(w)}"${f.from === w ? ' selected' : ''} title="${esc(TRW_TIP[w])}">${esc(w)}</option>`).join('')}</select></label>
-          <label class="f"><span class="tip-t" title="Куда пришли деньги. Копилку и Масло можно переводить только между собой и Антоном, Глебом">Куда</span><select id="pf-to" data-pf="to"><option value="">— выбери —</option>${TRW.filter(w => !f.from || trCanTo(f.from, w)).map(w => `<option value="${esc(w)}"${f.to === w ? ' selected' : ''} title="${esc(TRW_TIP[w])}">${esc(w)}</option>`).join('')}</select></label>
+          <label class="f"><span class="tip-t" title="Куда пришли деньги. Касса — только с ИП картой; Антон, Глеб, Копилка, Масло — только между собой">Куда</span><select id="pf-to" data-pf="to"><option value="">— выбери —</option>${TRW.filter(w => !f.from || trCanTo(f.from, w)).map(w => `<option value="${esc(w)}"${f.to === w ? ' selected' : ''} title="${esc(TRW_TIP[w])}">${esc(w)}</option>`).join('')}</select></label>
           <label class="f">Примечание<input id="pf-note" value="${esc(f.note)}" data-pf="note" autocomplete="off"></label>` : `
           <label class="f"><span class="tip-t" title="${esc(TYPE_TIP[tp] || '')}">Тип</span><select id="pf-type" data-pf="type">${S.PAY_TYPES.filter(t => t !== '₽/безнал' && (t !== 'QR' || tp === 'QR')).map(t => `<option value="${esc(t)}"${tp === t ? ' selected' : ''} title="${esc(TYPE_TIP[t] || '')}">${esc(TYPE_L[t] || t)}</option>`).join('')}</select></label>
-          <label class="f"><span class="tip-t" title="Только из списка. Оплаты клиентов вносятся в наряде или продаже.">Назначение</span><select id="pf-who" data-pf="who"><option value=""${f.who ? '' : ' selected'}>— выбери —</option>${(() => { const G = pfGroupsFor(tp); if (f.who && !G.some(([, it]) => it.some(([v]) => v === f.who))) G.unshift(['Сейчас в записи', [[f.who, f.who.replace('|ЗП', ' — зарплата')]]]); return G; })().map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(([v, l]) => `<option value="${esc(v)}"${f.who === v ? ' selected' : ''}${PF_OPT_TIP[v] && tp === 'Наличные' ? ` title="${esc(PF_OPT_TIP[v])}"` : ''}>${esc(l)}</option>`).join('')}</optgroup>`).join('')}</select></label>
+          <label class="f"><span class="tip-t" title="${esc(f.who && pfOptTip(f.who, f, tp) ? pfOptTip(f.who, f, tp) : 'Только из списка. Оплаты клиентов вносятся в наряде или продаже.')}">Назначение</span><select id="pf-who" data-pf="who"><option value=""${f.who ? '' : ' selected'}>— выбери —</option>${(() => { const G = pfGroupsFor(tp); if (f.who && !G.some(([, it]) => it.some(([v]) => v === f.who))) G.unshift(['Сейчас в записи', [[f.who, f.who.replace('|ЗП', ' — зарплата')]]]); return G; })().map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(([v, l]) => `<option value="${esc(v)}"${f.who === v ? ' selected' : ''}${pfOptTip(v, f, tp) ? ` title="${esc(pfOptTip(v, f, tp))}"` : ''}>${esc(pfOptLabel(v, l, f))}</option>`).join('')}</optgroup>`).join('')}</select></label>
           ${(f.who || '').endsWith('|ЗП') ? `<label class="f">Примечание<input id="pf-note" value="" disabled placeholder="ЗП — ставится само"></label>` : `<label class="f">Примечание<input id="pf-note" value="${esc(f.note)}" data-pf="note" autocomplete="off"></label>`}`}
         </div>
         ${payDupHTML(f)}
         <div class="actions"><button class="btn primary" data-act="pay-save">${f.id ? 'Сохранить' : 'Записать'}</button>
-        <details class="memo"><summary>Памятка по типам</summary><ul>
-          <li><b>Касса (наличные)</b> — деньги в кассу или из кассы.</li>
-          <li><b>Безнал</b> — в «Назначении» чей счёт: Антон, Глеб, Копилка, Масло/антифриз, ИП карта (Антон), Rossko, Mikado, ПП.</li>
-          <li><b>Перевод ⇄</b> — переложить между своими: Антон забрал из кассы, снял с ИП счёта в кассу, из Копилки на Масло… Деньги СТО не меняются.</li>
-          <li><b>ИП карта / счёт ИП</b> — заплатил с ИП счёта: поставщику (Rossko, Mikado, ПП), аренду, налог, свет… Одна запись. Оплаты клиентов картой и по QR вносятся в наряде или продаже.</li>
-          <li>Зарплата Антону и Глебу: Назначение «Антон — зарплата» или «Глеб — зарплата».</li><li>Выплата Никите или подрядчику: Ушли −, Назначение «Никита» или «Подрядчик». Остаток видно в «Отчёте».</li>
-          <li>Оплаты клиентов здесь не вносятся — только в наряде или продаже. В списке ниже они видны для справки без кнопки «Изменить»; номер наряда — ссылка на наряд.</li>
+        <details class="memo"><summary>Памятка</summary><ul>
+          <li><b>Пришли +</b> — деньги пришли в СТО. <b>Ушли −</b> — ушли из СТО. <b>Перевод ⇄</b> — остались в СТО, просто переложили: Касса ↔ ИП карта, или между Антоном, Глебом, Копилкой, Маслом.</li>
+          <li><b>Касса</b> — наличные. <b>ИП карта / счёт ИП</b> — с карты или счёта ИП: поставщикам, аренда, налог, свет… <b>Безнал</b> — с личных карт и счетов: Rossko, Mikado, ПП, перевод на долю, начисление ЗП.</li>
+          <li><b>Антон/Глеб — из доли</b> (Ушли −) — забрал себе из уже начисленной доли. <b>— свои в СТО</b> (Пришли +) — положил свои деньги. <b>— зарплата</b> — аванс ЗП, пока месяц не закрыт.</li>
+          <li><b>Копилка</b> с типом «Касса»: Ушли − — потратил деньги копилки наличными, Пришли + — положил в кассу деньги для копилки.</li>
+          <li><b>Никита, Подрядчик</b> — выплата: Ушли −. Остаток видно в «Отчёте».</li>
+          <li>Оплаты клиентов здесь не вносятся — только в наряде или продаже. В списке они видны для справки; номер наряда — ссылка на наряд.</li>
         </ul></details></div>${payPreview()}</section>`;
   }
   /* «Касса» + Копилка или Личные расходы = старый тип «Касса + счёт» (меняет и кассу, и копилку) */
@@ -4948,6 +4987,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const f = ui.payForm;
     if (f.dir === 0) return f.amount && f.from && f.to && trCanTo(f.from, f.to) ? trRows(f.from, f.to, f.amount, f.date, (f.note || '').trim(), f.tr || 'tr') : null;
     const w = pfWho(f);
+    if (w.share) { if (!f.amount) return null; const ph = f.type === 'Карта' ? W_IP : 'Касса'; return f.dir < 0 ? trRows(ph, w.name, f.amount, f.date, w.note, f.tr || 'tr') : trRows(w.name, ph, f.amount, f.date, w.note, f.tr || 'tr'); }
     return f.amount && w.name ? [{ date: f.date, order: null, amount: r2(Math.abs(f.amount) * f.dir), type: pfRealType(f.type, w.name), receipt: null, name: w.name, note: w.note, app: true }] : null;
   }
   function payPreview() {
@@ -4976,9 +5016,20 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     toast(f.id ? 'Перевод изменён' : 'Перевод записан');
     changed();
   }
+  function saveShare() {
+    const f = ui.payForm, w = pfWho(f);
+    if (!f.amount || !f.date) { toast('Укажи дату и сумму'); return; }
+    const tr = uid('t'), rows = payFormRows().map(r => Object.assign(r, { id: uid('y'), tr }));
+    if (f.id) { const old = D.pays.find(p => p.id === f.id); D.pays = D.pays.filter(p => p.id !== f.id && !(old && old.tr && p.tr === old.tr)); }
+    D.pays.push(...rows);
+    ui.payForm = payFormNew(f);
+    toast(f.id ? 'Запись изменена' : shLabel(w.name, f.dir) + ': записано');
+    changed();
+  }
   function savePay() {
     const f = ui.payForm;
     if (f.dir === 0) { saveTransfer(); return; }
+    if (pfWho(f).share) { saveShare(); return; }
     const w = pfWho(f);
     if (!f.amount || !f.date || !w.name) { toast('Укажи дату, сумму и назначение из списка'); return; }
     const rec = { id: f.id || uid('y'), date: f.date, order: null, amount: r2(Math.abs(f.amount) * f.dir), type: pfRealType(f.type, w.name), receipt: null, name: w.name, note: w.note, app: true };
@@ -5021,11 +5072,12 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const list = D.pays.filter(p => S.monthOf(p.date) === m && (!q || (p.name + ' ' + p.note + ' ' + p.type + ' ' + (TYPE_S[p.type] || '') + ' ' + (p.order ?? '') + (p.trFrom ? ' перевод ' + p.trFrom + ' ' + p.trTo : '')).toLowerCase().includes(q)))
       .filter(p => { if (!p.trFrom) return true; if (seenTr.has(p.tr)) return false; seenTr.add(p.tr); return true; })
       .sort((a, b) => b.date.localeCompare(a.date) || (b.id > a.id ? 1 : -1));
-    const money = list.filter(p => !trFromOld(p));
+    const money = list.filter(p => !isTrRow(p));
     const inSum = money.filter(p => p.amount > 0).reduce((s, p) => s + p.amount, 0), outSum = money.filter(p => p.amount < 0).reduce((s, p) => s + p.amount, 0);
     if (!ui.payForm || !ui.payForm.adv) ui.payForm = payFormNew();
     const card = (l, v, hint, tip) => `<div class="kpi" title="${esc(tip || '')}"><span>${l}${hint ? ` <span class="kpi-hint">${hint}</span>` : ''}</span><b class="${v < 0 ? 'neg' : ''}">${rub(v)}</b></div>`;
     const tipOf = p => {
+      if (shareOf(p)) { const sh = shareOf(p); return shLabel(sh.person, sh.dir) + ' (' + (sh.phys === 'Касса' ? 'касса' : 'ИП карта') + '). Что изменилось: ' + effText(payEffects(p.tr ? D.pays.filter(y => y.tr === p.tr) : [p])); }
       if (trFromOld(p)) return 'Перевод ' + trFromOld(p).from + ' → ' + trFromOld(p).to + '. Что изменилось: ' + effText(payEffects(p.tr ? D.pays.filter(y => y.tr === p.tr) : [p]));
       const part = p.tr && D.pays.find(y => y.tr === p.tr && y.id !== p.id);
       return 'Что изменилось: ' + effText(payEffects([p])) + (part ? '\nВместе со строкой «' + part.name + ' ' + (part.amount > 0 ? '+' : '') + fmt(part.amount, 2) + '» — это один перевод, правятся и удаляются вместе.' : '');
@@ -5040,8 +5092,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       <div class="toolbar">${monthNav(m, 'pay-month')}<input id="pq" class="search" type="search" placeholder="Фильтр: назначение, примечание, тип" value="${esc(ui.payQ)}" data-act="pay-search" autocomplete="off"></div>
       <p class="muted small">За месяц: пришло <b class="pos">${rub(inSum)}</b>, ушло <b class="neg">${rub(-outSum)}</b>, строк ${list.length}. Наведи на строку — покажет, что она изменила.</p>
       <div class="scroll"><table class="tbl pays"><thead><tr><th>Дата</th><th>Назначение</th><th>Примечание</th><th>Тип</th><th>Чек</th><th>Наряд</th><th class="r">Сумма</th><th></th></tr></thead><tbody>
-      ${list.map(p => `<tr title="${esc(tipOf(p) + (payEditable(p) ? '' : '\n' + payRefWhy(p)))}"><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${trFromOld(p) ? esc(trFromOld(p).from) + ' → ' + esc(trFromOld(p).to) : esc(p.name)}${p.tr && !p.trFrom ? ' <span class="muted small">перевод</span>' : ''}</td><td class="muted">${esc(p.note)}</td><td>${trFromOld(p) ? 'Перевод' : p.type === '₽/безнал' ? 'Касса' : esc(TYPE_S[p.type] || p.type || '—')}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order != null ? `<a class="ord-link" role="button" tabindex="0" data-act="pay-go" data-id="${esc(p.id)}">${esc(String(p.order))}</a>` : ''}</td>
-        <td class="r ${trFromOld(p) ? '' : p.amount < 0 ? 'neg' : 'pos'}"><b>${trFromOld(p) ? '⇄ ' + fmt(Math.abs(p.amount), Math.round(p.amount) === p.amount ? 0 : 2) : (p.amount > 0 ? '+' : '') + fmt(p.amount, Math.round(p.amount) === p.amount ? 0 : 2)}</b></td>
+      ${list.map(p => `<tr title="${esc(tipOf(p) + (payEditable(p) ? '' : '\n' + payRefWhy(p)))}"><td><span class="tip-t" title="${esc(timeTip('pays', p.id))}">${dshort(p.date)}</span></td><td>${shareOf(p) ? esc(shLabel(shareOf(p).person, shareOf(p).dir)) : trFromOld(p) ? esc(trFromOld(p).from) + ' → ' + esc(trFromOld(p).to) : esc(p.name)}${p.tr && !p.trFrom ? ' <span class="muted small">перевод</span>' : ''}</td><td class="muted">${esc(p.note)}</td><td>${shareOf(p) ? (shareOf(p).phys === 'Касса' ? 'Касса' : 'ИП карта') : trFromOld(p) ? 'Перевод' : p.type === '₽/безнал' ? 'Касса' : esc(TYPE_S[p.type] || p.type || '—')}</td><td>${p.receipt === true ? 'Да' : p.receipt === false ? 'Нет' : ''}</td><td>${p.order != null ? `<a class="ord-link" role="button" tabindex="0" data-act="pay-go" data-id="${esc(p.id)}">${esc(String(p.order))}</a>` : ''}</td>
+        <td class="r ${isTrRow(p) ? '' : (shareOf(p) ? shareOf(p).dir : p.amount) < 0 ? 'neg' : 'pos'}"><b>${shareOf(p) ? (shareOf(p).dir < 0 ? '−' : '+') + fmt(Math.abs(p.amount), Math.round(p.amount) === p.amount ? 0 : 2) : trFromOld(p) ? '⇄ ' + fmt(Math.abs(p.amount), Math.round(p.amount) === p.amount ? 0 : 2) : (p.amount > 0 ? '+' : '') + fmt(p.amount, Math.round(p.amount) === p.amount ? 0 : 2)}</b></td>
         <td class="r nowrap">${!payEditable(p) ? '' : isLockedM(S.monthOf(p.date)) ? `<span class="muted" title="${esc(S.monthLabel(S.monthOf(p.date)))} закрыт — менять нельзя. «Отчёт» → «Открыть для правки»">🔒</span>` : ui.payDel === p.id ? `<button class="btn small danger" data-act="pay-del-yes" data-id="${esc(p.id)}">Удалить${p.tr && !p.trFrom ? ' обе строки' : ''}</button><button class="btn small ghost" data-act="pay-del-no">Нет</button>` : `<span class="acts"><button class="link small" data-act="pay-edit" data-id="${esc(p.id)}">Изменить</button><button class="x" data-act="pay-del" data-id="${esc(p.id)}" aria-label="Удалить">×</button></span>`}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">В этом месяце платежей нет.</td></tr>'}
       </tbody></table></div>`;
   }
@@ -6466,6 +6518,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     ui.editor.paste.items = res.items.map(it => Object.assign(it, { on: true })); applySite(ui.editor.paste, res);
     paintEditor();
   });
+  document.addEventListener('input', capFirst, true);
   document.addEventListener('input', e => {
     const el = e.target;
     if (el.dataset.calc) { calcInput(el); return; }
@@ -6674,6 +6727,21 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       ui.error = 'Яндекс не дал доступ: ' + (h.get('error_description') || h.get('error'));
       history.replaceState(null, '', location.pathname + location.search);
     }
+  })();
+  /* Телефон: «Назад» (кнопка или свайп) — сначала наверх страницы (или открытого наряда/продажи).
+     Уже наверху — подсказка; второй «Назад» за 2 секунды — обычный выход. */
+  (function backToTop() {
+    if (!matchMedia('(pointer: coarse)').matches) return;
+    const arm = () => { try { history.pushState({ stoBack: 1 }, ''); } catch (e) {} };
+    let lastAt = 0;
+    arm();
+    window.addEventListener('popstate', () => {
+      const boxes = ['#editor:not([hidden]) .sheet-body', '#saleEd:not([hidden]) .sheet-body'].map(q => $(q)).filter(Boolean);
+      const sc = boxes.length ? boxes[boxes.length - 1] : (document.scrollingElement || document.documentElement);
+      if (sc.scrollTop > 4) { sc.scrollTo({ top: 0, behavior: 'smooth' }); arm(); return; }
+      if (Date.now() - lastAt < 2000) { history.back(); return; }
+      lastAt = Date.now(); toast('Нажми «Назад» ещё раз, чтобы выйти'); arm();
+    });
   })();
   function yaLogin() {
     const cid = yaCid();
