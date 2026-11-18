@@ -796,6 +796,14 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 #ckbadge { min-width: 128px; text-align: center; box-sizing: border-box; }
 #waitbadge { min-width: 86px; text-align: center; box-sizing: border-box; }
 .seg.seg3 button{flex:1 1 auto;white-space:nowrap;padding-left:6px;padding-right:6px}
+#wt-ask{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:32;background:var(--surface);border:2px solid var(--accent);color:var(--ink);padding:12px 14px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:min(560px,calc(100% - 32px));font-size:14px}
+#wt-ask[hidden]{display:none}#wt-ask ul{margin:8px 0}#wt-ask li{display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px solid var(--line)}#wt-ask li>span:first-child{flex:1}#wt-ask .ck-btns{display:flex;gap:6px;justify-content:flex-end}
+.chk-block .chk-l{border-top:1px solid var(--line)}.chk-block .chk-l>summary{display:flex;gap:12px;justify-content:space-between;padding:8px 2px;cursor:pointer;list-style:none}.chk-block .chk-l>summary::-webkit-details-marker{display:none}.chk-block .chk-l>summary b{white-space:nowrap}
+.chk-w>div{display:grid;grid-template-columns:1fr auto minmax(140px,240px);gap:8px;align-items:center;padding:3px 0 3px 14px;font-size:13px}.chk-w select{font-size:12px;padding:3px 6px}
+.chk-tot{display:flex;gap:12px;align-items:baseline;justify-content:flex-end;border-top:2px solid var(--line);padding-top:8px;margin-top:2px}
+select.wp-node{font-size:12px;padding:3px 6px;max-width:260px}select.wp-node.auto{color:var(--muted)}
+@media (max-width:600px){.chk-w>div{grid-template-columns:1fr auto}.chk-w select{grid-column:1/-1}}
+.wpct-row{display:flex;gap:16px;align-items:end;flex-wrap:wrap;max-width:520px}.wpct-row .chk{display:flex;gap:8px;align-items:center;padding-bottom:10px;cursor:pointer;white-space:nowrap}.wpct-row .f{flex:1;min-width:140px}
 </style>
 
 <header class="top">
@@ -815,6 +823,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 <div id="printArea"></div>
 <div id="saleEd" class="overlay" hidden></div>
 <div id="ck-alert" hidden></div>
+<div id="wt-ask" hidden></div>
 <div id="toast" hidden></div>
 <datalist id="dl-clients"></datalist>
 <datalist id="dl-works"></datalist>
@@ -2060,6 +2069,24 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     persist();
     toast((dir < 0 ? 'Отменено: ' : 'Повторено: ') + e.label);
   }
+  /* Новые работы из наряда: спросить, добавлять ли в прайс */
+  function paintWtAsk() {
+    const el = $('#wt-ask'); if (!el) return;
+    const L = ui.wtAsk || [];
+    el.hidden = !L.length;
+    el.innerHTML = L.length ? `<b>Новые работы — добавить в прайс?</b><ul class="plain">${L.map((x, i) => `<li><span>${esc(x.name)}${x.price ? ` <span class="muted">· ${rub(x.price)}</span>` : ''}</span><span class="ck-btns"><button class="btn small primary" data-act="wt-yes" data-i="${i}" title="Добавить в прайс работ с этой ценой">Добавить</button><button class="btn small ghost" data-act="wt-no" data-i="${i}" title="Не добавлять и больше не спрашивать про эту работу">Нет</button></span></li>`).join('')}</ul>${L.length > 1 ? `<div class="ck-btns"><button class="btn small" data-act="wt-yes-all">Добавить все</button><button class="btn small ghost" data-act="wt-no-all">Нет всем</button></div>` : ''}` : '';
+  }
+  function wtDecide(idx, yes) {
+    const L = ui.wtAsk || [], take = idx == null ? L : [L[idx]];
+    take.forEach(x => {
+      if (!x) return;
+      if (yes) { if (!D.workTypes.some(t => wk(t.name) === wk(x.name))) D.workTypes.push({ name: x.name, price: x.price || null, isNew: true, own: true }); }
+      else { D.cfg.wtSkip = (D.cfg.wtSkip || []).concat([x.name]); }
+    });
+    ui.wtAsk = idx == null ? [] : L.filter((_, i) => i !== idx);
+    changed(yes ? 'Добавлено в прайс работ' : 'Работа не добавлена в прайс');
+    paintWtAsk();
+  }
   /* «Сверка уехала после этой записи»: было 0 — стало не 0 */
   function paintCkAlert() {
     const el = $('#ck-alert'); if (!el) return;
@@ -2098,7 +2125,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     }
     if (ck0 && ckLabel && X.T && X.T.month === ck0.m && Math.abs(ck0.v) < 1 && Math.abs(X.T.check) >= 1) ui.ckAlert = { label: ckLabel, d: X.T.check - ck0.v };
     render();
-    hist.cur = json; paintUndo(); paintCkAlert();
+    hist.cur = json; paintUndo(); paintCkAlert(); paintWtAsk();
     if (!cloud) idb.set('backup', JSON.stringify(D));
     persist();
   }
@@ -2942,7 +2969,8 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
     };
     ui.editor.origParts = clone(ui.editor.parts);
     if (preset && preset.schedId) { ui.editor.schedId = preset.schedId; delete ui.editor.order.schedId; }
-    ui.editor.rc = rcOf(ui.editor.pays);
+    /* «Чек пробит: да/нет» — по оплатам, а если оплат ещё нет — как отметил в наряде */
+    { const r = rcOf(ui.editor.pays); ui.editor.rc = r != null ? r : (o.rc === true || o.rc === false ? o.rc : null); }
     ui.editor.picking = isNew && !o.cid;
     ui.editor.pickQ = '';
     ui.editor.origPays = clone(ui.editor.pays);
@@ -2952,8 +2980,8 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
   }
   function addWork() { ui.editor.order.works.push({ id: uid('w'), name: '', sum: null, base: null, pct: wPctCfg(), sub: 0, nik: 0, done: null }); }
   /* наценка на работы: вводишь свою цену (base), клиенту идёт base + % (округление из настроек). % запоминается в работе — смена настройки старые работы не трогает */
-  const wPctCfg = () => +D.cfg.workPct || 0;
-  const wRoundCfg = () => +D.cfg.workRound || 1;
+  const wPctCfg = () => (D.cfg.workPctOff ? 0 : +D.cfg.workPct || 0);
+  const wRoundCfg = () => 100; /* цена работы с наценкой всегда до 100 ₽ */
   const wHasPct = w => w && w.pct != null && !w.kind;
   function wMark(v, w) {
     if (v == null) return null;
@@ -3109,6 +3137,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <p class="muted small">Оплаты и возвраты сразу попадают в «Деньги» (как строка в листе «Платежи»). Возврат с чеком уменьшает выручку для налога. Если исходная оплата была с чеком, при возврате пробей чек возврата.</p>
         </section>
 
+        ${checkBlockHTML()}
         <section class="block totals${ui.totOpen ? ' open' : ''}">
           ${totBar(t)}
           <div><span>Работы</span><b>${rub(r2(t.works - o.works.filter(w => w.kind).reduce((a, w) => a + (w.sum || 0), 0)))}</b></div>
@@ -3716,6 +3745,12 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       later();
       return;
     }
+    if (el.dataset.wnode != null) {
+      const w = E.order.works[+el.dataset.wnode]; if (!w) return;
+      const wt = wtOf(w.name);
+      if (wt) { wt.node = el.value; wpTouch(wt); delete w.node; toast('Узел запомнен в прайсе'); } else w.node = el.value;
+      E.chkOpen = NODES.indexOf(el.value) >= 0 ? null : null; paintEditor(); return;
+    }
     if (el.dataset.y != null) {
       const p = E.pays[+el.dataset.y], k = el.dataset.k;
       if (k === 'kind') { const kk = payKinds().find(x => x.k === el.value) || PAY_KINDS[0]; p.type = kk.type; p.to = kk.name || null; if (kk.sup) p.receipt = false; return; }
@@ -3747,7 +3782,16 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     return x.num;
   }
   const numTxt = o => (o.num != null ? '№ ' + o.num : 'б/н') + (o.docNum ? ' · ' + o.docNum : '');
+  /* «Клиент дал» вписано, но кнопку не нажали — при сохранении записываем всю сумму (переплата остаётся за клиентом) */
+  function calcAutoCommit(where) {
+    const X0 = where === 'ed' ? ui.editor : ui.sale, C = X0 && X0.calc;
+    if (!C || !(numIn(String(C.given || '')) > 0)) return true;
+    const kk = payKinds().find(x => x.k === C.kind) || PAY_KINDS[0];
+    if (X0.rc == null && !kk.sup) { toast('Вписано «Клиент дал» — отметь: чек пробит или нет'); return false; }
+    calcCommit(where, 'all'); return true;
+  }
   function saveOrder() {
+    if (ui.editor && !calcAutoCommit('ed')) return;
     if (ui.editor) ui.editor.parts.forEach(p => { delete p.qtyNew; });
     ui.stash = { editor: ui.editor };
     const E = ui.editor, o = E.order;
@@ -3813,7 +3857,13 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       if (p.app) Object.assign(p, { order: o.num, name: p.to || (o.client + ' ' + o.car).trim(), note: p.to ? (o.client + ' ' + o.car).trim() : p.note || '' });
       D.pays.push(p);
     });
-    o.works.forEach(w => { if (w.name && !w.kind && !D.workTypes.some(x => wk(x.name) === wk(w.name) || (x.aliases || []).some(a => wk(a) === wk(w.name)))) D.workTypes.push({ name: w.name.trim(), price: null, isNew: true, own: true }); });
+    /* новые виды работ в прайс — только после вопроса «Добавить / Нет» */
+    o.works.forEach(w => {
+      const n = (w.name || '').trim();
+      if (!n || w.kind || D.workTypes.some(x => wk(x.name) === wk(n) || (x.aliases || []).some(a => wk(a) === wk(n)))) return;
+      if ((D.cfg.wtSkip || []).some(x => wk(x) === wk(n))) return;
+      ui.wtAsk = (ui.wtAsk || []).filter(x => wk(x.name) !== wk(n)).concat([{ name: n, price: w.base != null ? w.base : w.sum || null }]);
+    });
     ui.editor = null;
     if (ui.cdraft && ui.cdraft.id && person && ui.cdraft.id === person.id) ui.cdraft = clone(person);
     toast('Наряд ' + (o.num != null ? '№ ' + o.num + ' ' : '') + 'сохранён');
@@ -4183,7 +4233,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   const RND_MAX = 50;
   /* округлять можно оплату без чека или наличными (с чеком тоже: чек пробивается на круглую сумму); картой/QR с чеком — точно */
-  const rndOkPay = p => p.receipt === false || p.type === 'Наличные' || p.type === '₽';
+  /* с 18.11.2026 округляются все наряды и продажи — и наличные, и карта, с чеком и без */
+  const rndOkPay = () => true;
   const rnd100 = v => Math.round(r2(v) / 100) * 100;
   function rndTarget(total) { const R = rnd100(total), d = r2(R - total); return Math.abs(d) > 0.004 && Math.abs(d) <= RND_MAX ? R : null; }
   function rndAuto(lines, pays, totalNoRnd, paidSum, add) {
@@ -4254,10 +4305,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const sumK = k => lines.filter(x => x.kind === k && (k !== 'rnd' || x.auto)).reduce((a, x) => a + (x.sum || 0), 0);
     const noch = sumK('noch'), base = r2(total - sumK('rnd') - noch), paidEff = r2(t.paid - noch);
     /* «без сдачи» — округлять незачем: всё сверх точной суммы и так доход СТО */
-    const ck = (payKinds().find(x => x.k === ((X0.calc || {}).kind || 'cash')) || {}).type;
-    const pays0 = X0.pays.filter(p => (+p.amount || 0) > 0 && !p.refund);
-    const canR = X0.rc === false || (X0.rc === true && (ck === 'Наличные') && pays0.every(rndOkPay));
-    const R = canR && !(noch > 0.004) ? rndTarget(base) : null, target = R != null ? R : base;
+    void X0; /* округляем всегда: и наличные, и карта, с чеком и без */
+    const R = !(noch > 0.004) ? rndTarget(base) : null, target = R != null ? R : base;
     return { t, base, target, rounded: R != null, noch, paid: t.paid, rem: r2(target - paidEff) };
   }
   function calcHTML(where) {
@@ -4270,7 +4319,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       const rest = r2(c.rem - g);
       if (c.rem <= 0.004) { info = `Наряд уже оплачен — это будет переплата.`; btns = `<button class="btn small" data-act="calc-pay" data-w="${where}" data-m="all">Записать ${rub(g)}</button>`; }
       else if (rest > 0.004) { info = `После оплаты останется: <b>${rub(rest)}</b>`; btns = `<button class="btn small primary" data-act="calc-pay" data-w="${where}" data-m="all">Записать оплату ${rub(g)}</button>`; }
-      else if (rest < -0.004) { const nx = r2(g - (c.base - (c.paid - c.noch))); info = `Сдача: <b class="pos">${rub(-rest)}</b>`; btns = `<button class="btn small primary" data-act="calc-pay" data-w="${where}" data-m="change">Сдачу выдал</button><button class="btn small" data-act="calc-pay" data-w="${where}" data-m="noch" title="Клиент оставил сдачу — это доход СТО, в бланк не печатается. Без округления: всё сверх точной суммы">Без сдачи (+${fmt(nx, nx % 1 ? 2 : 0)} ₽)</button>`; }
+      else if (rest < -0.004) { const nx = r2(g - (c.base - (c.paid - c.noch))); info = `Сдача: <b class="pos">${rub(-rest)}</b> <span class="muted small" title="Если не нажать ни одну кнопку, при сохранении запишется вся сумма ${rub(g)} — переплата ${rub(-rest)} будет числиться за клиентом">· не нажал — сохранится переплатой</span>`; btns = `<button class="btn small primary" data-act="calc-pay" data-w="${where}" data-m="change">Сдачу выдал</button><button class="btn small" data-act="calc-pay" data-w="${where}" data-m="noch" title="Клиент оставил сдачу — это доход СТО, в бланк не печатается. Без округления: всё сверх точной суммы">Без сдачи (+${fmt(nx, nx % 1 ? 2 : 0)} ₽)</button>`; }
       else { info = `Ровно, без сдачи.`; btns = `<button class="btn small primary" data-act="calc-pay" data-w="${where}" data-m="all">Записать оплату ${rub(g)}</button>`; }
     } else info = c.rem > 0.004 ? `Осталось <b>${rub(c.rem)}</b> — впиши, сколько дал клиент.` : '';
     const pre = ed ? 'cg' : 'scg';
@@ -4281,7 +4330,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function rcSegHTML(where) {
     const X0 = where === 'ed' ? ui.editor : ui.sale;
-    return `<div class="rc-seg"><span>Чек пробит:</span><div class="seg"><button class="${X0.rc === true ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="1">Да</button><button class="${X0.rc === false ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="0">Нет</button></div><span class="muted small">${X0.rc === false ? 'без чека — сумма округляется до сотни' : X0.rc === true ? 'наличными — округляется до сотни, картой или QR — точная сумма' : 'один раз на все оплаты'}</span></div>`;
+    return `<div class="rc-seg"><span>Чек пробит:</span><div class="seg"><button class="${X0.rc === true ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="1">Да</button><button class="${X0.rc === false ? 'on' : ''}" data-act="rc-all" data-w="${where}" data-v="0">Нет</button></div><span class="muted small">${X0.rc == null ? 'один раз на все оплаты' : 'сумма округляется до сотни'}</span></div>`;
   }
   function calcCommit(where, mode) {
     const ed = where === 'ed', X0 = ed ? ui.editor : ui.sale, C = X0.calc || {}, c = payCalc(where);
@@ -4316,6 +4365,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   });
   function rcAll(where, v) {
     const ed = where === 'ed', X0 = ed ? ui.editor : ui.sale; X0.rc = v; X0.err = '';
+    if (ed) ui.editor.order.rc = v; /* запоминаем в наряде, даже если оплат ещё нет */
     X0.pays.forEach(p => { if (!kindIsSup(p)) p.receipt = v; });
     /* последняя оплата закрывала наряд — подгоняем её под новую сумму (ровную или точную) */
     const lines0 = ed ? ui.editor.order.works : ui.sale.rows, nl = lines0.find(x => x.kind === 'noch');
@@ -4486,6 +4536,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.act === 'sa-paste-no') { Sx.paste.no = el.checked; return; }
   }
   function saveSale() {
+    if (ui.sale && !calcAutoCommit('sa')) return;
     if (ui.sale) ui.sale.rows.forEach(p => { delete p.qtyNew; });
     ui.stash = { sale: ui.sale };
     const Sx = ui.sale;
@@ -5807,6 +5858,69 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   /* ----- Настройки ----- */
   /* ---------- Прайс работ ---------- */
   const wk = n => low(n).replace(/\s+/g, ' ').trim();
+  /* ---------- Узлы для кассового чека: работы сворачиваются в 14 строк-услуг + «Запчасти и материалы для ремонта» ---------- */
+const NODES = ['Ремонт двигателя','Ремонт выхлопной системы','Ремонт тормозной системы','Ремонт подвески','Ремонт рулевого управления','Ремонт сцепления и КПП','Ремонт приводов и трансмиссии','Ремонт системы охлаждения, отопления и кондиционера','Ремонт топливной системы и системы зажигания','Ремонт электрооборудования','Кузовные и сварочные работы','Техническое обслуживание','Диагностика','Прочие работы'];
+  /* порядок важен: первое совпадение побеждает */
+  const B = w => '(?:^|[^а-яa-z0-9])(?:' + w + ')(?:$|[^а-яa-z0-9])';
+  const R = (...a) => new RegExp(a.join('|'));
+  const RULES = [
+   [12, R('диагност|осмотр|дымогенер|эндоскоп|компьютерн|замер компресс|проверк[аи] компресс|поиск неиспр')],
+   [1, R('выхлоп|глушит|резонатор|гофр|при[её]?мн(ая|ой|ую) труб|примн|приемн|приёмн|обманк|катализ|лямбд|кислородн|пламегас|пламягас|паук')],
+   [5, R('сцеплен', B('кпп'), 'акпп|мкпп|коробк|кулис|выбор[а]? передач|вариатор|маховик|выжимн|первичн|вторичн|синхрон|селектор|переключени[яе] передач|вертолет')],
+   [6, R('шрус|гранат|полуос|кардан|редуктор|раздат|дифференц|подвесн(ой|ого) подшип|крестовин|привод(?! ремн)|haldex|муфт|ступичн(ая|ой|ую) гайк')],
+   [2, R('тормоз|торм\\.|колод|суппорт|барабан', B('abs|абс'), 'стояноч|ручник|прокачк|вакуумн', B('диск(а|и|ов)?'), 'дисков')],
+   [4, R('рулев|рейк', B('гур'), 'наконечник|тяг[аи] рул|насос гур')],
+   [3, R('амортиз|рычаг|сайлент|стабилиз|шаров|ступиц|ступичн|пружин|стойк|стоек|балк|подвеск|ходов|развал|сход|отбойник|подрамник|рессор|опорн')],
+   [7, R('охлажд|охдажд|радиатор|помп|патруб|термостат|антифриз|тосол', B('ож|сож'), 'печк|отопит|расширит|вентилятор|кондиц|испарит|фреон|кипит')],
+   [8, R('топлив|форсун|тнвд|дроссел|карбюр|егр', B('egr|рхх'), 'инжект|бензонас|рамп[аеуы]|регулятор давлен|адсорб|свеч|катушк|зажиган|трамбл|высоковольт|бронепровод', B('вв'), 'холост|педал[ьи] (газа|акселер)|бак|гбо|топлипровод|горловин', B('рдт'), 'регулятор хх')],
+   [9, R('генерат|стартер|датчик', B('акб'), 'аккумул|фар[аыу]?(?:$|[^а-я])|предохран|разъ[её]м|проводк|фонар|электр|ламп|омыват|стеклоподъ|стеклоочист|дворник|реле|блок[а]? управлен|сигнал|клаксон|подсветк|габарит|магнитол|кнопк|поворотник|противотуман|свет', B('птф'))],
+   [0, R('грм|гбц|маслонасос|масл\\. насос|раскокс|капиталк')],
+   [11, R(B('то'), 'техобслуж|техническ(ое|ого) обслуж|масл|фильтр|доливк|долить|уровн|смазк')],
+   [10, R('бампер|кузов|свар|арматур|рихтов|защит|капот|двер|зеркал|подкрыл|брызгов|порог|крыл[оа]|молдинг|багажник|замок|петл|ручк|стекл[оа]|лобов|покраск|антикор|салон(?!н)|металл|фаркоп|сиден|панел')],
+   [0, R(B('двс'), 'двигат|мотор|грм|ремен|гбц|клапан|сальник|прокладк|поддон|коленв|распредв|раскокс|цеп[ьи]|ремень|ремн|ролик|шкив|турбин|интеркул|коллектор|картер|квкг|фаз[аы]|компресси|vvt|блок|поршн|кольц|вкладыш|подушк|опор[аы] двиг|гидрокомп|толкат|натяжит|маслонасос|капиталк|шатун|расточк|гильз|фрезеровк|заглушк')],
+  ];
+  function nodeAuto(name) { const s=(name||'').toLowerCase().replace(/ё/g,'е'); for (const [i,re] of RULES) if (re.test(s)) return i; return 13; }
+  const PARTS_LINE = 'Запчасти и материалы для ремонта';
+  /* узел работы: своя отметка в наряде → узел в прайсе → по названию */
+  function wtOf(name) { const k = wk(name || ''); return D.workTypes.find(x => wk(x.name) === k || (x.aliases || []).some(a => wk(a) === k)); }
+  function nodeIdx(w) {
+    if (w.node != null && NODES.includes(w.node)) return NODES.indexOf(w.node);
+    const wt = wtOf(w.name); if (wt && wt.node && NODES.includes(wt.node)) return NODES.indexOf(wt.node);
+    return nodeAuto(w.name);
+  }
+  /* строки чека по наряду; сумма = «Всего» (округление — в самую крупную строку, «без сдачи» в чек не идёт) */
+  function checkLines(o, parts, target) {
+    const isTip = x => x.kind === 'noch' || (!x.kind && low((x.name || '').trim()) === 'сдача');
+    const by = new Map();
+    (o.works || []).forEach((w, i) => {
+      if (w.kind || isTip(w) || !(+w.sum)) return;
+      const n = nodeIdx(w); const L = by.get(n) || { name: NODES[n], sum: 0, works: [] };
+      L.sum = r2(L.sum + (+w.sum || 0)); L.works.push({ w, i }); by.set(n, L);
+    });
+    const lines = [...by.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]);
+    const ps = r2(parts.filter(p => !p.ret && !p.kind && !isTip(p)).reduce((a, p) => a + (p.sum || 0), 0));
+    if (Math.abs(ps) > 0.004) lines.push({ name: PARTS_LINE, sum: ps, works: [], parts: true });
+    const sum = r2(lines.reduce((a, l) => a + l.sum, 0)), diff = r2((target ?? sum) - sum);
+    if (Math.abs(diff) > 0.004 && lines.length) { const big = lines.reduce((m, l) => (l.sum > m.sum ? l : m)); big.sum = r2(big.sum + diff); big.adj = diff; }
+    return { lines, total: r2(lines.reduce((a, l) => a + l.sum, 0)), diff };
+  }
+  function checkBlockHTML() {
+    const E = ui.editor, o = E.order;
+    if (E.rc !== true) return '';
+    const c = payCalc('ed'), C = checkLines(o, E.parts, c.target);
+    if (!C.lines.length) return '';
+    const dn = o.docNum || (hasReceipt(E.pays) ? '' : docNext(String(new Date().getFullYear()).slice(2)).num);
+    const ok = Math.abs(C.total - c.target) < 0.005;
+    return `<section class="block chk-block">
+      <div class="block-head"><h3 title="Как пробивать на Эвоторе: выбираешь услугу с таким названием и вписываешь сумму. Номер з/н на терминале вписывать не нужно">Для чека</h3><span class="muted small">з/н ${esc(o.docNum || dn || '')}</span></div>
+      <div class="chk-lines">${C.lines.map((l, li) => `<details class="chk-l"${E.chkOpen === li ? ' open' : ''}><summary><span>${esc(l.name)}</span><b>${fmt(l.sum, 2)}</b></summary>
+        ${l.parts ? `<p class="muted small">Все запчасти наряда одной строкой.</p>` : `<div class="chk-w">${l.works.map(({ w, i }) => `<div><span>${esc(w.name)}</span><span class="muted">${fmt(w.sum, 2)}</span><select data-wnode="${i}" title="Перенести работу в другой узел. Если работа есть в прайсе — запомнится и для следующих нарядов">${NODES.map(n => `<option${n === NODES[nodeIdx(w)] ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></div>`).join('')}</div>`}
+        ${l.adj ? `<p class="muted small">включено округление ${l.adj > 0 ? '+' : '−'}${fmt(Math.abs(l.adj), 2)}</p>` : ''}</details>`).join('')}
+      </div>
+      <div class="chk-tot"><span>Итого в чеке</span><b>${fmt(C.total, 2)}</b>${ok ? '<span class="pos small">✓ совпадает со «Всего»</span>' : `<span class="neg small">не совпадает со «Всего» (${fmt(c.target, 2)})</span>`}</div>
+    </section>`;
+  }
+
   function workHistory() {
     if (X._wh) return X._wh;
     const m = {};
@@ -5823,7 +5937,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function priceListHTML() {
     const q = wk(ui.wpq || ''), words = q.split(' ').filter(Boolean);
     const all = D.workTypes.map((wt, i) => ({ wt, i, st: workStat(wt) }));
-    const list = all.filter(x => words.every(w => wk([x.wt.name].concat(x.wt.aliases || []).join(' ')).includes(w)))
+    const list = all.filter(x => words.every(w => wk([x.wt.name].concat(x.wt.aliases || []).join(' ')).includes(w)) && (!ui.wpNode || NODES[nodeIdx({ name: x.wt.name })] === ui.wpNode))
       .sort((a, b) => b.st.count - a.st.count || a.wt.name.localeCompare(b.wt.name, 'ru'));
     const lim = Infinity, priced = all.filter(x => x.wt.price).length;
     const fill = all.filter(x => !x.wt.price && x.st.typ);
@@ -5832,6 +5946,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (!ui.wpOpen) return `<section class="block">${head}</section>`;
     return `<section class="block">${head}
       <div class="toolbar"><input id="wpq" class="search" type="search" placeholder="Поиск работы" value="${esc(ui.wpq || '')}" data-act="wp-search" autocomplete="off">
+        <select id="wp-nf" data-act="wp-nodef" title="Показать работы одного узла — удобно проверять"><option value="">Все узлы</option>${NODES.map(n => `<option${ui.wpNode === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
         <button class="btn" data-act="wp-add">+ Работа</button>${fill.length ? `<button class="btn" data-act="${ui.wpFill ? 'wp-fill-close' : 'wp-fill-open'}">${ui.wpFill ? 'Скрыть цены из истории' : 'Цены из истории'}</button>` : ''}</div>
       ${ui.wpFill ? `<div class="note" style="display:grid;gap:8px"><div><b>Цены из истории нарядов — для ознакомления.</b> Для работ без цены в прайсе — сколько ты обычно брал (средняя по нарядам, округлена до 50 ₽). В прайс ничего не ставится.</div>
         <input id="wfq" class="search" type="search" placeholder="Поиск в этом списке" value="${esc(ui.wpFill.q || '')}" data-act="wf-search" autocomplete="off">
@@ -5840,13 +5955,14 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         </tbody></table></div><div class="actions"><button class="btn ghost" data-act="wp-fill-close">Закрыть</button></div></div>` : ''}
       ${M ? `<div class="note"><span>Работа «${esc(M.to)}» уже есть в прайсе. Объединить с ней «${esc(D.workTypes[M.from].name)}»? Старые наряды не меняются, просто в прайсе останется одна строка.</span>
         <div class="actions"><button class="btn small primary" data-act="wp-merge-yes">Объединить</button><button class="btn small ghost" data-act="wp-merge-no">Отмена</button></div></div>` : ''}
-      ${list.length ? `<div class="scroll"><table class="tbl wp"><thead><tr><th>Работа</th><th class="r">Цена, ₽</th><th class="r">Делали</th><th class="r">Обычно брали</th><th></th></tr></thead><tbody>
+      ${list.length ? `<div class="scroll"><table class="tbl wp"><thead><tr><th>Работа</th><th class="r">Цена, ₽</th><th title="Строка в кассовом чеке. Подставлено по названию — поправь, если не так">Узел для чека</th><th class="r">Делали</th><th class="r">Обычно брали</th><th></th></tr></thead><tbody>
         ${list.slice(0, lim).map(({ wt, i, st }) => `<tr${wt.isNew ? ' class="wp-new"' : ''}><td><input id="wp-n-${i}" value="${esc(wt.name)}" data-wp="${i}" data-k="name" aria-label="Название работы">${(wt.aliases || []).length ? `<div class="muted small">также: ${esc(wt.aliases.join('; '))}</div>` : ''}</td>
           <td class="r"><input id="wp-p-${i}" class="r" value="${esc(nv(wt.price))}" data-wp="${i}" data-k="price" inputmode="decimal" aria-label="Цена"></td>
+          <td><select id="wp-u-${i}" data-wp="${i}" data-k="node" class="wp-node${wt.node ? '' : ' auto'}" title="${wt.node ? 'Выбрано вручную' : 'Подставлено по названию'}">${NODES.map(n => `<option${n === NODES[nodeIdx({ name: wt.name })] ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></td>
           <td class="r">${st.count || '<span class="muted">—</span>'}</td><td class="r">${st.typ ? `<button class="link small" data-act="wp-use" data-i="${i}" title="Поставить эту цену">${rub(st.typ)}</button>` : '<span class="muted">—</span>'}</td>
           <td><button class="x" data-act="wp-del" data-i="${i}" aria-label="Удалить из прайса">×</button></td></tr>`).join('')}
         </tbody></table></div>${list.length > lim ? `<button class="btn wide" data-act="wp-more">Показать ещё (${list.length - lim})</button>` : ''}` : '<p class="muted">Ничего не нашлось.</p>'}
-      <p class="muted small">Цена из прайса сама подставляется в наряд, когда выбираешь работу. Новые работы из нарядов попадают сюда без цены — поставь им цену здесь.</p>
+      <p class="muted small">Цена из прайса сама подставляется в наряд, когда выбираешь работу. Новые работы из нарядов программа предлагает добавить сюда после сохранения наряда. «Узел для чека» — в какую строку кассового чека попадёт работа.</p>
     </section>`;
   }
   /* подсказки работ в наряде: свой список вместо стандартного — длинные названия видны целиком, рядом цена */
@@ -5999,11 +6115,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         ${(() => { const st = (D.cfg.params || []).map(p => p.from).sort()[0]; return st ? `<div class="grid g2" style="max-width:520px"><label class="f">Доход ИП в ${st.slice(0, 4)} до начала учёта в программе, ₽<input id="cfg-ipbefore" class="r" value="${esc(nv(D.cfg.ipIncomeBefore || 0))}" data-cfgip="ipIncomeBefore" inputmode="decimal"></label><label class="f">Взносы за дни ИП до начала учёта, ₽<input id="cfg-vzbefore" class="r" value="${esc(nv(D.cfg.vznosBefore || 0))}" data-cfgip="vznosBefore" inputmode="decimal"></label></div><p class="muted small">Учёт в программе начат с месяца «${esc(S.monthLabel(st))}». Если раньше в этом году у ИП уже был доход — впиши его, он засчитается в 300 000. Не было — оставь 0. Взносы за дни до начала учёта (у тебя 30–31 октября) прибавятся к взносам первого месяца.</p>` : ''; })()}
       </section>
       <section class="block"><div class="block-head"><h3>Наценка на работы</h3></div>
-        <div class="grid g2" style="max-width:520px">
-          <label class="f">Наценка, %<input id="cfg-wpct" class="r" value="${esc(String(wPctCfg()).replace('.', ','))}" data-cfgw="workPct" inputmode="decimal"></label>
-          <label class="f">Округлять цену до<select id="cfg-wround" data-cfgw="workRound">${[[1, 'не округлять'], [10, '10 ₽'], [50, '50 ₽'], [100, '100 ₽']].map(([v, l]) => `<option value="${v}"${wRoundCfg() === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        <div class="wpct-row">
+          <label class="chk" title="Выключил — новые работы идут по твоей цене, без наценки. Уже введённые работы не меняются"><input type="checkbox" id="cfg-wpct-on" data-cfgwon="1"${D.cfg.workPctOff ? '' : ' checked'}> Наценка включена</label>
+          <label class="f">Наценка, %<input id="cfg-wpct" class="r" value="${esc(String(+D.cfg.workPct || 0).replace('.', ','))}" data-cfgw="workPct" inputmode="decimal"${D.cfg.workPctOff ? ' disabled' : ''}></label>
         </div>
-        <p class="muted small">В наряде вводишь свою цену работы — клиенту идёт с наценкой. ${wPctCfg() > 0 ? 'Пример: 10 000 → ' + rub(wMark(10000, { pct: wPctCfg() })) + '. ' : ''}У каждой работы кнопкой «+%» наценку можно снять. Новый % касается только новых работ.</p>
+        <p class="muted small">В наряде вводишь свою цену работы — клиенту идёт с наценкой, цена округляется до 100 ₽. ${wPctCfg() > 0 ? 'Пример: 10 000 → ' + rub(wMark(10000, { pct: wPctCfg() })) + '. ' : ''}У каждой работы кнопкой «+%» наценку можно снять. Новый % касается только новых работ.</p>
       </section>
       <section class="block"><div class="block-head"><h3>Наценка на запчасти</h3></div>
         <div class="scroll"><table class="tbl"><thead><tr><th>Закупка до, ₽</th><th class="r">Наценка, %</th></tr></thead><tbody>
@@ -6387,6 +6503,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       case 'pay-dup-no': if (ui.payForm) { ui.payForm.dupAsk = null; render(); } break;
       case 'ck-undo': ui.ckAlert = null; histGo(-1); paintCkAlert(); break;
       case 'ck-ok': ui.ckAlert = null; paintCkAlert(); break;
+      case 'wt-yes': wtDecide(+b.dataset.i, true); break;
+      case 'wt-no': wtDecide(+b.dataset.i, false); break;
+      case 'wt-yes-all': wtDecide(null, true); break;
+      case 'wt-no-all': wtDecide(null, false); break;
       case 'pay-cancel': ui.payForm = payFormNew(); render(); break;
       case 'pay-edit': { const p = D.pays.find(x => x.id === b.dataset.id); ui.payForm = payFormEdit(p); render(); window.scrollTo(0, 0); break; }
       case 'pay-del': ui.payDel = b.dataset.id; render(); break;
@@ -6533,6 +6653,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (a === 'wait-search') { ui.waitQ = el.value; render(); return; }
     if (a === 'xsearch') { ui.xq = el.value; render(); return; }
     if (a === 'wp-search') { ui.wpq = el.value; ui.wpLim = 50; render(); return; }
+    if (a === 'wp-nodef') { ui.wpNode = el.value; render(); return; }
     if (a === 'wf-search') { ui.wpFill.q = el.value; render(); return; }
     if (a === 'pay-search') { ui.payQ = el.value; render(); return; }
     if (a === 'clq-search') { ui.clQ = el.value; render(); return; }
@@ -6594,6 +6715,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (el.dataset.wp != null) {
       const i = +el.dataset.wp, wt = D.workTypes[i], k = el.dataset.k; if (!wt) return;
       if (k === 'price') { wt.price = numIn(el.value); wpTouch(wt); toast('Цена сохранена'); changed(); return; }
+      if (k === 'node') { wt.node = el.value; wpTouch(wt); toast('Узел сохранён'); changed(); return; }
       const v = el.value.trim(); if (!v || v === wt.name) { el.value = wt.name; return; }
       const j = D.workTypes.findIndex((x, n) => n !== i && wk(x.name) === wk(v));
       if (j >= 0) { ui.wpMerge = { from: i, to: D.workTypes[j].name, toIdx: j }; render(); return; }
@@ -6633,10 +6755,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       toast('Параметры сохранены'); changed(); return;
     }
     if (el.dataset.cfgip) { const n = numIn(el.value); D.cfg[el.dataset.cfgip] = n > 0 ? r2(n) : 0; toast('Сохранено'); changed(); return; }
+    if (el.dataset.cfgwon) { D.cfg.workPctOff = !el.checked; toast(el.checked ? 'Наценка на работы включена' : 'Наценка на работы выключена'); changed(); return; }
     if (el.dataset.cfgw) {
       const k = el.dataset.cfgw, n = numIn(el.value);
       if (k === 'workPct' && (n == null || n < 0 || n > 500)) { toast('Наценка — число от 0 до 500'); render(); return; }
-      D.cfg[k] = k === 'workRound' ? +el.value : r2(n);
+      D.cfg[k] = r2(n);
       toast('Наценка на работы сохранена'); changed(); return;
     }
     if (el.dataset.mk != null) {
