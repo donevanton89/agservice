@@ -1992,8 +1992,8 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
   }
   function orderWho(o) { const p = o.cid && X.clientById[o.cid]; return p ? label(p) : (o.client + (o.note ? ' ' + o.note : '')).trim(); }
   function clientSearch(q) {
-    const w = low(q).split(' ').filter(Boolean);
-    return X.crows.filter(x => w.every(t => x.hay.includes(t))).sort((a, b) => (b.last || '').localeCompare(a.last || '')).slice(0, 8);
+    const vs = qVars(low(q)).map(v => v.split(' ').filter(Boolean));
+    return X.crows.filter(x => vs.some(w => w.every(t => x.hay.includes(t)))).sort((a, b) => (b.last || '').localeCompare(a.last || '')).slice(0, 8);
   }
 
   /* ---------- хранение: файл базы + запасная копия в браузере ---------- */
@@ -2220,7 +2220,9 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
   /* поменялось ли что-то, что влияет на деньги месяца */
   function lockMoneyDiff(k, a, b) {
     if (!a || !b) return true;
-    if (LOCK_F[k].some(f => JSON.stringify(a[f]) !== JSON.stringify(b[f]))) return true;
+    /* у продажи клиенту «оплачено» — только счётчик долга; сами деньги лежат в оплате (её дата и проверяется) */
+    const saleCl = k === 'parts' && a.order == null && b.order == null && !low(a.client || '').startsWith('сто') && !low(b.client || '').startsWith('сто');
+    if (LOCK_F[k].some(f => !(saleCl && f === 'paid') && JSON.stringify(a[f]) !== JSON.stringify(b[f]))) return true;
     if (k === 'parts') { if (low(a.client || '').startsWith('сто') !== low(b.client || '').startsWith('сто')) return true; if (a.oilCost != null && JSON.stringify(a.oilCost) !== JSON.stringify(b.oilCost)) return true; }
     if (k === 'pays' && a.name !== b.name && (lockSpecial(a.name) || lockSpecial(b.name))) return true;
     return false;
@@ -2948,6 +2950,13 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     </section>`;
   }
 
+  /* ----- Неправильная раскладка: «kfgf» найдёт «лапа», «дфзф»… найдёт латиницу. Ищем по обоим вариантам ----- */
+  const KB_EN = '`qwertyuiop[]asdfghjkl;\'zxcvbnm,./', KB_RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю.';
+  function kbSwap(t) {
+    return String(t).split('').map(c => { const l = c.toLowerCase(); let i = KB_EN.indexOf(l); if (i >= 0) return KB_RU[i]; i = KB_RU.indexOf(l); if (i >= 0) return KB_EN[i]; return c; }).join('');
+  }
+  const qVars = q => { q = String(q || ''); const v = [q]; if (q) { const t = kbSwap(q); if (t !== q) v.push(t); } return v; };
+
   /* ----- Наряды ----- */
   function viewOrders() {
     const q = ui.q.trim().toLowerCase();
@@ -2965,14 +2974,15 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
       if (ui.filter === 'ip' && !isIP(o)) return false;
       if (!q) return true;
       /* поиск внутри выбранного фильтра: клиент, машина, номер, а также запчасти (артикул, название, бренд) */
-      const words = q.split(/\s+/);
       const head = [o.num, o.docNum, o.client, o.car, o.plate, o.vin, o.phone, o.note].join(' ').toLowerCase();
       const parts = o.num != null ? X.partsByOrder[o.num] || [] : [];
-      if (words.every(w => head.includes(w))) return true;
-      const hp = parts.filter(p => { const hay = head + ' ' + [p.art, p.name, p.brand].join(' ').toLowerCase(), an = rkNorm(p.art); return words.every(w => hay.includes(w) || (rkNorm(w).length >= 3 && an.includes(rkNorm(w)))); });
-      if (!hp.length) return false;
-      hits[o.id] = hp;
-      return true;
+      for (const qq of qVars(q)) {
+        const words = qq.split(/\s+/);
+        if (words.every(w => head.includes(w))) return true;
+        const hp = parts.filter(p => { const hay = head + ' ' + [p.art, p.name, p.brand].join(' ').toLowerCase(), an = rkNorm(p.art); return words.every(w => hay.includes(w) || (rkNorm(w).length >= 3 && an.includes(rkNorm(w)))); });
+        if (hp.length) { hits[o.id] = hp; return true; }
+      }
+      return false;
     });
     const sk = o => o.start || o.doneDate || '9999';
     /* по убыванию номера наряда */
@@ -3395,7 +3405,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const taken = new Set(E.parts.map(p => p.id));
     const mine = g => (o.cid && g.person && g.person.id === o.cid) || (!!o.client && low(g.client) === low(o.client) && low(g.note || '') === low(o.note || ''));
     return X.sales.filter(g => !g.rows.some(p => taken.has(p.id)) && !isOwn(g.client))
-      .filter(g => (w.length ? w.every(t => g.hay.includes(t)) : mine(g) || g.date >= S.addMonths(NOW_M(), -1) + '-01'))
+      .filter(g => (w.length ? qVars(q).some(qq => qq.split(' ').filter(Boolean).every(t => g.hay.includes(t))) : mine(g) || g.date >= S.addMonths(NOW_M(), -1) + '-01'))
       .sort((a, b) => (mine(b) - mine(a)) || b.date.localeCompare(a.date)).slice(0, 12).map(g => ({ g, mine: mine(g) }));
   }
   function attachPanel() {
@@ -4253,7 +4263,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function viewSales() {
     const q = low(ui.sq || ''), w = q.split(' ').filter(Boolean), f = ui.sfilter || 'all';
-    const list = X.sales.filter(g => (f === 'all' || (f === 'debt' && g.debt > 5) || (f === 'own' && isOwn(g.client)) || (f === 'wait' && g.wait)) && w.every(t => g.hay.includes(t)));
+    const list = X.sales.filter(g => (f === 'all' || (f === 'debt' && g.debt > 5) || (f === 'own' && isOwn(g.client)) || (f === 'wait' && g.wait)) && qVars(q).some(qq => qq.split(' ').filter(Boolean).every(t => g.hay.includes(t))));
     const counts = { debt: X.sales.filter(g => g.debt > 5).length, own: X.sales.filter(g => isOwn(g.client)).length, wait: X.sales.filter(g => g.wait).length };
     const chip = (k, l, n) => `<button class="chip${f === k ? ' on' : ''}" data-act="sfilter" data-k="${k}">${l}${n != null ? ` <b>${n}</b>` : ''}</button>`;
     const lim = ui.slimit || 40;
@@ -4352,7 +4362,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const t = saleTotals(), totalNo = r2(t.sum - old - noch);
     if (noch > 0.004 && nochFit(Sx.rows, r2(t.paid - totalNo + old), true)) return saRndSync();
     if (noch > 0.004) { if (Math.abs(old) > 0.004) { const nl = Sx.rows.find(p => p.kind === 'noch'); nl.sum = r2(nl.sum + old); nl.price = nl.sum; } for (let i = Sx.rows.length - 1; i >= 0; i--) if (Sx.rows[i].kind === 'rnd' && Sx.rows[i].auto) Sx.rows.splice(i, 1); return; }
-    rndAuto(Sx.rows, Sx.pays, totalNo, r2(t.paid - noch), d => Sx.rows.push(saleRowNew({ sup: '', name: RND_LBL.rnd, kind: 'rnd', auto: true, cost: 0, qty: 1, price: d, sum: d, no: false })));
+    rndAuto(Sx.rows, Sx.pays, totalNo, r2(t.paid - noch), d => Sx.rows.push(saleRowNew({ date: (Sx.origRows || []).some(p => { const m = S.partPeriod(p, X); return m && m !== 'work' && isLockedM(m); }) ? S.todayISO() : Sx.date, sup: '', name: RND_LBL.rnd, kind: 'rnd', auto: true, cost: 0, qty: 1, price: d, sum: d, no: false })));
   }
   /* при отметке «чек: нет» сумма оплаты сама округляется до сотни (и обратно при «чек: да») */
   function rndPayAmount(pays, i, totalNo) {
@@ -4662,7 +4672,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       let od = 0; st.orders.forEach(o => { const t = S.orderTotals(o, X); if (o.doneDate && t.debt > 5) od += t.debt; });
       const sd = (X.salesByPerson[p.id] || []).reduce((a, g) => a + (g.debt > 5 ? g.debt : 0), 0);
       return { p, st, hay, od: r2(od), sd: r2(sd), debt: r2(od + sd) };
-    }).filter(r => w.every(t => r.hay.includes(t)));
+    }).filter(r => qVars(q).some(qq => qq.split(' ').filter(Boolean).every(t => r.hay.includes(t))));
     const nDebt = list.filter(r => r.debt > 5).length;
     const shown = ui.clDebt ? list.filter(r => r.debt > 5).sort((a, b) => b.debt - a.debt) : list.sort((a, b) => (b.st.last || '').localeCompare(a.st.last || ''));
     const lim = ui.climit || 60;
@@ -4720,7 +4730,8 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function clqMatch(q) {
     const w = low(q || '').split(/\s+/).filter(Boolean); if (!w.length) return null;
     const an = x => String(x || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase();
-    return p => { const hay = low([p.name, p.brand, p.art].join(' ')), ah = an(p.art); return w.every(t => hay.includes(t) || (an(t).length >= 3 && ah.includes(an(t)))); };
+    const vs = qVars(w.join(' ')).map(v => v.split(' ').filter(Boolean));
+    return p => { const hay = low([p.name, p.brand, p.art].join(' ')), ah = an(p.art); return vs.some(w => w.every(t => hay.includes(t) || (an(t).length >= 3 && ah.includes(an(t))))); };
   }
   const clqLine = (p, isWork) => isWork ? `<li><span class="muted small">работа</span> ${esc(p.name || '')}${p.sum ? ' · ' + rub(p.sum) : ''}</li>`
     : `<li>${esc(p.name || '')}${p.brand ? ' <span class="muted">' + esc(p.brand) + '</span>' : ''}${p.art ? ' <span class="mono muted small">' + esc(p.art) + '</span>' : ''} · ${fmt(p.qty || 0, (p.qty || 0) % 1 ? 2 : 0)} шт. · ${rub(p.sum || 0)}${p.no ? ' <span class="pill st-wait">НЕТ</span>' : ''}${p.ret ? ' <span class="pill">возврат</span>' : ''}${p.sup ? ' <span class="muted small">' + esc(p.sup) + '</span>' : ''}</li>`;
@@ -5202,7 +5213,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const m = ui.payMonth;
     const q = ui.payQ.trim().toLowerCase();
     const seenTr = new Set();
-    const list = D.pays.filter(p => S.monthOf(p.date) === m && (!q || (p.name + ' ' + p.note + ' ' + p.type + ' ' + (TYPE_S[p.type] || '') + ' ' + (p.order ?? '') + (p.trFrom ? ' перевод ' + p.trFrom + ' ' + p.trTo : '')).toLowerCase().includes(q)))
+    const list = D.pays.filter(p => S.monthOf(p.date) === m && (!q || [(p.name + ' ' + p.note + ' ' + p.type + ' ' + (TYPE_S[p.type] || '') + ' ' + (p.order ?? '') + (p.trFrom ? ' перевод ' + p.trFrom + ' ' + p.trTo : '')).toLowerCase()].some(h => qVars(q).some(v => h.includes(v)))))
       .filter(p => { if (!p.trFrom) return true; if (seenTr.has(p.tr)) return false; seenTr.add(p.tr); return true; })
       .sort((a, b) => b.date.localeCompare(a.date) || (b.id > a.id ? 1 : -1));
     const money = list.filter(p => !isTrRow(p));
@@ -5238,7 +5249,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const all = D.parts.filter(p => p.ret && !p.retDone && !p.retNo);
     ui.retSel = new Set([...(ui.retSel || [])].filter(id => all.some(p => String(p.id) === id)));
     if (!all.length) return '';
-    const list = all.filter(p => !q || low((p.art || '') + ' ' + (p.name || '') + ' ' + (p.brand || '') + ' ' + (p.sup || '') + ' ' + waitWho(p)).includes(q));
+    const list = all.filter(p => !q || qVars(q).some(v => low((p.art || '') + ' ' + (p.name || '') + ' ' + (p.brand || '') + ' ' + (p.sup || '') + ' ' + waitWho(p)).includes(v)));
     const RS = ui.retSel, cst = p => r2((p.cost || 0) * (p.qty || 0));
     const bySup = {}; list.forEach(p => (bySup[p.sup || 'Без поставщика'] = bySup[p.sup || 'Без поставщика'] || []).push(p));
     const sel = all.filter(p => RS.has(String(p.id)));
@@ -5300,7 +5311,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function viewWait() {
     const q = low(ui.waitQ || '').trim();
     const all = waitList();
-    const list = all.filter(p => !q || low((p.art || '') + ' ' + (p.name || '') + ' ' + (p.brand || '') + ' ' + waitWho(p)).includes(q));
+    const list = all.filter(p => !q || qVars(q).some(v => low((p.art || '') + ' ' + (p.name || '') + ' ' + (p.brand || '') + ' ' + waitWho(p)).includes(v)));
     const bySup = {};
     list.forEach(p => { const k = p.sup || 'Без поставщика'; ((bySup[k] = bySup[k] || {})[p.date || ''] = bySup[k][p.date || ''] || []).push(p); });
     const msg = ui.waitMsg;
@@ -5368,7 +5379,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function viewStock() {
     const q = ui.stockQ.trim().toLowerCase();
-    const items = D.stock.map(s => ({ s, q: S.stockQty(s, D) })).filter(({ s }) => !q || (s.art + ' ' + s.name + ' ' + s.brand).toLowerCase().includes(q));
+    const items = D.stock.map(s => ({ s, q: S.stockQty(s, D) })).filter(({ s }) => !q || qVars(q).some(v => (s.art + ' ' + s.name + ' ' + s.brand).toLowerCase().includes(v)));
     const oil = items.filter(x => x.s.oil), sto = items.filter(x => !x.s.oil && x.s.grp === 'sto'), other = items.filter(x => !x.s.oil && x.s.grp !== 'sto');
     const value = items.reduce((a, { s, q }) => a + (q > 0 ? q * ((s.oil ? s.cost : stockCost(s)) || s.price || 0) : 0), 0);
     ui.stockSel = ui.stockSel || new Set();
@@ -5504,8 +5515,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const xq = (ui.xq || '').trim().toLowerCase(), xall = !!ui.xqAll;
     let found = '';
     if (xq) {
-      const words = xq.split(/\s+/);
-      const res = D.parts.filter(p => low(p.client).startsWith('сто') && (xall || p.month === m) && words.every(w => [p.art, p.name, p.brand, p.sup].join(' ').toLowerCase().includes(w) || (rkNorm(w).length >= 3 && rkNorm(p.art).includes(rkNorm(w)))))
+      const res = D.parts.filter(p => low(p.client).startsWith('сто') && (xall || p.month === m) && qVars(xq).some(qq => qq.split(/\s+/).every(w => [p.art, p.name, p.brand, p.sup].join(' ').toLowerCase().includes(w) || (rkNorm(w).length >= 3 && rkNorm(p.art).includes(rkNorm(w))))))
         .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       found = `<section class="block"><div class="block-head"><h3>Найдено в расходах СТО <span class="muted small">${res.length}${res.length > 100 ? ', показаны последние 100' : ''}</span></h3></div>
         ${res.length ? stoList(res.slice(0, 100)) : `<p class="muted">Ничего не нашлось.${xall ? '' : ' <button class="link small" data-act="xq-all" data-k="1">Искать за все месяцы</button>'}</p>`}</section>`;
@@ -6052,7 +6062,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   function priceListHTML() {
     const q = wk(ui.wpq || ''), words = q.split(' ').filter(Boolean);
     const all = D.workTypes.map((wt, i) => ({ wt, i, st: workStat(wt) }));
-    const list = all.filter(x => words.every(w => wk([x.wt.name].concat(x.wt.aliases || []).join(' ')).includes(w)) && (!ui.wpNode || nodeOfW({ name: x.wt.name }) === ui.wpNode))
+    const list = all.filter(x => qVars(q).some(qq => qq.split(' ').filter(Boolean).every(w => wk([x.wt.name].concat(x.wt.aliases || []).join(' ')).includes(w))) && (!ui.wpNode || nodeOfW({ name: x.wt.name }) === ui.wpNode))
       .sort((a, b) => b.st.count - a.st.count || a.wt.name.localeCompare(b.wt.name, 'ru'));
     const lim = Infinity, priced = all.filter(x => x.wt.price).length;
     const fill = all.filter(x => !x.wt.price && x.st.typ);
@@ -6085,7 +6095,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const words = wk(q).split(' ').filter(Boolean);
     const st = workHistory();
     const cnt = wt => [wt.name].concat(wt.aliases || []).reduce((a, n) => a + ((st[wk(n)] || []).length), 0);
-    return D.workTypes.filter(wt => words.every(w => wk([wt.name].concat(wt.aliases || []).join(' ')).includes(w)))
+    return D.workTypes.filter(wt => qVars(words.join(' ')).some(qq => qq.split(' ').filter(Boolean).every(w => wk([wt.name].concat(wt.aliases || []).join(' ')).includes(w))))
       .map(wt => ({ wt, c: cnt(wt) })).sort((a, b) => b.c - a.c).slice(0, 12).map(x => x.wt);
   }
   function workSuggHTML(i) {
