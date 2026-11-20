@@ -800,14 +800,14 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 .seg.seg3 button{flex:1 1 auto;white-space:nowrap;padding-left:6px;padding-right:6px}
 #wt-ask{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:32;background:var(--surface);border:2px solid var(--accent);color:var(--ink);padding:12px 14px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:min(560px,calc(100% - 32px));font-size:14px}
 #wt-ask[hidden]{display:none}#wt-ask ul{margin:8px 0}#wt-ask li{display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px solid var(--line)}#wt-ask li>span:first-child{flex:1}#wt-ask .ck-btns{display:flex;gap:6px;justify-content:flex-end}
-.chk-block .chk-l{border-top:1px solid var(--line)}.chk-block .chk-l>summary{display:flex;gap:12px;justify-content:space-between;padding:8px 2px;cursor:pointer;list-style:none}.chk-block .chk-l>summary::-webkit-details-marker{display:none}.chk-block .chk-l>summary b{white-space:nowrap}
+.chk-block .chk-l{border-top:1px solid var(--line)}.chk-block .chk-l>summary{display:flex;gap:12px;justify-content:space-between;padding:8px 2px;cursor:pointer;list-style:none}.chk-block .chk-l>summary::-webkit-details-marker{display:none}.chk-block .chk-l>summary b{white-space:nowrap}.chk-code{display:inline-block;min-width:30px;margin-right:8px;padding:1px 6px;border-radius:6px;background:var(--accent);color:#fff;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}.nd-row.nd-head{font-size:12px}.nd-row input:disabled{opacity:.7}
 .chk-w>div{display:grid;grid-template-columns:1fr auto minmax(140px,240px);gap:8px;align-items:center;padding:3px 0 3px 14px;font-size:13px}.chk-w select{font-size:12px;padding:3px 6px}
 .chk-tot{display:flex;gap:12px;align-items:baseline;justify-content:flex-end;border-top:2px solid var(--line);padding-top:8px;margin-top:2px}
 select.wp-node{font-size:12px;padding:3px 6px;max-width:260px}select.wp-node.auto{color:var(--muted)}
 @media (max-width:600px){.chk-w>div{grid-template-columns:1fr auto}.chk-w select{grid-column:1/-1}}
 .wpct-row{display:flex;gap:16px;align-items:end;flex-wrap:wrap;max-width:520px}.wpct-row .chk{display:flex;gap:8px;align-items:center;padding-bottom:10px;cursor:pointer;white-space:nowrap}.wpct-row .f{flex:1;min-width:140px}
 #wp-nf{min-width:0;max-width:100%;flex:1 1 160px;text-overflow:ellipsis;padding:10px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font-size:15px}
-.nodes-list{display:grid;gap:6px;max-width:620px}.nd-row{display:grid;grid-template-columns:24px 1fr 32px;gap:8px;align-items:center}.nd-row input{min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--ink);font-size:15px}
+.nodes-list{display:grid;gap:6px;max-width:620px}.nd-row{display:grid;grid-template-columns:62px 1fr 32px;gap:8px;align-items:center}.nd-row input{min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--ink);font-size:15px}
 #login{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}#login[hidden]{display:none}
 .login-box{width:min(360px,100%);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;display:grid;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.12)}.login-box .brand{font-size:26px}.login-box .seg button{flex:1}.login-box input{font-size:20px;letter-spacing:4px;text-align:center}
 .userchip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
@@ -6022,8 +6022,19 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   /* список узлов — в настройках (D.cfg.nodes): переименовать, добавить свои. id базовых — n0…n13 (на них смотрит авто-разбор по названию) */
   function nodesList() {
     if (!Array.isArray(D.cfg.nodes) || !D.cfg.nodes.length) D.cfg.nodes = NODES.map((n, i) => ({ id: 'n' + i, name: n }));
+    /* код товара на Эвоторе: 1 — запчасти, работы с 2 (базовые узлы по порядку 2…15, свои — дальше) */
     return D.cfg.nodes;
   }
+  /* код без ручной правки: базовые по порядку 2…15, свои — следующие свободные с 16 (в базу не пишем, считаем на лету) */
+  function nodeCode(n) {
+    if (!n) return null; if (n.code != null) return +n.code;
+    const m = /^n(\d+)$/.exec(n.id); if (m) return +m[1] + 2;
+    const L = nodesList(), taken = new Set(L.filter(x => x.code != null || /^n\d+$/.test(x.id)).map(x => x.code != null ? +x.code : +x.id.slice(1) + 2));
+    let k = 16; for (const x of L) { if (x.code != null || /^n\d+$/.test(x.id)) continue; while (taken.has(k)) k++; if (x === n) return k; taken.add(k); }
+    return null;
+  }
+  function nodeFreeCode(L) { const t = new Set(L.map(nodeCode)); let k = 16; while (t.has(k)) k++; return k; }
+  const PARTS_CODE = 1;
   const nodeById = id => nodesList().find(n => n.id === id);
   /* отметка узла хранится id; старые отметки названием — понимаем и их */
   function nodeRef(v) { if (v == null || v === '') return null; if (nodeById(v)) return v; const n = nodesList().find(x => x.name === v); return n ? n.id : null; }
@@ -6042,13 +6053,13 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const by = new Map();
     (o.works || []).forEach((w, i) => {
       if (w.kind || isTip(w) || !(+w.sum)) return;
-      const n = nodeOfW(w); const L = by.get(n) || { name: nodeName(n), sum: 0, works: [] };
+      const n = nodeOfW(w); const L = by.get(n) || { name: nodeName(n), code: nodeCode(nodeById(n)), sum: 0, works: [] };
       L.sum = r2(L.sum + (+w.sum || 0)); L.works.push({ w, i }); by.set(n, L);
     });
     const order = nodesList().map(n => n.id);
     const lines = [...by.entries()].sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0])).map(e => e[1]);
     const ps = r2(parts.filter(p => !p.ret && !p.kind && !isTip(p)).reduce((a, p) => a + (p.sum || 0), 0));
-    if (Math.abs(ps) > 0.004) lines.push({ name: PARTS_LINE, sum: ps, works: [], parts: true });
+    if (Math.abs(ps) > 0.004) lines.push({ name: PARTS_LINE, code: PARTS_CODE, sum: ps, works: [], parts: true });
     const sum = r2(lines.reduce((a, l) => a + l.sum, 0)), diff = r2((target ?? sum) - sum);
     if (Math.abs(diff) > 0.004 && lines.length) { const big = lines.reduce((m, l) => (l.sum > m.sum ? l : m)); big.sum = r2(big.sum + diff); big.adj = diff; }
     return { lines, total: r2(lines.reduce((a, l) => a + l.sum, 0)), diff };
@@ -6057,9 +6068,9 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   function nodesHTML() {
     const L = nodesList(), used = id => D.workTypes.some(w => nodeRef(w.node) === id) || D.orders.some(o => (o.works || []).some(w => nodeRef(w.node) === id));
     return `<section class="block"><div class="block-head"><h3 title="Строки кассового чека. Такие же услуги заведи на Эвоторе">Узлы для чека</h3><span class="muted small">${L.length} + «${PARTS_LINE}»</span></div>
-      <div class="nodes-list">${L.map((n, i) => `<div class="nd-row"><span class="muted">${i + 1}</span><input id="nd-${i}" value="${esc(n.name)}" data-nd="${i}" title="Переименовать — новое название сразу пойдёт в чек"${n.id === 'n13' ? '' : ''}>${/^n\d+$/.test(n.id) ? '<span></span>' : `<button class="x" data-act="nd-del" data-i="${i}" title="${used(n.id) ? 'Узел используется — сначала перенеси его работы в другой узел' : 'Удалить узел'}"${used(n.id) ? ' disabled' : ''}>×</button>`}</div>`).join('')}</div>
+      <div class="nodes-list"><div class="nd-row nd-head muted small"><span>Код</span><span>Название (как на Эвоторе)</span><span></span></div><div class="nd-row"><input value="${PARTS_CODE}" disabled title="Код 1 — всегда запчасти"><input value="${esc(PARTS_LINE)}" disabled><span></span></div>${L.map((n, i) => `<div class="nd-row"><input id="ndc-${i}" class="nd-code" inputmode="numeric" value="${esc(nodeCode(n))}" data-ndc="${i}" title="Код услуги на Эвоторе"><input id="nd-${i}" value="${esc(n.name)}" data-nd="${i}" title="Переименовать — новое название сразу пойдёт в чек"${n.id === 'n13' ? '' : ''}>${/^n\d+$/.test(n.id) ? '<span></span>' : `<button class="x" data-act="nd-del" data-i="${i}" title="${used(n.id) ? 'Узел используется — сначала перенеси его работы в другой узел' : 'Удалить узел'}"${used(n.id) ? ' disabled' : ''}>×</button>`}</div>`).join('')}</div>
       <div class="actions"><button class="btn small" data-act="nd-add">+ Узел</button></div>
-      <p class="muted small">Переименовал или добавил узел — заведи такую же услугу на Эвоторе. Свои узлы можно удалить, пока в них нет работ. Базовые 14 удалить нельзя: по ним программа сама раскладывает работы по названию.</p>
+      <p class="muted small">Код — это «код товара» на Эвоторе: на кассе набираешь его вместо поиска по списку. 1 — всегда запчасти, работы — с 2. Переименовал или добавил узел — заведи такую же услугу с тем же кодом на Эвоторе. Свои узлы можно удалить, пока в них нет работ. Базовые 14 удалить нельзя: по ним программа сама раскладывает работы по названию.</p>
     </section>`;
   }
   function checkBlockHTML() {
@@ -6070,8 +6081,8 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const dn = o.docNum || (hasReceipt(E.pays) ? '' : docNext(String(new Date().getFullYear()).slice(2)).num);
     const ok = Math.abs(C.total - c.target) < 0.005;
     return `<section class="block chk-block">
-      <div class="block-head"><h3 title="Как пробивать на Эвоторе: выбираешь услугу с таким названием и вписываешь сумму. Номер з/н на терминале вписывать не нужно">Для чека</h3><span class="muted small">з/н ${esc(o.docNum || dn || '')}</span></div>
-      <div class="chk-lines">${C.lines.map((l, li) => `<details class="chk-l"${E.chkOpen === li ? ' open' : ''}><summary><span>${esc(l.name)}</span><b>${fmt(l.sum, 2)}</b></summary>
+      <div class="block-head"><h3 title="Как пробивать на Эвоторе: набираешь код (цифра слева), вписываешь сумму. Номер з/н на терминале вписывать не нужно">Для чека</h3><span class="muted small">з/н ${esc(o.docNum || dn || '')}</span></div>
+      <div class="chk-lines">${C.lines.map((l, li) => `<details class="chk-l"${E.chkOpen === li ? ' open' : ''}><summary><span><span class="chk-code" title="Код на Эвоторе">${l.code != null ? esc(l.code) : '?'}</span>${esc(l.name)}</span><b>${fmt(l.sum, 2)}</b></summary>
         ${l.parts ? `<p class="muted small">Все запчасти наряда одной строкой.</p>` : `<div class="chk-w">${l.works.map(({ w, i }) => `<div><span>${esc(w.name)}</span><span class="muted">${fmt(w.sum, 2)}</span><select data-wnode="${i}" title="Перенести работу в другой узел. Если работа есть в прайсе — запомнится и для следующих нарядов">${nodeOpts(nodeOfW(w))}</select></div>`).join('')}</div>`}
         ${l.adj ? `<p class="muted small">включено округление ${l.adj > 0 ? '+' : '−'}${fmt(Math.abs(l.adj), 2)}</p>` : ''}</details>`).join('')}
       </div>
@@ -6674,7 +6685,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'pay-dup-no': if (ui.payForm) { ui.payForm.dupAsk = null; render(); } break;
       case 'ck-undo': ui.ckAlert = null; histGo(-1); paintCkAlert(); break;
       case 'ck-ok': ui.ckAlert = null; paintCkAlert(); break;
-      case 'nd-add': { const L = nodesList(); let k = 1; while (L.some(n => n.id === 'u' + k)) k++; L.push({ id: 'u' + k, name: 'Новый узел ' + k }); changed('Добавлен узел'); setTimeout(() => { const f = $('#nd-' + (L.length - 1)); if (f) { f.focus(); f.select(); } }, 30); break; }
+      case 'nd-add': { const L = nodesList(); let k = 1; while (L.some(n => n.id === 'u' + k)) k++; L.push({ id: 'u' + k, name: 'Новый узел ' + k, code: nodeFreeCode(L) }); changed('Добавлен узел'); setTimeout(() => { const f = $('#nd-' + (L.length - 1)); if (f) { f.focus(); f.select(); } }, 30); break; }
       case 'nd-del': { const L = nodesList(), i = +b.dataset.i; if (L[i] && !/^n\d+$/.test(L[i].id)) { L.splice(i, 1); changed('Удалён узел'); } break; }
       case 'login-u': ui.login = { u: b.dataset.v, pin: '' }; paintUser(); break;
       case 'login-go': {
@@ -6950,6 +6961,13 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         if (!/^\d{4,8}$/.test(v)) { toast('PIN — от 4 до 8 цифр'); el.value = ''; return; }
         U.pins[el.dataset.u] = pinHash(el.dataset.u, v); el.value = ''; toast('PIN сохранён'); changed(); return;
       }
+    }
+    if (el.dataset.ndc != null) {
+      const n = nodesList()[+el.dataset.ndc], v = el.value.trim();
+      if (!n) return;
+      if (!/^\d{1,6}$/.test(v) || +v < 2) { toast('Код — число от 2 (1 — запчасти)'); render(); return; }
+      if (nodesList().some(x => x !== n && nodeCode(x) === +v)) { toast('Код ' + v + ' уже занят'); render(); return; }
+      n.code = +v; toast('Код изменён — поменяй и на Эвоторе'); changed(); return;
     }
     if (el.dataset.nd != null) {
       const n = nodesList()[+el.dataset.nd], v = el.value.trim();
