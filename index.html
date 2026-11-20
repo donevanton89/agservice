@@ -5523,10 +5523,11 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
           <label class="f">Сумма, ₽<input id="x-amount" value="${esc(nv(f.amount))}" data-xf="amount" inputmode="decimal"></label>
           <label class="f">Чем платили<select id="x-how" data-xf="how">
             ${(f.kind === 'sto' ? ['ip', 'cash', 'piggy', 'oil', 'anton', 'gleb', 'debt'] : ['ip', 'cash']).map(k => `<option value="${k}"${f.how === k ? ' selected' : ''}>${k === 'debt' ? DEBT_LABEL : HOW[k][2]}</option>`).join('')}</select></label>
+          ${f.kind === 'sto' && FUNDS.includes(f.how) ? `<label class="f"><span class="tip-t" title="Копилка — отложенные деньги. Сами деньги за покупку ушли откуда-то: из кассы, с ИП карты или ты заплатил своей картой (тогда сумма вернётся тебе на долю)">Деньги ушли из</span><select id="x-src" data-xf="src">${srcOpts(f.sup).map(k => `<option value="${k}"${(f.src || srcDef(f.sup)) === k ? ' selected' : ''}>${srcLabel(k)}</option>`).join('')}</select></label>` : ''}
           ${f.kind === 'sto' ? `<label class="f">Где купили<input id="x-sup" value="${esc(f.sup)}" data-xf="sup" list="dl-sups"></label>` : ''}
           <label class="f span2">Примечание<input id="x-note" value="${esc(f.note)}" data-xf="note"></label>
         </div>
-        <p class="muted small">${f.kind === 'sto' ? 'Копилка и Масло/антифриз — в расходы месяца не идут, тратятся из своих денег. «Лично Антон/Глеб» — из кассы ничего не уходит, сумма зачисляется на долю. «' + DEBT_LABEL + '» — только для ' + (D.cfg.balanceSuppliers || []).join(', ') + ': покупка ляжет на их баланс, а оплату внесёшь потом в «Деньги». Если у них же заплатил сразу (картой, наличными) — выбери чем, баланс поставщика не изменится.' : 'Запишется в «Деньги» минусом с этим назначением и уменьшит ИП карту или кассу.'}</p>
+        <p class="muted small">${f.kind === 'sto' ? 'Копилка и Масло/антифриз — в расходы месяца не идут; укажи, откуда ушли сами деньги («Деньги ушли из»). «Лично Антон/Глеб» — из кассы ничего не уходит, сумма зачисляется на долю. «' + DEBT_LABEL + '» — только для ' + (D.cfg.balanceSuppliers || []).join(', ') + ': покупка ляжет на их баланс, а оплату внесёшь потом в «Деньги». Если у них же заплатил сразу (картой, наличными) — выбери чем, баланс поставщика не изменится.' : 'Запишется в «Деньги» минусом с этим назначением и уменьшит ИП карту или кассу.'}</p>
         <div class="actions"><button class="btn primary" data-act="exp-add">Записать расход</button>${f.kind === 'sto' ? '<button class="btn primary-t" data-act="xp-open">Загрузить запчасти</button>' : ''}</div>
       </section>
       ${f.kind === 'sto' && ui.xpaste ? xpastePanel() : ''}
@@ -5593,7 +5594,9 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (!rows.length) return;
     const x = rows[0], y = x.link ? D.pays.find(p => p.link === x.link) : null;
     const how = y ? HOW_BY_NAME(y) : x.link || isBalanceSup(x.sup) ? 'debt' : 'none';
-    ui.stoEdit = { key, group: rows.length > 1, date: x.date, what: x.name, amount: rows.length > 1 ? null : x.sum, sup: x.sup || '', note: x.note || '', how, how0: how, linked: !!x.link };
+    const ys = x.link ? D.pays.filter(p => p.link === x.link) : [], yS = ys.find(p => p.fsrc);
+    const src = FUNDS.includes(how) ? (yS ? HOW_BY_NAME(yS) : (isBalanceSup(x.sup) && !ys.some(p => p.cr) ? 'debt' : null)) : null;
+    ui.stoEdit = { key, group: rows.length > 1, date: x.date, what: x.name, amount: rows.length > 1 ? null : x.sum, sup: x.sup || '', note: x.note || '', how, how0: how, linked: !!x.link, src: src || srcDef(x.sup), srcOld: src };
     render();
   }
   function stoEditForm() {
@@ -5604,6 +5607,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       ${f.group ? '' : `<label class="f">Что купили<input id="se-what" value="${esc(f.what)}" data-se="what"></label><label class="f">Сумма, ₽<input id="se-amount" value="${esc(nv(f.amount))}" data-se="amount" inputmode="decimal"></label>`}
       ${f.how === 'none' ? `<div class="f"><span>Чем платили</span><span class="muted small">запись из Excel — её оплата в «Деньгах» отдельной строкой, правь её там</span></div>`
         : `<label class="f">Чем платили<select id="se-how" data-se="how">${howOpts.map(([v, t]) => `<option value="${v}"${f.how === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`}
+      ${FUNDS.includes(f.how) ? `<label class="f"><span class="tip-t" title="Откуда ушли сами деньги. Своей картой — сумма вернётся тебе на долю">Деньги ушли из</span><select id="se-src" data-se="src">${srcOpts(f.sup).map(k => `<option value="${k}"${f.src === k ? ' selected' : ''}>${srcLabel(k)}</option>`).join('')}</select></label>` : ''}
       <label class="f">Где купили<input id="se-sup" value="${esc(f.sup)}" data-se="sup" list="dl-sups"></label>
       <label class="f span2">Примечание<input id="se-note" value="${esc(f.note)}" data-se="note"></label></div>
       ${f.group ? '<p class="muted small">В покупке из нескольких позиций меняются дата, оплата и магазин для всех строк; сумма — по строкам.</p>' : ''}
@@ -5626,7 +5630,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       const total = r2(rows.reduce((a, p) => a + (p.ret ? 0 : p.sum || 0), 0)), first = rows[0];
       const old = D.pays.find(p => p.link === link && !p.cr);
       D.pays = D.pays.filter(p => p.link !== link);
-      if (f.how !== 'debt') { const ys = payRows(f.how, -total, f.date, (f.group ? 'Покупка' : f.what) + (f.sup ? ' (' + f.sup + ')' : ''), link, f.sup), y = ys[0]; if (old) { y.id = old.id; if (old.note && f.how === f.how0) y.note = old.note; } D.pays.push(...ys); }
+      if (f.how !== 'debt') { const ys = payRows(f.how, -total, f.date, (f.group ? 'Покупка' : f.what) + (f.sup ? ' (' + f.sup + ')' : ''), link, f.sup, f.src), y = ys[0]; if (old) { y.id = old.id; if (old.note && f.how === f.how0) y.note = old.note; } D.pays.push(...ys); }
       if (first.paid != null || f.how !== 'debt') first.paid = f.how === 'debt' ? null : total;
     }
     ui.stoEdit = null; toast('Расход изменён'); changed();
@@ -5635,9 +5639,20 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   const HOW = { ip: ['безнал', 'ИП карта (Антон)', 'ИП карта (Антон)'], cash: ['Наличные', 'СТО', 'Касса (наличные)'], piggy: ['безнал', 'Копилка', 'Копилка'], oil: ['безнал', 'Масло/антифриз', 'Масло/антифриз'], anton: ['безнал', 'Антон', 'Лично Антон (на долю)', 1], gleb: ['безнал', 'Глеб', 'Лично Глеб (на долю)', 1] };
   const DEBT_LABEL = 'Не оплачено — долг поставщику';
   /* оплата покупки + если магазин с балансом (Rossko…) и заплатили сразу — зачисление на его баланс, чтобы долг не повис */
-  function payRows(how, amount, date, note, link, sup) {
+  /* покупка «из Копилки / Масла»: копилка — это отложенные деньги, а сами деньги ушли из кассы, с ИП карты или с личной карты (тогда на долю).
+     Поэтому две строки: «Копилка −» и «откуда ушли» — сверка не сдвигается. */
+  const FUNDS = ['piggy', 'oil'];
+  const srcDef = sup => (isBalanceSup(sup) ? 'debt' : 'anton');
+  const srcOpts = sup => ['cash', 'ip', 'anton', 'gleb'].concat(isBalanceSup(sup) ? ['debt'] : []);
+  const srcLabel = k => (k === 'debt' ? DEBT_LABEL : HOW[k][2]);
+  function payRows(how, amount, date, note, link, sup, src) {
     if (how === 'debt') return [];
     const out = [payFor(how, amount, date, note, link)];
+    if (FUNDS.includes(how)) {
+      const sc = src || srcDef(sup);
+      if (sc === 'debt') return out;
+      out.push(Object.assign(payFor(sc, amount, date, note, link), { fsrc: 1 }));
+    }
     if (isBalanceSup(sup)) out.push({ id: uid('y'), date, order: null, amount: Math.abs(amount), type: 'безнал', receipt: null, name: (D.cfg.balanceSuppliers || []).find(x => low(x) === low(sup)), note: 'оплата покупки: ' + note, app: true, link, cr: true });
     return out;
   }
@@ -5659,7 +5674,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <label class="f">Дата<input id="xp-date" type="date" value="${esc(P.date)}" data-xp="date"></label>
         <label class="f">Поставщик<select id="xp-sup" data-xp="sup">${opt(sups, P.sup)}</select></label>
         <label class="f">Куда<select id="xp-to" data-xp="to"><option value="СТО"${P.to === 'СТО' ? ' selected' : ''}>Расход СТО</option><option value="СТО (копилка)"${P.to === 'СТО (копилка)' ? ' selected' : ''}>Копилка</option><option value="СТО (масло/антифриз)"${P.to === 'СТО (масло/антифриз)' ? ' selected' : ''}>Масло/антифриз</option></select></label>
-        ${fund ? `<div class="f"><span>Оплата</span><span class="small" style="font-weight:400;color:var(--ink)">из «${fund === 'oil' ? 'Масло/антифриз' : 'Копилка'}»</span></div>` : `<label class="f">Чем платили<select id="xp-how" data-xp="how">${['ip', 'cash', 'anton', 'gleb'].concat(bal ? ['debt'] : []).map(k => `<option value="${k}"${xpHow(P) === k ? ' selected' : ''}>${k === 'debt' ? DEBT_LABEL : HOW[k][2]}</option>`).join('')}</select></label>`}
+        ${fund ? `<label class="f"><span class="tip-t" title="Покупка за счёт «${fund === 'oil' ? 'Масло/антифриз' : 'Копилка'}». Сами деньги ушли из кассы, с ИП карты или с личной карты (тогда на долю)">Деньги ушли из</span><select id="xp-src" data-xp="src">${srcOpts(P.sup).map(k => `<option value="${k}"${(P.src || srcDef(P.sup)) === k ? ' selected' : ''}>${srcLabel(k)}</option>`).join('')}</select></label>` : `<label class="f">Чем платили<select id="xp-how" data-xp="how">${['ip', 'cash', 'anton', 'gleb'].concat(bal ? ['debt'] : []).map(k => `<option value="${k}"${xpHow(P) === k ? ' selected' : ''}>${k === 'debt' ? DEBT_LABEL : HOW[k][2]}</option>`).join('')}</select></label>`}
       </div>
       <div class="scroll"><table class="tbl"><thead><tr><th></th><th>Артикул</th><th>Название</th><th>Бренд</th><th class="r">Цена</th><th class="r">Кол-во</th><th class="r">Сумма</th></tr></thead><tbody>
       ${P.items.map((it, i) => `<tr class="${it.on ? '' : 'off'}"><td><input type="checkbox" id="xpc-${i}" data-xpc="${i}" ${it.on ? 'checked' : ''} aria-label="Добавить строку"></td><td class="mono">${esc(it.art)}</td><td>${esc(it.name)}${it.rst != null ? rkPill(it.rst) : ''}</td><td>${esc(it.brand)}</td><td class="r cst">${fmt(it.cost, 2)}</td><td class="r"><input id="xpq-${i}" class="r qty" value="${esc(it.qty)}" data-xpq="${i}" inputmode="decimal"></td><td class="r cst">${rub((it.cost || 0) * (it.qty || 0))}</td></tr>`).join('')}
@@ -5686,7 +5701,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     });
     const what = items.length === 1 ? items[0].name : items[0].name + ' и ещё ' + (items.length - 1) + ' поз.';
     const fund = P.to === 'СТО (масло/антифриз)' ? 'oil' : P.to === 'СТО (копилка)' ? 'piggy' : null;
-    D.pays.push(...payRows(fund || xpHow(P), -total, P.date, what + (P.sup ? ' (' + P.sup + ')' : ''), link, P.sup));
+    D.pays.push(...payRows(fund || xpHow(P), -total, P.date, what + (P.sup ? ' (' + P.sup + ')' : ''), link, P.sup, fund ? P.src : null));
     ui.xpaste = null; toast('Покупка записана'); changed();
   }
   function addExpense() {
@@ -5700,7 +5715,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
       if (f.how === 'debt' && !isBalanceSup(f.sup)) { toast('В долг можно только у ' + (D.cfg.balanceSuppliers || []).join(', ') + ' — укажи, где купили'); return; }
       const m = S.monthOf(f.date), a = Math.abs(f.amount);
       D.parts.push({ id: uid('p'), date: f.date, sup: f.sup || '', order: null, art: '', name: f.what, brand: '', cost: a, qty: 1, price: a, sum: a, client: f.how === 'piggy' ? 'СТО (копилка)' : f.how === 'oil' ? 'СТО (масло/антифриз)' : 'СТО', car: '', note: f.note, vin: '', plate: '', phone: '', paid: a, no: false, ret: false, retDone: false, month: m, app: true, link });
-      D.pays.push(...payRows(f.how, -a, f.date, f.what + (f.sup ? ' (' + f.sup + ')' : ''), link, f.sup));
+      D.pays.push(...payRows(f.how, -a, f.date, f.what + (f.sup ? ' (' + f.sup + ')' : ''), link, f.sup, f.src));
     }
     ui.expForm = Object.assign({}, f, { amount: null, note: '', what: f.kind === 'fixed' ? f.what : '', how: 'cash', howSet: false, sup: '' });
     toast('Расход записан'); changed();
@@ -6861,7 +6876,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     }
     if (a === 'sups') { D.cfg.suppliers = el.value.split(',').map(s => s.trim()).filter(s => s && s !== 'Склад'); toast('Поставщики сохранены'); changed(); return; }
     if (a === 'bsups') { D.cfg.balanceSuppliers = el.value.split(',').map(s => s.trim()).filter(Boolean); toast('Сохранено'); changed(); return; }
-    if (el.dataset.xf === 'how' || el.dataset.xf === 'what') { ui.expForm[el.dataset.xf] = el.value; if (el.dataset.xf === 'how') ui.expForm.howSet = true; return; }
+    if (el.dataset.xf === 'how' || el.dataset.xf === 'what') { ui.expForm[el.dataset.xf] = el.value; if (el.dataset.xf === 'how') { ui.expForm.howSet = true; render(); } return; }
     if (el.dataset.xf === 'sup') { const f = ui.expForm; f.sup = el.value; if (isBalanceSup(f.sup) && !f.howSet && f.how !== 'debt') { f.how = 'debt'; render(); } return; }
     if (el.dataset.pf === 'who') { ui.payForm.who = el.value; render(); return; }
     if (el.dataset.pf === 'from') { const f = ui.payForm; f.from = el.value; if (f.to && !trCanTo(f.from, f.to)) f.to = ''; render(); return; }
