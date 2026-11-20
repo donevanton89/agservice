@@ -667,6 +667,8 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 .zn-t2 td.n, .zn-t2 th.n { text-align: center; color: #888; }
 .zn-t2 td.r { text-align: right; white-space: nowrap; }
 .zn-t2 .mut { color: #666; } .zn-t2 td.b { font-family: Arial, sans-serif; font-weight: 600; }
+.zn-t2 tr.zn-grp td { background: #f7f7f7; font-weight: 600; border-bottom: .5pt solid #cfcfcf; }
+.zn-t2 tr.zn-gw td:nth-child(2) { padding-left: 4mm; }
 .zn-t2 .sub { font-size: 7pt; color: #777; line-height: 1.15; }
 .zn-t2 tr, .zn-t2 td { break-inside: avoid; page-break-inside: avoid; }
 .zn-blk { break-inside: avoid; page-break-inside: avoid; display: block; }
@@ -2457,7 +2459,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
       if (x[0] === 'возврат') return x[2] === 'да' ? 'возврат' : 'возврат отменён';
       if (x[0] === 'остаток (поправка)') { const n = v => parseFloat(String(v).replace(/\s/g, '').replace(',', '.')) || 0, dlt = Math.round((n(x[2]) - n(x[1])) * 100) / 100; return 'остаток поправлен вручную: ' + (dlt > 0 ? '+' : '−') + fmtN(Math.abs(dlt)); }
       const dd = v => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? dshort(v) : v);
-      if (x[0] === 'дата закрытия') return x[2] === '—' ? 'снова в работе' : 'машина сдана ' + dd(x[2]);
+      if (x[0] === 'дата закрытия') return x[2] === '—' ? 'снова в работе' : 'наряд закрыт ' + dd(x[2]);
       if (x[0] === 'работы' && x[1] === x[2]) return 'работы изменены';
       if (/^\d{4}-\d{2}-\d{2}$/.test(x[1]) || /^\d{4}-\d{2}-\d{2}$/.test(x[2])) return x[0] + ': ' + dd(x[1]) + ' → ' + dd(x[2]);
       return x[0] + ': ' + x[1] + ' → ' + x[2];
@@ -3236,7 +3238,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
 
         <div class="actions">
           ${o.doneDate ? `<button class="btn" data-act="reopen">Вернуть в работу</button>`
-            : `<label class="f inline">Дата сдачи<input id="e-done" type="date" value="${esc(E.doneInput || S.todayISO())}" data-ed-done="1"></label><button class="btn ok" data-act="close-order">Машина сдана</button>`}
+            : `<label class="f inline">Дата сдачи<input id="e-done" type="date" value="${esc(E.doneInput || S.todayISO())}" data-ed-done="1"></label><button class="btn ok" data-act="close-order">Закрыть наряд</button>`}
           <span class="grow"></span>
           ${E.isNew ? '' : E.confirmDelete
             ? `<span class="small">Удалить наряд со всеми запчастями и оплатами?</span><button class="btn danger" data-act="delete-order">Да, удалить</button><button class="btn ghost" data-act="cancel-delete">Нет</button>`
@@ -3861,8 +3863,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   function docYearOf(pays) { const d = (pays || []).filter(p => p.receipt === true && (+p.amount || 0) > 0 && !p.refund).map(p => p.date || S.todayISO()).sort()[0] || S.todayISO(); return d.slice(2, 4); }
   function docAssign(o, pays) {
-    if (o.docNum || !hasReceipt(pays)) return null;
-    const yy = docYearOf(pays), x = docNext(yy);
+    if (o.docNum) { const [yy, n] = o.docNum.split('/'); if (+n > (+((D.cfg.docSeq || {})[yy]) || 0)) D.cfg.docSeq = Object.assign({}, D.cfg.docSeq || {}, { [yy]: +n }); return null; }
+    const byRc = !hasReceipt(pays) && o.rc === true && !!o.doneDate;   /* «Чек: Да» и машину выдали (в т.ч. в долг) */
+    if (!hasReceipt(pays) && !byRc) return null;
+    const yy = byRc ? o.doneDate.slice(2, 4) : docYearOf(pays), x = docNext(yy);
     o.docNum = x.num; D.cfg.docSeq = Object.assign({}, D.cfg.docSeq || {}, { [yy]: x.n });
     return x.num;
   }
@@ -3926,7 +3930,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     (E.detachedPays || []).forEach(y => { y.order = null; D.pays.push(y); });
     D.parts.forEach(p => { if (touched.has(p.blk)) p.edited = true; });
     const docNew = docAssign(o, E.pays);
-    if (docNew) setTimeout(() => toast('Наряду присвоен номер ' + docNew + ' (оплата с чеком)'), 400);
+    if (docNew) setTimeout(() => toast('Наряду присвоен номер ' + docNew + (hasReceipt(E.pays) ? ' (оплата с чеком)' : ' (наряд закрыт, чек: да)')), 400);
     D.orders = D.orders.filter(x => x.id !== o.id).concat([o]);
     if (E.schedId) { const sc = D.schedule.find(x => x.id === E.schedId); if (sc) sc.oid = o.id; }
     E.parts.forEach(p => {
@@ -4043,19 +4047,43 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     /* округление в бланк отдельно не печатаем: прячем в самой дорогой запчасти с количеством 1 (цена = сумме, пересчитать нечего),
        нет такой — в самой дорогой работе; нет и её — печатаем строку «Округление» над итогом */
     let rndLine = 0;
-    const rndSum = r2(works.filter(w => w.kind === 'rnd').reduce((a, w) => a + (w.sum || 0), 0) + pr.filter(p => p.kind === 'rnd').reduce((a, p) => a + (p.sum || 0), 0));
-    if (Math.abs(rndSum) > 0.004) {
+    const withReceipt = hasReceipt(pays) || o.rc === true || !!o.docNum;
+    let rndSum = r2(works.filter(w => w.kind === 'rnd').reduce((a, w) => a + (w.sum || 0), 0) + pr.filter(p => p.kind === 'rnd').reduce((a, p) => a + (p.sum || 0), 0));
+    /* итог в бланке = сколько программа попросит с клиента: округлённый до сотни, даже если оплат ещё нет */
+    if (!(tip > 0.004)) {
+      const items = r2(prP.reduce((a, p) => a + (p.sum || 0), 0) + wk.reduce((a, w) => a + (w.sum || 0), 0));
+      const autoR = r2(works.filter(w => w.kind === 'rnd' && w.auto).reduce((a, w) => a + (w.sum || 0), 0) + pr.filter(p => p.kind === 'rnd' && p.auto).reduce((a, p) => a + (p.sum || 0), 0));
+      const R = rndTarget(r2(items + rndSum - autoR)); if (R != null) rndSum = r2(R - items);
+    }
+    if (Math.abs(rndSum) > 0.004 && !withReceipt) {
       const big = arr => arr.reduce((m, x) => (!m || (x.sum || 0) > (m.sum || 0) ? x : m), null);
       const bp = big(prP.filter(p => +p.qty === 1 && (p.sum || 0) > Math.abs(rndSum))), bw = big(wk.filter(w => (w.sum || 0) > Math.abs(rndSum)));
       if (bp) { bp.sum = r2(bp.sum + rndSum); bp.price = bp.sum; } else if (bw) bw.sum = r2(bw.sum + rndSum); else rndLine = rndSum;
     }
-    const total = r2(prP.reduce((a, p) => a + (p.sum || 0), 0) + wk.reduce((a, w) => a + (w.sum || 0), 0) + rndLine);
+    /* с чеком: работы группами по узлам, суммы групп — ровно как строки чека (округление — в ту же строку, что и в чеке) */
+    let grp = null, prHead = null;
+    if (withReceipt) {
+      const all = r2(prP.reduce((a, p) => a + (p.sum || 0), 0) + wk.reduce((a, w) => a + (w.sum || 0), 0) + rndSum);
+      const C = checkLines({ works }, pr, all), lines = new Map(C.lines.map(l => [l.name, l]));
+      const fold = (arr, adj) => { const b = arr.filter(x => (x.sum || 0) > Math.abs(adj)).reduce((m, x) => (!m || x.sum > m.sum ? x : m), null); if (b) { b.sum = r2(b.sum + adj); if (b.price != null && +b.qty === 1) b.price = b.sum; return true; } return false; };
+      const by = new Map();
+      wk.forEach(w => { const nm = nodeName(nodeOfW(w)); if (!by.has(nm)) by.set(nm, []); by.get(nm).push(w); });
+      const ord = nodesList().map(n => n.name);
+      grp = [...by.entries()].sort((a, b) => ord.indexOf(a[0]) - ord.indexOf(b[0])).map(([name, ws]) => {
+        const L = lines.get(name), adj = L && L.adj ? L.adj : 0;
+        if (adj && !fold(ws, adj)) ws.push({ name: 'Округление', sum: adj });
+        return { name, sum: L ? L.sum : r2(ws.reduce((a, w) => a + (w.sum || 0), 0)), ws };
+      });
+      const PL = lines.get(PARTS_LINE);
+      if (PL) { if (PL.adj && !fold(prP.filter(p => +p.qty === 1), PL.adj)) rndLine = PL.adj; prHead = PL.sum; }
+      else if (Math.abs(C.diff) > 0.004 && !grp.length) rndLine = C.diff;
+    }
+    const total = r2(prP.reduce((a, p) => a + (p.sum || 0), 0) + (grp ? grp.reduce((a, g) => a + g.ws.reduce((b, w) => b + (w.sum || 0), 0), 0) : wk.reduce((a, w) => a + (w.sum || 0), 0)) + rndLine);
     const paid = r2(t.paid - tip), due = r2(total - paid);
     /* заказчик — только имя, без прозвища */
     const who = (o.cid && X.clientById[o.cid] ? X.clientById[o.cid].name : o.client || '').trim();
     /* исполнитель с ИНН — только если по наряду пробит чек; иначе просто «Станция технического обслуживания» */
-    const withReceipt = hasReceipt(pays);
-    const docN = withReceipt ? (o.docNum || docNext(docYearOf(pays)).num) : null;
+    const docN = withReceipt ? (o.docNum || docNext(hasReceipt(pays) ? docYearOf(pays) : (o.doneDate || S.todayISO()).slice(2, 4)).num) : null;
     const logo = P.logo || 'data:image/png;base64,' + LOGO_B64;
     const oilArts = new Set(D.stock.filter(x => x.oil).map(x => String(x.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase()));
     const unit = p => (low(p.sup) === 'склад' && oilArts.has(String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase())) ? 'л' : 'шт.';
@@ -4076,9 +4104,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         </div>
       </div>
       ${wk.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cw"></colgroup><thead><tr><th class="n">№</th><th>Выполненные работы</th><th class="r">Стоимость, ₽</th></tr></thead>
-        <tbody>${wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td>${esc(w.name)}</td><td class="r b">${(+w.sum || 0) > 0.004 ? money(w.sum) : '<span class="mut">входит в стоимость</span>'}</td></tr>`).join('')}</tbody></table>` : ''}
+        <tbody>${grp ? (() => { let n = 0; return grp.map(g => `<tr class="zn-grp"><td class="n"></td><td>${esc(g.name)}</td><td class="r b">${money(g.sum)}</td></tr>` + g.ws.map(w => `<tr class="zn-gw"><td class="n">${++n}</td><td>${esc(w.name)}</td><td class="r mut">${(+w.sum || 0) > 0.004 || (+w.sum || 0) < -0.004 ? money(w.sum) : 'входит в стоимость'}</td></tr>`).join('')).join(''); })()
+          : wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td>${esc(w.name)}</td><td class="r b">${(+w.sum || 0) > 0.004 ? money(w.sum) : '<span class="mut">входит в стоимость</span>'}</td></tr>`).join('')}</tbody></table>` : ''}
       ${prP.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cq"><col class="cp"><col class="cs"></colgroup><thead><tr><th class="n">№</th><th>Запасные части и материалы</th><th class="c">Кол-во</th><th class="r">Цена, ₽</th><th class="r">Сумма, ₽</th></tr></thead>
-        <tbody>${prP.map((p, i) => { const sub = [p.brand || '', p.art || ''].filter(Boolean).join(' · '); return `<tr><td class="n">${i + 1}</td><td>${esc(p.name || p.art)}${sub && p.name ? `<div class="sub">${esc(sub)}</div>` : ''}</td><td class="c">${fmt(p.qty, p.qty % 1 ? 2 : 0)}${unit(p) === 'л' ? '\u00a0л' : ''}</td><td class="r mut">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`; }).join('')}</tbody></table>` : ''}
+        <tbody>${prHead != null ? `<tr class="zn-grp"><td class="n"></td><td colspan="3">${esc(PARTS_LINE)}</td><td class="r b">${money(prHead)}</td></tr>` : ''}${prP.map((p, i) => { const sub = [p.brand || '', p.art || ''].filter(Boolean).join(' · '); return `<tr><td class="n">${i + 1}</td><td>${esc(p.name || p.art)}${sub && p.name ? `<div class="sub">${esc(sub)}</div>` : ''}</td><td class="c">${fmt(p.qty, p.qty % 1 ? 2 : 0)}${unit(p) === 'л' ? '\u00a0л' : ''}</td><td class="r mut">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`; }).join('')}</tbody></table>` : ''}
       <div class="zn-blk"><div class="zn-sum">${rndLine ? `<div><span>Округление:</span><b>${rndLine > 0 ? '+' : '−'}${money(Math.abs(rndLine))}&nbsp;₽</b></div>` : ''}<div class="zn-total"><span>Итоговая стоимость ремонта:</span><b>${money(total)}&nbsp;₽</b></div>
         <div><span>Оплачено:</span><b>${money(paid)}&nbsp;₽</b></div>
         <div class="zn-due"><span>${due < -0.005 ? 'Переплата:' : 'К оплате:'}</span><b>${money(Math.abs(due))}&nbsp;₽</b></div></div>
@@ -4456,6 +4485,10 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   function rcAll(where, v) {
     const ed = where === 'ed', X0 = ed ? ui.editor : ui.sale; X0.rc = v; X0.err = '';
     if (ed) ui.editor.order.rc = v; /* запоминаем в наряде, даже если оплат ещё нет */
+    /* «Чек: Да» — сразу даём наряду официальный номер (закрепится при сохранении; передумал до сохранения — номер не тратится) */
+    if (ed) { const o = ui.editor.order;
+      if (v && !o.docNum) { o.docNum = docNext(S.todayISO().slice(2, 4)).num; ui.editor.docTmp = true; toast('Наряду присвоен номер ' + o.docNum); }
+      else if (!v && ui.editor.docTmp) { delete o.docNum; ui.editor.docTmp = false; } }
     X0.pays.forEach(p => { if (!kindIsSup(p)) p.receipt = v; });
     /* последняя оплата закрывала наряд — подгоняем её под новую сумму (ровную или точную) */
     const lines0 = ed ? ui.editor.order.works : ui.sale.rows, nl = lines0.find(x => x.kind === 'noch');
