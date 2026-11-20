@@ -6492,7 +6492,19 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'stk-sale-open': ui.tab = 'sales'; try { localStorage.setItem('sto.tab', ui.tab); } catch (er) {} openSale(b.dataset.id); render(); break;
       case 'rc-all': rcAll(b.dataset.w, b.dataset.v === '1'); break;
       case 'calc-pay': calcCommit(b.dataset.w, b.dataset.m); break;
-      case 'rnd-del': { const i = +b.dataset.i; if (b.dataset.w === 'ed') { const w = ui.editor.order.works[i]; if (w && w.kind) ui.editor.order.works.splice(i, 1); paintEditor(); } else { const p = ui.sale.rows[i]; if (p && p.kind) ui.sale.rows.splice(i, 1); paintSale(); } break; }
+      case 'rnd-del': {
+        /* авто-округление держится, пока оплата = круглой сумме: убираем его вместе с этой разницей в последней оплате */
+        const i = +b.dataset.i, ed = b.dataset.w === 'ed', L = ed ? ui.editor.order.works : ui.sale.rows, pays = ed ? ui.editor.pays : ui.sale.pays, x = L[i];
+        if (!x || !x.kind) break;
+        if (x.kind === 'rnd' && x.auto) {
+          const py = pays.slice().reverse().find(p => (+p.amount || 0) > 0 && !p.refund);
+          if (py) { py.amount = r2((+py.amount || 0) - (x.sum || 0)); toast('Округление убрано — оплата теперь ' + rub(py.amount)); }
+          L.splice(i, 1);
+          if (ed) paintEditor(); else paintSale();
+          break;
+        }
+        L.splice(i, 1); if (ed) paintEditor(); else paintSale(); break;
+      }
       case 'sfilter': ui.sfilter = b.dataset.k; ui.slimit = 40; render(); break;
       case 's-more': ui.slimit = (ui.slimit || 40) + 60; render(); break;
       case 'toggle-row': { const id = b.dataset.id; if (ui.openRows.has(id)) ui.openRows.delete(id); else ui.openRows.add(id); render(); break; }
