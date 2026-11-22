@@ -3432,14 +3432,14 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
   }
   /* подсказка у поля «Закупка» для запчасти со склада: цена закупки из карточки склада */
   /* закупка позиции склада (кроме масел) = цена последней покупки этого артикула в расходах СТО; нет покупок — что указано в карточке */
-  function stockLast(st, receivedOnly = false) {
+  function stockLast(st) {
     if (!st || st.oil) return null;
     const a = artN(st.art); if (!a) return null;
     let best = null;
-    D.parts.forEach(p => { if ((receivedOnly && p.no) || !low(p.client).startsWith('сто') || p.ret || !(+p.cost > 0) || artN(p.art) !== a) return; if (!best || (p.date || '') >= (best.date || '')) best = p; });
+    D.parts.forEach(p => { if (p.no || !low(p.client).startsWith('сто') || p.ret || !(+p.cost > 0) || artN(p.art) !== a) return; if (!best || (p.date || '') >= (best.date || '')) best = p; });
     return best ? { c: +best.cost, date: best.date, sup: best.sup || '' } : null;
   }
-  function stockCost(st) { if (st && receiptPriced(st)) return stockUnitCost(st); if (st?.manualCost != null) return st.manualCost; const l = stockLast(st); return l ? l.c : st && st.cost; }
+
   function stockCostTip(p) {
     if (p.sup !== 'Склад') return 'Закупка';
     const k = String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase();
@@ -3448,7 +3448,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (!st) return 'Со склада — такой позиции на складе не нашёл';
     if (st.oil && p.oilCost != null && p.oilArt === p.art) return `Закупка в этой продаже: ${rub(p.oilCost)} за л` + (p.oilBase != null ? ` = бочка ${rub(p.oilBase)} + ${p.oilAdd != null ? 'надбавка ' + rub(p.oilAdd) : p.oilPct + '% запас'}${p.oilFrom ? ' (бочка от ' + p.oilFrom.split(',').map(dshort).join(' и ') + ')' : ''}` : ' (по карточке склада на момент продажи)') + `${p.qty ? ` · на ${fmt(p.qty, p.qty % 1 ? 2 : 0)} л: ${rub(p.oilCost * p.qty)}` : ''}. Можно поправить руками.`;
     if (st.oil && !(p.oilCost != null && p.oilArt === p.art)) { const r = barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), +p.qty || 1, st.cost); return `При сохранении закупка возьмётся из бочки: ${rub(r.avg)} + надбавка ${rub(oilAddOf(st))} = ${rub(r.avg + oilAddOf(st))} за л`; }
-    const sc = stockCost(st);
+    const sc = stockUnitCost(st);
     if (sc == null || sc === '') return 'Со склада — у позиции не указана закупка';
     return `Закупка на складе: ${rub(sc)} за ${st.oil ? 'л' : 'шт.'}${p.qty ? ` · на ${fmt(p.qty, p.qty % 1 ? 2 : 0)} ${st.oil ? 'л' : 'шт.'}: ${rub(sc * p.qty)}` : ''}`;
   }
@@ -3706,7 +3706,8 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const foot = ctx === 'wait'
       ? `<select id="rk-bulk" data-rkbulk="1" aria-label="Куда — всем отмеченным" ${on.length ? '' : 'disabled'}>${destOpts('', 'Куда — всем отмеченным…')}</select>
          <button class="btn primary" data-act="rk-put" ${on.length ? '' : 'disabled'}>Внести выбранное${on.length ? ' (' + on.length + ')' : ''}</button>`
-      : ctx === 'xp' ? `<label class="f inline">Чем платили<select id="rk-how" data-rkhow="1">${['debt', 'cash', 'ip', 'anton', 'gleb'].map(k => `<option value="${k}"${(ui.rkHow || 'debt') === k ? ' selected' : ''}>${k === 'debt' ? DEBT_LABEL : HOW[k][2]}</option>`).join('')}</select></label>
+      : ctx === 'xp' ? `<label class="f inline">Чем платили<select id="rk-how" data-rkhow="1">${['debt', 'cash', 'ip', 'anton', 'gleb', ...FUNDS].map(k => `<option value="${k}"${(ui.rkHow || 'debt') === k ? ' selected' : ''}>${k === 'debt' ? DEBT_LABEL : HOW[k][2]}</option>`).join('')}</select></label>
+         ${FUNDS.includes(ui.rkHow) ? `<label class="f inline">Деньги ушли из<select id="rk-src" data-rksrc="1">${srcOpts('Rossko').map(k => `<option value="${k}"${(ui.rkSrc || srcDef('Rossko')) === k ? ' selected' : ''}>${srcLabel(k)}</option>`).join('')}</select></label>` : ''}
          <button class="btn primary" data-act="rk-add" data-k="xp" ${on.length ? '' : 'disabled'}>Записать в расходы СТО${on.length ? ' (' + on.length + ')' : ''}</button>`
       : `<button class="btn primary" data-act="rk-add" data-k="${ctx}" ${on.length ? '' : 'disabled'}>${ctx === 'ed' ? 'Добавить в наряд' : 'Добавить в продажу'}${on.length ? ' (' + on.length + ')' : ''}</button>`;
     return `<section class="block rk-flat${ctx === 'wait' ? '' : ' ctx-x'}">${head}<p class="muted small">${tip}</p>
@@ -3771,7 +3772,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       Sx.paste = null; paintSale(); toast('Добавлено в продажу: ' + items.length + '. Не забудь сохранить');
     } else {
       const how = ui.rkHow || 'debt';
-      ui.xpaste = { items: items.map(it => Object.assign(it, { on: true })), date: (ui.expForm && ui.expForm.date) || S.todayISO(), sup: items[0].sup, to: 'СТО', how, howSet: true, no: false };
+      ui.xpaste = { items: items.map(it => Object.assign(it, { on: true })), date: (ui.expForm && ui.expForm.date) || S.todayISO(), sup: items[0].sup, to: how === 'oil' ? 'СТО (масло/антифриз)' : how === 'piggy' ? 'СТО (копилка)' : 'СТО', how, src: FUNDS.includes(how) ? ui.rkSrc || srcDef(items[0].sup) : null, howSet: true, no: false };
       xpasteAdd();
     }
     lines.forEach(L => sel.delete(L.key));
@@ -4700,7 +4701,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       if (k === 'sup') { const was = low(p.sup) === 'склад'; p.sup = el.value; if (low(p.sup) === 'склад') p.no = false; else if (was) p.no = true; paintSale(); return; }
       if (['art', 'name', 'brand'].includes(k)) {
         p[k] = el.value;
-        if (k === 'art' && p.sup === 'Склад') { const st = D.stock.find(x => x.art === el.value); if (st) { Object.assign(p, { name: st.name, brand: st.brand, price: isOwn(Sx.client) ? stockCost(st) || st.price : st.price, cost: null }); p.sum = r2((p.price || 0) * (p.qty || 0)); paintSale(); } }
+        if (k === 'art' && p.sup === 'Склад') { const st = D.stock.find(x => x.art === el.value); if (st) { Object.assign(p, { name: st.name, brand: st.brand, price: isOwn(Sx.client) ? stockUnitCost(st) || st.price : st.price, cost: null }); p.sum = r2((p.price || 0) * (p.qty || 0)); paintSale(); } }
         return;
       }
       p[k] = numIn(el.value);
@@ -5497,7 +5498,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const q = ui.stockQ.trim().toLowerCase();
     const items = orderedStock().map(s => ({ s, q: S.stockQty(s, D) })).filter(({ s }) => !q || qVars(q).some(v => (s.art + ' ' + s.name + ' ' + s.brand).toLowerCase().includes(v)));
     const oil = items.filter(x => stockGroup(x.s) === 'oil'), sto = items.filter(x => stockGroup(x.s) === 'sto'), other = items.filter(x => stockGroup(x.s) === '');
-    const value = items.reduce((a, { s, q }) => a + (q > 0 ? q * (receiptPriced(s) ? stockUnitCost(s) ?? 0 : stockCost(s) || s.price || 0) : 0), 0);
+    const value = items.reduce((a, { s, q }) => a + (q > 0 ? q * (stockUnitCost(s) ?? 0) : 0), 0);
     ui.stockSel = ui.stockSel || new Set();
     const SEL = ui.stockSel, F = ui.stockForm;
     const chk = s => `<td class="chkc"><span class="stock-grip" title="Перетащить позицию" aria-label="Перетащить позицию"></span><input type="checkbox" id="ss-${esc(s.id)}" data-ssel="${esc(s.id)}" ${SEL.has(s.id) ? 'checked' : ''} aria-label="Выбрать"></td>`;
@@ -5514,7 +5515,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const dragAttr = s => `data-stock-drag="${esc(s.id)}"`;
     const deleteRow = s => ui.stockDelete === s.id ? `<tr class="stk-form"><td colspan="7"><div class="note"><span>Убрать «${esc(s.name)}» со склада? Остаток: ${esc(String(S.stockQty(s, D)))}. История операций сохранится.</span> <button class="btn small danger" data-act="stock-delete" data-id="${esc(s.id)}">Удалить</button> <button class="btn small ghost" data-act="stock-del-no">Отмена</button></div></td></tr>` : '';
     const cell = (s,key,text) => {
-      if (!editing(s) || (key === 'cost' && receiptPriced(s))) return esc(text);
+      if (!editing(s) || key === 'cost') return esc(text);
       const numeric = !['art','name','brand'].includes(key);
       return `${key === 'fundRate' ? 'В кассу ' : ''}<input class="stock-input" data-row-key="${key}" aria-label="${esc(fieldNames[key])}" title="${esc(fieldNames[key])}" ${numeric ? 'inputmode="decimal"' : ''} value="${esc(ui.stockDraft.values[key] ?? '')}" placeholder="${key === 'packLitres' ? 'л/уп.' : '—'}">`;
     };
@@ -5607,9 +5608,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const st = D.stock.find(s => s.id === id);
     if (!st || isRO()) return;
     if (ui.stockDraft && ui.stockDraft.id !== id) { toast('Сохрани или отмени открытую правку'); return; }
-    const values = {art:st.art,name:st.name,brand:st.brand,qty:S.stockQty(st,D),cost:stockUnitCost(st),price:st.price};
-    if (receiptPriced(st)) delete values.cost;
-    if (values.cost != null) values.cost = String(r2(values.cost)).replace('.', ',');
+    const values = {art:st.art,name:st.name,brand:st.brand,qty:S.stockQty(st,D),price:st.price};
     if (stockGroup(st) === 'oil') values.fundRate = initialFundRate(st);
     if (st.oil && st.packLitres == null) values.packLitres = '';
     ui.stockDraft = {id,values:{...values},original:values};
@@ -5631,7 +5630,6 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if ('art' in updates) st.art = updates.art;
     for (const [key,val] of Object.entries(updates)) {
       if (key === 'qty') st.qtyBase = r2((st.qtyBase || 0) + val - S.stockQty(st,D));
-      else if (key === 'cost') st.manualCost = val == null ? null : r2(val);
       else if (key === 'fundRate') {
         if (st.fundRate == null) {
           st.fundStart = S.todayISO();
@@ -5646,10 +5644,8 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     ui.stockDelete = null; ui.stockDraft = null;
     if (Object.keys(updates).length) changed('Изменение позиции склада'); else render();
   }
-  function receiptPriced(st) { return st.oil || stockGroup(st) === 'oil'; }
   function stockUnitCost(st) {
-    if (!receiptPriced(st)) return stockCost(st);
-    if (!st.oil) return stockLast(st, true)?.c ?? null;
+    if (!st.oil) return stockLast(st)?.c ?? null;
     const buys = oilBuys(st, true);
     if (!buys.length) return null;
     return barrelAvg(buys, Math.max(0, S.stockQty(st, D) - 1), 1, st.cost).avg;
@@ -5752,11 +5748,25 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       <div class="actions"><button class="btn small primary" data-act="fe-save">Сохранить</button><button class="btn small ghost" data-act="fe-cancel">Отмена</button></div></div>`;
   }
   function stoList(sto) {
-    const byLink = {};
-    D.pays.forEach(p => { if (p.link && !p.cr) byLink[p.link] = p; });
+    const byLink = new Map();
+    for (const payment of D.pays) {
+      if (!payment.link) continue;
+      const group = byLink.get(payment.link) || {};
+      if (payment.cr) group.credit = true;
+      else if (payment.fsrc) group.source = payment;
+      else group.main = payment;
+      byLink.set(payment.link, group);
+    }
     /* чем платили — по связанной записи в «Деньгах» */
     const who = p => {
-      const y = p.link && byLink[p.link], pill = (t, c) => ' · <span class="pill ' + (c || 'st-done') + '">' + esc(t) + '</span>';
+      const group = byLink.get(p.link);
+      const y = group?.source || group?.main, pill = (t, c) => ' · <span class="pill ' + (c || 'st-done') + '">' + esc(t) + '</span>';
+      const fundPurchase = ['сто (масло/антифриз)', 'сто (копилка)'].includes(low(p.client));
+      if (fundPurchase && group?.credit && !y) return pill('Оплачено поставщику');
+      if (fundPurchase && y && !group.source && ['копилка','масло/антифриз'].includes(low(y.name))) {
+        if (group.credit) return pill('Оплачено поставщику');
+        return isBalanceSup(p.sup) ? pill('Долг поставщику', 'st-wait') : '';
+      }
       if (!y) return isBalanceSup(p.sup) ? pill('Долг поставщику', 'st-wait') : p.link ? pill('оплата удалена', 'st-bad') : '';
       const n = low(y.name);
       if ((n === 'антон' || n === 'глеб') && y.amount > 0) return pill('Лично ' + y.name);
@@ -7126,7 +7136,8 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (el.dataset.rkq != null) { ui.rkQty = ui.rkQty || {}; ui.rkQty[el.dataset.rkq] = +el.value; rkSelSet().add(el.dataset.rkq); rkRepaintAll(); return; }
     if (el.dataset.rksel != null) { const S2 = rkSelSet(); if (el.checked) S2.add(el.dataset.rksel); else S2.delete(el.dataset.rksel); rkRepaintAll(); return; }
     if (el.dataset.rkselall != null) { const S2 = rkSelSet(); rkLines().forEach(L => { if (el.checked) S2.add(L.key); else S2.delete(L.key); }); rkRepaintAll(); return; }
-    if (el.dataset.rkhow != null) { ui.rkHow = el.value; return; }
+    if (el.dataset.rkhow != null) { ui.rkHow = el.value; render(); return; }
+    if (el.dataset.rksrc != null) { ui.rkSrc = el.value; return; }
     if (el.dataset.cmrg) { if (ui.cmrg) ui.cmrg.keep = el.value; render(); return; }
     if (el.closest('#editor')) { if (el.tagName === 'SELECT' || el.type === 'checkbox') onEditorInput(el); return; }
     if (el.closest('#saleEd')) { if (el.dataset.sa === 'client') onSaleInput(el); return; }
@@ -7136,7 +7147,6 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (el.dataset.rksel != null) { const S2 = rkSelSet(); if (el.checked) S2.add(el.dataset.rksel); else S2.delete(el.dataset.rksel); rkRepaintAll(); return; }
     if (el.dataset.rkselall != null) { const S2 = rkSelSet(); rkLines().forEach(L => { if (el.checked) S2.add(L.key); else S2.delete(L.key); }); rkRepaintAll(); return; }
     if (el.dataset.rkbulk != null) { if (!el.value) return; ui.rkDest = ui.rkDest || {}; rkLines().forEach(L => { if (rkSelSet().has(L.key)) ui.rkDest[L.key] = el.value; }); render(); return; }
-    if (el.dataset.rkhow != null) { ui.rkHow = el.value; return; }
     if (el.dataset.rkd != null) { ui.rkDest = ui.rkDest || {}; ui.rkDest[el.dataset.rkd] = el.value; render(); return; }
     if (el.dataset.rkall != null) {
       const o = ui.rk && ui.rk.data.orders.find(x => String(x.id) === el.dataset.rkall); if (!o || !el.value) return;
