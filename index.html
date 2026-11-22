@@ -719,6 +719,9 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 @media (max-width: 560px) { .pct-m { display: inline-block; } }
 .pct-btn:hover { background: var(--accent-soft); }
 .oilres-box { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; padding: 10px 12px; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--accent-soft); }
+.fund-panel {display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;padding:12px 14px;margin:12px 0;background:var(--accent-soft);border-radius:8px}
+.fund-panel b {display:block;margin-top:4px}
+.fund-panel input {max-width:180px}
 .oilc-btn { background: none; border: 0; padding: 2px 4px; margin: -2px -4px; border-radius: 6px; font: inherit; color: inherit; cursor: pointer; }
 .oilc-btn:hover { background: var(--accent-soft); color: var(--accent); }
 .oilc-btn.own { color: var(--accent); font-weight: 600; }
@@ -5480,27 +5483,14 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const row = ({ s, q }) => `<tr ${dragAttr(s)} class="${SEL.has(s.id) ? 'sel' : ''}">${chk(s)}<td class="mono">${esc(s.art)}</td><td>${esc(s.name)}<div class="muted small">${esc(s.brand)}</div></td>
       <td class="r ${q < 0 ? 'neg' : q === 0 ? 'muted' : ''}"><b>${fmt(q, q % 1 ? 2 : 0)}</b></td>${(() => { const l = stockLast(s); return l ? `<td class="r cst"><span title="${esc('Последняя закупка ' + dshort(l.date) + (l.sup ? ' · ' + l.sup : '') + ' — ставится сама')}">${rub(l.c)}</span></td>` : `<td class="r cst">${s.cost ? `<span title="Покупок этого артикула в расходах СТО нет — цена из карточки">${rub(s.cost)}</span>` : '<span class="muted">—</span>'}</td>`; })()}<td class="r">${rub(s.price)}</td>${acts(s)}</tr>${deleteRow(s)}${formRow(s)}`;
     /* масла и жидкости: стрелочка раскрывает, кому, сколько и когда продали */
-    const oilB = st => barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), 1, st.cost).avg;
     const oilCostCell = st => {
-      if (st.pack) return `<td class="r cst" title="Закупка за канистру">${rub(packCost(st))}</td>`;
-      const b = oilB(st), add = oilAddOf(st);
-      const tip = b ? 'Бочка ' + rub(b) + ' за л + надбавка ' + rub(add) + '. Нажми, чтобы поменять надбавку' : 'Нет закупки бочки';
-      return `<td class="r cst"><button type="button" class="oilc-btn" data-act="oilc-open" data-id="${esc(st.id)}" title="${esc(tip)}">${b ? rub(r2(b + add)) : (st.cost ? rub(st.cost) : '—')}</button></td>`;
-    };
-    const oilBox = st => {
-      if (!ui.oilc || ui.oilc.id !== st.id) return '';
-      const b = oilB(st), P = ui.oilc, addV = P.v != null ? (numIn(String(P.v)) || 0) : oilAddOf(st);
-      return `<tr class="stk-form"><td colspan="7"><div class="oilres-box oilc-box">
-        <div class="oilc-auto"><span class="muted small">Цена бочки (ставится сама)</span><b>${b ? rub(b) : '—'}</b><span class="muted small">за литр, из которой сейчас льёшь</span></div>
-        <label class="f">Надбавка, ₽<input id="oilc-v" class="r" value="${esc(P.v ?? String(oilAddOf(st)).replace('.', ','))}" data-oilc="v" inputmode="decimal"></label>
-        <div class="oilc-auto"><span class="muted small">Закупка в продаже</span><b id="oilc-sum">${b ? rub(r2(b + addV)) : '—'}</b><span class="muted small">бочка + надбавка</span></div>
-        <div class="actions"><button class="btn small primary" data-act="oilc-save">Сохранить</button><button class="btn small ghost" data-act="oilc-close">Отмена</button></div>
-        <p class="muted small">Надбавка остаётся на этой позиции и для следующих бочек, пока сам не поменяешь. Касается только новых продаж; уже сделанные продажи не меняются.</p></div></td></tr>`;
+      const cost = stockUnitCost(st);
+      return `<td class="r cst"><button type="button" class="oilc-btn" data-act="stock-edit" data-id="${esc(st.id)}" title="Открыть карточку позиции">${cost == null ? '—' : rub(cost)}</button></td>`;
     };
     const oilRow = ({ s, q }) => {
       const open = ui.openRows.has('stk-' + s.id);
       return `<tr ${dragAttr(s)} class="stk-row${open ? ' is-open' : ''}${SEL.has(s.id) ? ' sel' : ''}">${chk(s)}<td class="mono"><span class="arr arr-btn" role="button" tabindex="0" aria-expanded="${open}" aria-label="Раскрыть" data-act="toggle-row" data-id="stk-${esc(s.id)}">${open ? '▾' : '▸'}</span> <span class="art-sel">${esc(s.art)}</span></td><td data-act="toggle-row" data-id="stk-${esc(s.id)}">${esc(s.name)}<div class="muted small">${esc(s.brand)}</div></td>
-      <td class="r ${q < 0 ? 'neg' : q === 0 ? 'muted' : ''}"><b>${fmt(q, q % 1 ? 2 : 0)}</b></td>${oilCostCell(s)}<td class="r">${rub(s.price)}</td>${acts(s)}</tr>${deleteRow(s)}${oilBox(s)}${formRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
+      <td class="r ${q < 0 ? 'neg' : q === 0 ? 'muted' : ''}"><b>${fmt(q, q % 1 ? 2 : 0)}</b></td>${oilCostCell(s)}<td class="r">${rub(s.price)}</td>${acts(s)}</tr>${deleteRow(s)}${formRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
     };
     const head = `<thead><tr><th class="chkc"></th><th>Артикул</th><th>Название</th><th class="r">Остаток</th><th class="r cst">Закупка</th><th class="r">Цена</th><th></th></tr></thead>`;
     const tbl = (rows, group) => `<div class="scroll" data-stock-group="${group}"><table class="tbl stk">${head}<tbody>${rows.map(x => x.s.oil ? oilRow(x) : row(x)).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
@@ -5575,20 +5565,39 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
           <td class="nowrap">${o ? `<button class="link small" data-act="open-order" data-id="${esc(o.id)}">№ ${o.num}</button>` : g ? `<button class="link small" data-act="stk-sale-open" data-id="${esc(g.id)}" title="Открыть покупку">без наряда</button>` : '<span class="muted small">без наряда</span>'}</td></tr>`; }).join('')}
       </tbody></table>`;
   }
+  function stockUnitCost(st) {
+    if (!st.oil) return stockCost(st);
+    return barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), 1, st.cost).avg || st.cost || null;
+  }
+  function initialFundRate(st) {
+    if (st.fundRate != null || !st.oil) return st.fundRate;
+    const cost = stockUnitCost(st);
+    return cost == null ? null : r2(cost + oilAddOf(st));
+  }
+  function fundDifference(rate, cost) {
+    if (rate == null || cost == null) return '—';
+    const diff = r2(rate - cost);
+    return (diff > 0 ? '+' : '') + rub(diff);
+  }
   function stockForm(f) {
     const s = f.id ? D.stock.find(x => x.id === f.id) : null;
     const noBarrel = f.oil && !oilBuys({ art: f.art, name: f.name, cost: f.cost }).length;
+    const base = noBarrel ? f.cost : s ? stockUnitCost(s) : null;
     return `<section class="block form"><div class="block-head"><h3>${s ? 'Позиция склада' : 'Новая позиция'}</h3><button class="link" data-act="stock-cancel">Отмена</button></div>
       <div class="grid g4">
         <label class="f">Артикул<input id="sn-art" class="mono" value="${esc(f.art)}" data-sf="art"></label>
         <label class="f span2">Название<input id="sn-name" value="${esc(f.name)}" data-sf="name"></label>
         <label class="f">Бренд<input id="sn-brand" value="${esc(f.brand)}" data-sf="brand"></label>
-        <label class="f">В кассу «Масло/антифриз», ₽/${f.oil ? 'л' : 'шт.'}<input id="sn-fund" value="${esc(nv(f.fundRate))}" data-sf="fundRate" inputmode="decimal" placeholder="Не задано"></label>
+
         <label class="f">Цена продажи<input id="sn-price" value="${esc(nv(f.price))}" data-sf="price" inputmode="decimal"></label>
         <label class="f">Сейчас на складе<input id="sn-qty" value="${esc(nv(f.qty))}" data-sf="qty" inputmode="decimal"></label>
         <label class="f" title="Масла и жидкости — продаются на литры, закупка берётся из бочки + запас, деньги идут в кассу «Масло/антифриз». Остальное — обычные запчасти.">Блок<select id="sn-grp" data-sf="blk">${[['oil', 'Масла и жидкости (касса «Масло/антифриз»)'], ['sto', 'Артикулы для заказов СТО'], ['', 'Запчасти на складе']].map(([v, l]) => `<option value="${v}"${(f.oil ? 'oil' : f.grp === 'sto' ? 'sto' : '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
         ${noBarrel ? `<label class="f">Закупка за литр<input id="sn-cost" value="${esc(nv(f.cost))}" data-sf="cost" inputmode="decimal"></label>` : ''}
-      </div>${noBarrel ? `<p class="muted small">Покупки бочки ещё нет — впиши цену литра руками. Когда внесёшь покупку на «СТО (масло/антифриз)», цена будет браться из бочки, а это поле исчезнет.</p>` : ''}${s && f.oil && !noBarrel ? `<p class="muted small">Сейчас льёшь из бочки по ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg)} за л → в продажах закупка ${rub(barrelAvg(oilBuys(s), Math.max(0, S.stockQty(s, D)), 1, s.cost).avg + oilAddOf(s))} (надбавка ${rub(oilAddOf(s))} — меняется щелчком по цене в колонке «Закупка»).${f.art && f.art !== s.art ? ' <b>Артикул поменяется и во всех продажах и покупках этой позиции.</b>' : ''}</p>` : s && f.art && f.art !== s.art ? '<p class="muted small"><b>Артикул поменяется и во всех продажах и покупках этой позиции.</b></p>' : ''}<div class="grid g4" style="display:none">
+      </div>
+      <div class="fund-panel">
+        <label class="f">В кассу «Масло/антифриз», ₽/${f.oil ? 'л' : 'шт.'}<input id="sn-fund" value="${esc(nv(f.fundRate))}" data-sf="fundRate" inputmode="decimal" placeholder="Не задано"></label>
+        <div><span class="muted small">Закупка за ${f.oil ? 'литр' : 'штуку'}</span><b id="fund-base">${base == null ? '—' : rub(base)}</b></div>
+        <div><span class="muted small">Разница с закупкой</span><b id="fund-diff">${fundDifference(f.fundRate, base)}</b></div>
       </div><button class="btn primary" data-act="stock-save">Сохранить</button></section>`;
   }
 
@@ -6477,15 +6486,6 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (act === 'tot-toggle') { ui.totOpen = !ui.totOpen; const sec = b.closest('.totals'); if (sec) sec.classList.toggle('open', ui.totOpen); b.setAttribute('aria-expanded', ui.totOpen); const ar = b.querySelector('.tot-arr'); if (ar) ar.textContent = ui.totOpen ? '▾' : '▴'; return; }
     switch (act) {
       case 'oilres-open': ui.oilResOpen = !ui.oilResOpen; ui.oilResVal = null; render(); if (ui.oilResOpen) setTimeout(() => { const t = $('#oilres'); if (t) { t.focus(); t.select(); } }, 30); break;
-      case 'oilc-open': { const id = b.dataset.id; ui.oilc = ui.oilc && ui.oilc.id === id ? null : { id, v: null, p: null }; render(); if (ui.oilc) setTimeout(() => { const t = $('#oilc-v'); if (t) t.focus(); }, 30); break; }
-      case 'oilc-close': ui.oilc = null; render(); break;
-      case 'oilc-save': {
-        const P = ui.oilc, st = P && D.stock.find(x => x.id === P.id); if (!st) break;
-        const vs = P.v == null ? String(oilAddOf(st)) : String(P.v).trim(), v = vs === '' ? 0 : numIn(vs);
-        if (v == null || v < 0) { toast('Надбавка — число от 0'); break; }
-        ui.oilc = null;
-        if (r2(v) !== oilAddOf(st)) { st.oilAdd = r2(v); toast('Надбавка ' + rub(v) + ' — для новых продаж'); changed(); } else render();
-        break; }
       case 'oilres-close': ui.oilResOpen = false; ui.oilResVal = null; render(); break;
       case 'oilres-save': { const v = numIn(String(ui.oilResVal ?? oilPct())); if (v == null || v < 0 || v > 200) { toast('Укажи процент от 0 до 200'); break; } ui.oilResOpen = false; ui.oilResVal = null; if (v !== oilPct()) { D.cfg.oilReserve = v; toast('Запас ' + v + '% — для новых продаж масла'); changed(); } else render(); break; }
       case 'theme': ui.theme = b.dataset.k; applyTheme(ui.theme); try { localStorage.setItem('sto.theme', ui.theme); } catch (er) {} render(); break;
@@ -6871,7 +6871,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         break;
       }
       case 'stock-new': ui.stockForm = { mode: 'new', art: '', name: '', brand: '', price: null, qty: 0, oil: false, cost: null, grp: '' }; render(); setTimeout(() => { const t = $('#sn-art'); if (t) { t.scrollIntoView({ block: 'center' }); t.focus(); } }, 30); break;
-      case 'stock-edit': { const s = D.stock.find(x => x.id === b.dataset.id); ui.stockForm = { mode: 'edit', id: s.id, fundRate: s.fundRate, art: s.art, name: s.name, brand: s.brand, price: s.price, qty: S.stockQty(s, D), oil: s.oil, cost: s.cost, grp: s.grp || '' }; render(); break; }
+      case 'stock-edit': { const s = D.stock.find(x => x.id === b.dataset.id); ui.stockForm = { mode: 'edit', id: s.id, fundRate: initialFundRate(s), art: s.art, name: s.name, brand: s.brand, price: s.price, qty: S.stockQty(s, D), oil: s.oil, cost: s.cost, grp: s.grp || '' }; render(); break; }
       case 'stock-cancel': ui.stockForm = null; render(); break;
       case 'stock-save': saveStockItem(); break;
       case 'sched-add': { const f = ui.schedForm; if (!f.client || !f.date) { toast('Укажи дату и клиента'); break; } D.schedule.push({ id: uid('r'), date: f.date, client: f.client, car: f.car, note: f.note, cid: f.cid || null, carId: f.carId || null }); ui.schedForm = { date: f.date, client: '', car: '', note: '' }; toast('Записал'); changed(); break; }
@@ -7001,10 +7001,15 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (el.dataset.wday) { ui.waitSel = ui.waitSel || new Set(); el.dataset.wday.split(',').forEach(id => el.checked ? ui.waitSel.add(id) : ui.waitSel.delete(id)); render(); return; }
     if (el.dataset.ssel) { ui.stockSel = ui.stockSel || new Set(); if (el.checked) ui.stockSel.add(el.dataset.ssel); else ui.stockSel.delete(el.dataset.ssel); render(); return; }
     if (el.dataset.oilres) { ui.oilResVal = el.value; return; }
-    if (el.dataset.oilc) { if (ui.oilc) { ui.oilc[el.dataset.oilc] = el.value; const st = D.stock.find(x => x.id === ui.oilc.id), t = $('#oilc-sum'); if (st && t) { const b = barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), 1, st.cost).avg; t.textContent = b ? rub(r2(b + (numIn(el.value) || 0))) : '—'; } } return; }
     if (el.dataset.jrel) { if (ui.jAsk) ui.jAsk.rel = el.checked; render(); return; }
     if (el.dataset.sf === 'blk') { const f = ui.stockForm; f.oil = el.value === 'oil'; f.grp = el.value === 'sto' ? 'sto' : ''; render(); return; }
-    if (el.dataset.sf) { const f = ui.stockForm, k = el.dataset.sf; f[k] = el.type === 'checkbox' ? el.checked : ['qty', 'cost', 'price', 'fundRate'].includes(k) ? numIn(el.value) : el.value; if (k === 'oil') render(); return; }
+    if (el.dataset.sf) { const f = ui.stockForm, k = el.dataset.sf; f[k] = el.type === 'checkbox' ? el.checked : ['qty', 'cost', 'price', 'fundRate'].includes(k) ? numIn(el.value) : el.value; if (k === 'fundRate' || k === 'cost') {
+        const st = D.stock.find(x => x.id === f.id);
+        const base = $('#sn-cost') ? f.cost : st ? stockUnitCost(st) : null;
+        $('#fund-base').textContent = base == null ? '—' : rub(base);
+        $('#fund-diff').textContent = fundDifference(f.fundRate, base);
+      }
+      if (k === 'oil') render(); return; }
     if (el.dataset.xp) { ui.xpaste[el.dataset.xp] = el.value; if (el.dataset.xp === 'how') ui.xpaste.howSet = true; if (el.dataset.xp !== 'date') render(); return; }
     if (el.dataset.xpq != null) { ui.xpaste.items[+el.dataset.xpq].qty = numIn(el.value) || 0; clearTimeout(ui.xpT); ui.xpT = setTimeout(render, 400); return; }
     if (el.dataset.xpno) { ui.xpaste.no = el.checked; return; }
@@ -7174,6 +7179,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       preOilRows: Object.fromEntries(D.parts.filter(p => p.art === article).map(p => [p.id, true])),
       displayGroup: 'oil',
     } : {};
+    if (f.oil && f.fundRate == null) { toast('Укажи сумму в кассу за литр, можно 0'); return; }
     if (f.fundRate != null && (!Number.isFinite(f.fundRate) || f.fundRate < 0)) { toast('Укажи сумму от нуля'); return; }
     if (f.fundRate != null || original?.fundRate != null) oilSetup.fundRate = f.fundRate == null ? null : r2(f.fundRate);
     if (f.fundRate != null && original?.fundRate == null) {
