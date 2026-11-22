@@ -720,7 +720,12 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 .pct-btn:hover { background: var(--accent-soft); }
 .oilres-box { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; padding: 10px 12px; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--accent-soft); }
 .tbl.stk {table-layout:fixed;width:100%}
-@media(min-width:561px){.tbl.stk {min-width:740px}}
+@media(min-width:561px){table.tbl.stk {width:100%;min-width:0} .tbl.stk :is(td,th):not(.chkc){padding-inline:4px;overflow-wrap:anywhere}}
+.stock-actions {display:flex;justify-content:flex-end;align-items:center;gap:2px}
+.stock-actions .btn {padding:3px 4px;font-size:12px}
+.stock-input {width:100%;min-width:0;box-sizing:border-box;font:inherit;color:inherit;text-align:inherit;border:1px solid var(--line);border-radius:4px;padding:2px 3px}
+.stock-input:focus {outline:1px solid var(--accent)}
+.tbl.stk .muted .stock-input[data-row-key="fundRate"] {width:58%}
 .stock-value {font:inherit;color:inherit;background:transparent;border:0;padding:2px 0;text-align:inherit;cursor:pointer;max-width:100%;overflow-wrap:anywhere}
 .stock-value:hover,.stock-value:focus-visible {color:var(--accent);text-decoration:underline}
 .stock-dialog {color:var(--text);background:var(--panel,Canvas);border:1px solid var(--line);border-radius:12px;width:min(340px,90vw);padding:20px}
@@ -5483,23 +5488,31 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     ui.stockSel = ui.stockSel || new Set();
     const SEL = ui.stockSel, F = ui.stockForm;
     const chk = s => `<td class="chkc"><span class="stock-grip" title="Перетащить позицию" aria-label="Перетащить позицию"></span><input type="checkbox" id="ss-${esc(s.id)}" data-ssel="${esc(s.id)}" ${SEL.has(s.id) ? 'checked' : ''} aria-label="Выбрать"></td>`;
-    const acts = s => `<td class="r nowrap"><button class="btn small primary-t" data-act="stock-sell" data-id="${esc(s.id)}">Продать</button> <button class="stock-remove" data-act="stock-del-ask" data-id="${esc(s.id)}" title="Удалить со склада" aria-label="Удалить со склада: ${esc(s.name)}">×</button></td>`;
+    const editing = s => ui.stockDraft?.id === s.id;
+    const action = (s, act, label, title, primary = false) => `<button type="button" class="btn small ${primary ? 'primary-t' : 'ghost'}" data-act="${act}" data-id="${esc(s.id)}" title="${title}" aria-label="${title}">${label}</button>`;
+    const acts = s => `<td class="r"><div class="stock-actions">${editing(s)
+      ? action(s,'stock-commit','✓','Сохранить',true) + action(s,'stock-discard','↶','Отмена') + action(s,'stock-del-ask','🗑','Удалить позицию')
+      : action(s,'stock-sell','Продать','Продать',true) + (isRO() ? '' : action(s,'stock-begin','Изменить','Изменить'))}</div></td>`;
     const dragAttr = s => `data-stock-drag="${esc(s.id)}"`;
     const deleteRow = s => ui.stockDelete === s.id ? `<tr class="stk-form"><td colspan="7"><div class="note"><span>Убрать «${esc(s.name)}» со склада? Остаток: ${esc(String(S.stockQty(s, D)))}. История операций сохранится.</span> <button class="btn small danger" data-act="stock-delete" data-id="${esc(s.id)}">Удалить</button> <button class="btn small ghost" data-act="stock-del-no">Отмена</button></div></td></tr>` : '';
-    const cell = (s, key, text) => `<button type="button" class="stock-value" data-act="stock-field" data-id="${esc(s.id)}" data-field="${key}" aria-label="${fieldNames[key]}: ${esc(text)}">${esc(text)}</button>`;
+    const cell = (s,key,text) => {
+      if (!editing(s)) return esc(text);
+      const numeric = !['art','name','brand'].includes(key);
+      return `${key === 'fundRate' ? 'В кассу ' : ''}<input class="stock-input" data-row-key="${key}" aria-label="${esc(fieldNames[key])}" title="${esc(fieldNames[key])}" ${numeric ? 'inputmode="decimal"' : ''} value="${esc(ui.stockDraft.values[key] ?? '')}" placeholder="${key === 'packLitres' ? 'л/уп.' : '—'}">`;
+    };
     const row = ({s, q}) => {
       const open = s.oil && ui.openRows.has('stk-' + s.id);
       const cost = stockUnitCost(s), inFund = stockGroup(s) === 'oil';
       const rate = inFund ? initialFundRate(s) : null;
       return `<tr ${dragAttr(s)} class="stk-row ${SEL.has(s.id) ? 'sel' : ''}">${chk(s)}
-        <td class="mono">${s.oil ? `<button type="button" class="stock-value" data-act="toggle-row" data-id="stk-${esc(s.id)}" aria-label="История продаж" aria-expanded="${!!open}">${open ? '▾' : '▸'}</button> ` : ''}${cell(s,'art',s.art || '—')}</td>
+        <td class="mono">${s.oil && !editing(s) ? `<button type="button" class="stock-value" data-act="toggle-row" data-id="stk-${esc(s.id)}" aria-label="История продаж" aria-expanded="${!!open}">${open ? '▾' : '▸'}</button> ` : ''}${cell(s,'art',s.art || '—')}${editing(s) && s.oil && s.packLitres == null ? cell(s,'packLitres','') : ''}</td>
         <td>${cell(s,'name',s.name)}<div class="muted small">${cell(s,'brand',s.brand || 'Бренд')}</div></td>
         <td class="r"><b>${cell(s,'qty',fmt(q,q % 1 ? 2 : 0))}</b></td>
         <td class="r cst">${cell(s,'cost',cost == null ? '—' : rub(cost))}${inFund ? `<div class="muted small">${cell(s,'fundRate','В кассу: ' + (rate == null ? '—' : rub(rate)))}</div>` : ''}</td>
         <td class="r">${cell(s,'price',rub(s.price))}</td>${acts(s)}</tr>${deleteRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
     };
     const head = `<thead><tr><th class="chkc"></th><th>Артикул</th><th>Название</th><th class="r">Остаток</th><th class="r cst">Закупка</th><th class="r">Цена</th><th></th></tr></thead>`;
-    const tbl = (rows, group) => `<div class="scroll" data-stock-group="${group}"><table class="tbl stk"><colgroup><col style="width:52px"><col style="width:16%"><col><col style="width:10%"><col style="width:16%"><col style="width:10%"><col style="width:108px"></colgroup>${head}<tbody>${rows.map(row).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
+    const tbl = (rows, group) => `<div class="scroll" data-stock-group="${group}"><table class="tbl stk"><colgroup><col style="width:52px"><col style="width:14%"><col><col style="width:8%"><col style="width:14%"><col style="width:9%"><col style="width:134px"></colgroup>${head}<tbody>${rows.map(row).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
     const selItems = D.stock.filter(x => SEL.has(x.id));
     const openOrders = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num);
     const bar = selItems.length ? `<div class="stk-bar"><b>Выбрано: ${selItems.length}</b><span class="muted small">${esc(selItems.map(x => x.name).join(', ').slice(0, 120))}</span>
@@ -5572,40 +5585,33 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       </tbody></table>`;
   }
   const fieldNames = {art:'Артикул', name:'Название', brand:'Бренд', qty:'Остаток', cost:'Цена закупки', price:'Цена продажи', packLitres:'Литров в единице закупки', fundRate:'В кассу «Масло/антифриз»'};
-  function editStockField(id, key) {
-    const st = D.stock.find(item => item.id === id);
-    if (!st || isRO() || !Object.hasOwn(fieldNames,key) || (key === 'fundRate' && stockGroup(st) !== 'oil')) return;
-    if (key === 'packLitres' && (!st.oil || st.packLitres != null)) return;
-    const numeric = !['art','brand','name'].includes(key);
-    const value = key === 'qty' ? S.stockQty(st,D) : key === 'cost' ? stockUnitCost(st) : key === 'fundRate' ? initialFundRate(st) : key === 'packLitres' ? null : st[key];
-    const dialog = document.createElement('dialog');
-    dialog.className = 'stock-dialog';
-    const unit = ['fundRate','cost','price'].includes(key) ? (st.oil ? ', ₽/л' : ', ₽/шт.') : '';
-    dialog.innerHTML = `<form><label class="f">${fieldNames[key]}${unit}<input autofocus value="${esc(String(value ?? ''))}" ${numeric ? 'inputmode="decimal"' : ''}></label>${key === 'cost' ? '<p class="small muted">Оставь поле пустым, чтобы брать цену из закупок.</p>' : ''}<div class="actions"><button class="btn primary">Сохранить</button><button type="button" class="btn ghost">Отмена</button></div></form>`;
-    if (key === 'art' && st.oil && st.packLitres == null) {
-      const setup = document.createElement('button');
-      setup.type = 'button';
-      setup.className = 'link small';
-      setup.textContent = 'Указать объём упаковки для этого артикула';
-      setup.onclick = () => { dialog.close(); editStockField(id, 'packLitres'); };
-      dialog.querySelector('.actions').before(setup);
-    }
-    document.body.append(dialog);
-    const input = dialog.querySelector('input');
-    dialog.querySelector('.ghost').onclick = () => dialog.close();
-    dialog.onclose = () => dialog.remove();
-    input.oninput = () => input.setCustomValidity('');
-    dialog.querySelector('form').onsubmit = event => {
-      event.preventDefault();
-      const raw = input.value.trim();
+  function beginStockEdit(id) {
+    const st = D.stock.find(s => s.id === id);
+    if (!st || isRO()) return;
+    if (ui.stockDraft && ui.stockDraft.id !== id) { toast('Сохрани или отмени открытую правку'); return; }
+    const values = {art:st.art,name:st.name,brand:st.brand,qty:S.stockQty(st,D),cost:stockUnitCost(st),price:st.price};
+    if (stockGroup(st) === 'oil') values.fundRate = initialFundRate(st);
+    if (st.oil && st.packLitres == null) values.packLitres = '';
+    ui.stockDraft = {id,values:{...values},original:values};
+    ui.stockDelete = null; render();
+  }
+  function commitStockEdit(id) {
+    const draft = ui.stockDraft, st = D.stock.find(s => s.id === id);
+    if (!st || !draft || draft.id !== id || isRO()) return;
+    const updates = {};
+    for (const [key,input] of Object.entries(draft.values)) {
+      const raw = String(input ?? '').trim();
+      if (raw === String(draft.original[key] ?? '')) continue;
+      const numeric = !['art','name','brand'].includes(key);
       const val = numeric ? Number(raw.replace(',','.')) : raw;
-      let error = '';
-      if (!raw && !['cost','brand'].includes(key)) error = 'Заполни поле';
-      if (numeric && (!Number.isFinite(val) || (key !== 'qty' && val < 0) || (key === 'packLitres' && val <= 0))) error = 'Проверь значение';
-      if (key === 'art' && val !== st.art && (D.parts.some(p => p.art === st.art || p.art === val) || D.stock.some(item => item !== st && low(item.art) === low(val)))) error = 'Артикул уже используется в складе или истории операций';
-      if (error) { input.setCustomValidity(error); input.reportValidity(); return; }
+      if ((!raw && !['brand','cost'].includes(key)) || (numeric && (!Number.isFinite(val) || (key !== 'qty' && val < 0) || (key === 'packLitres' && (val <= 0 || st.packLitres != null))))) { toast('Проверь поле «' + fieldNames[key] + '»'); return; }
+      if (key === 'art' && (D.parts.some(p => p.art === st.art || p.art === val) || D.stock.some(s => s !== st && low(s.art) === low(val)))) { toast('Артикул используется в истории или на складе'); return; }
+      updates[key] = key === 'cost' && !raw ? null : val;
+    }
+    if ('art' in updates) st.art = updates.art;
+    for (const [key,val] of Object.entries(updates)) {
       if (key === 'qty') st.qtyBase = r2((st.qtyBase || 0) + val - S.stockQty(st,D));
-      else if (key === 'cost') st.manualCost = raw ? r2(val) : null;
+      else if (key === 'cost') st.manualCost = val == null ? null : r2(val);
       else if (key === 'fundRate') {
         if (st.fundRate == null) {
           st.fundStart = S.todayISO();
@@ -5613,13 +5619,12 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
         }
         st.fundRate = r2(val);
       } else if (key === 'packLitres') {
-        if (st.packLitres != null) { dialog.close(); return; }
         st.packLitres = val;
         D.parts.forEach(p => { if (p.stockIn && p.no && !p.ret && p.art === st.art && p.month === NOW_M() && !isLockedM(p.month)) p.receiptLitres = val; });
       } else st[key] = val;
-      dialog.close(); changed('Склад: ' + fieldNames[key]);
-    };
-    dialog.showModal(); input.select();
+    }
+    ui.stockDelete = null; ui.stockDraft = null;
+    if (Object.keys(updates).length) changed('Изменение позиции склада'); else render();
   }
   function stockUnitCost(st) {
     if (st.manualCost != null) return st.manualCost;
@@ -6922,14 +6927,16 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         const item = D.stock.find(x => x.id === b.dataset.id && x.id === ui.stockDelete);
         if (!item) break;
         ui.stockDelete = null;
-        item.archived = true;
+        item.archived = true; ui.stockDraft = null;
         ui.stockSel.delete(item.id);
         ui.stockForm = null;
         changed('Удаление позиции склада');
         break;
       }
       case 'stock-new': ui.stockForm = { mode: 'new', art: '', name: '', brand: '', price: null, qty: 0, oil: false, cost: null, grp: '' }; render(); setTimeout(() => { const t = $('#sn-art'); if (t) { t.scrollIntoView({ block: 'center' }); t.focus(); } }, 30); break;
-      case 'stock-field': editStockField(b.dataset.id, b.dataset.field); break;
+      case 'stock-begin': beginStockEdit(b.dataset.id); break;
+      case 'stock-commit': commitStockEdit(b.dataset.id); break;
+      case 'stock-discard': ui.stockDraft = null; ui.stockDelete = null; render(); break;
       case 'stock-cancel': ui.stockForm = null; render(); break;
       case 'stock-save': saveStockItem(); break;
       case 'sched-add': { const f = ui.schedForm; if (!f.client || !f.date) { toast('Укажи дату и клиента'); break; } D.schedule.push({ id: uid('r'), date: f.date, client: f.client, car: f.car, note: f.note, cid: f.cid || null, carId: f.carId || null }); ui.schedForm = { date: f.date, client: '', car: '', note: '' }; toast('Записал'); changed(); break; }
@@ -7060,6 +7067,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (el.dataset.ssel) { ui.stockSel = ui.stockSel || new Set(); if (el.checked) ui.stockSel.add(el.dataset.ssel); else ui.stockSel.delete(el.dataset.ssel); render(); return; }
     if (el.dataset.oilres) { ui.oilResVal = el.value; return; }
     if (el.dataset.jrel) { if (ui.jAsk) ui.jAsk.rel = el.checked; render(); return; }
+    if (el.dataset.rowKey && ui.stockDraft) { ui.stockDraft.values[el.dataset.rowKey] = el.value; return; }
     if (el.dataset.sf === 'blk') { const f = ui.stockForm; f.oil = el.value === 'oil'; f.grp = el.value === 'sto' ? 'sto' : ''; render(); return; }
     if (el.dataset.sf) { const f = ui.stockForm, k = el.dataset.sf; f[k] = el.type === 'checkbox' ? el.checked : ['qty', 'cost', 'price', 'fundRate'].includes(k) ? numIn(el.value) : el.value; if ((k === 'fundRate' || k === 'cost') && $('#fund-base')) {
         const st = D.stock.find(x => x.id === f.id);
