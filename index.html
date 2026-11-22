@@ -1421,9 +1421,19 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
   STO.partPeriod = partPeriod;
   /* себестоимость проданного масла: закупка, запомненная в момент продажи (p.oilCost, с 10.11.2026);
      если не запомнена — текущая закупка из карточки склада */
+  function oilSaleEligible(p, st) {
+    if (!st || !st.oil || p.client === 'СТО (масло/антифриз)') return false;
+    if (!st.oilStart) return true;
+    return low(p.sup) === 'склад' && p.date >= st.oilStart
+      && (!p.month || p.month >= st.oilStart.slice(0, 7))
+      && !Object.prototype.hasOwnProperty.call(st.preOilRows || {}, p.id);
+  }
+  STO.oilSaleEligible = oilSaleEligible;
   const oilCostOf = (p, X) => {
     const s = X.stockByArt[p.art];
-    if (!s || !s.oil || p.client === 'СТО (масло/антифриз)') return 0;
+    if (p.fundArt === p.art && p.fundUnit != null && low(p.sup) === 'склад')
+      return p.fundUnit * (p.qty || 0);
+    if (!oilSaleEligible(p, s)) return 0;
     const c = p.oilCost != null && p.oilArt === p.art ? p.oilCost : s.cost;
     return c ? c * (p.qty || 0) : 0;
   };
@@ -1913,8 +1923,21 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
   }
   /* масло: закупку запоминаем в строке продажи.
      До 10.11.2026 — по карточке склада; дальше — по бочке, из которой льёшь, + запас (настройка, 15%) */
+  function freezeFundRates() {
+    const month = S.todayISO().slice(0, 7);
+    for (const p of D.parts) {
+      const st = X.stockByArt[p.art];
+      if (!st || st.fundRate == null || low(p.sup) !== 'склад' || p.stockIn || p.no || p.ret ||
+          low(p.client).startsWith('сто') || !p.id || p.date < st.fundStart ||
+          (p.month || monthOf(p.date)) < month || isLockedM(p.month || monthOf(p.date)) ||
+          st.preFundRows?.[p.id] || (p.fundArt === p.art && p.fundUnit != null)) continue;
+      p.fundArt = p.art;
+      p.fundUnit = st.fundRate;
+    }
+  }
   function freezeOil() {
-    const need = p => { const st = X.stockByArt[p.art]; return st && st.oil && p.client !== 'СТО (масло/антифриз)' && (p.oilCost == null || p.oilArt !== p.art) ? st : null; };
+    freezeFundRates();
+    const need = p => { const st = X.stockByArt[p.art]; return !(p.fundArt === p.art && p.fundUnit != null) && S.oilSaleEligible(p, st) && (p.oilCost == null || p.oilArt !== p.art) ? st : null; };
     if (!D.cfg.oilRule2) {
       D.parts.forEach(p => { const st = need(p); if (st && st.cost) { p.oilCost = st.cost; p.oilArt = p.art; } });
       D.cfg.oilRule2 = S.todayISO();
@@ -3177,7 +3200,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
               <label class="f grow">Название<input id="p-name-${i}" value="${esc(p.name)}" data-p="${i}" data-k="name"></label>
               <label class="f">Бренд<input id="p-br-${i}" value="${esc(p.brand)}" data-p="${i}" data-k="brand"></label>
               ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="p-cost-${i}" value="${esc(nv(p.cost))}" data-p="${i}" data-k="cost" inputmode="decimal" placeholder="${p.sup === 'Склад' ? 'со склада' : ''}" title="${esc(stockCostTip(p))}"></label>`}
-${oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="p-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-p="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
+${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stockByArt[p.art]?.fundRate != null && !X.stockByArt[p.art]?.preFundRows?.[p.id]) ? `<label class="f num ro">В кассу с единицы<b>${rub(p.fundArt === p.art && p.fundUnit != null ? p.fundUnit : X.stockByArt[p.art].fundRate)}</b></label>` : oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="p-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-p="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
               <label class="f num">Кол-во<input id="p-qty-${i}" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-p="${i}" data-k="qty" inputmode="decimal" placeholder="1"></label>
               <label class="f num">Цена<input id="p-pr-${i}" value="${esc(nv(p.price))}" data-p="${i}" data-k="price" inputmode="decimal"></label>
               <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
@@ -3393,6 +3416,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     if (p.sup !== 'Склад') return 'Закупка';
     const k = String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase();
     const st = X.stockByArt[p.art] || D.stock.find(x => String(x.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase() === k && k);
+    if (p.fundArt === p.art && p.fundUnit != null) return 'В кассу «Масло/антифриз» с единицы: ' + rub(p.fundUnit);
     if (!st) return 'Со склада — такой позиции на складе не нашёл';
     if (st.oil && p.oilCost != null && p.oilArt === p.art) return `Закупка в этой продаже: ${rub(p.oilCost)} за л` + (p.oilBase != null ? ` = бочка ${rub(p.oilBase)} + ${p.oilAdd != null ? 'надбавка ' + rub(p.oilAdd) : p.oilPct + '% запас'}${p.oilFrom ? ' (бочка от ' + p.oilFrom.split(',').map(dshort).join(' и ') + ')' : ''}` : ' (по карточке склада на момент продажи)') + `${p.qty ? ` · на ${fmt(p.qty, p.qty % 1 ? 2 : 0)} л: ${rub(p.oilCost * p.qty)}` : ''}. Можно поправить руками.`;
     if (st.oil && !(p.oilCost != null && p.oilArt === p.art)) { const r = barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), +p.qty || 1, st.cost); return `При сохранении закупка возьмётся из бочки: ${rub(r.avg)} + надбавка ${rub(oilAddOf(st))} = ${rub(r.avg + oilAddOf(st))} за л`; }
@@ -4578,7 +4602,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
               <label class="f">Артикул<input id="sp-art-${i}" class="mono" value="${esc(p.art)}" data-sp="${i}" data-k="art" ${p.sup === 'Склад' ? 'list="dl-stock"' : ''} autocomplete="off"></label>
               <label class="f grow">Название<input id="sp-name-${i}" value="${esc(p.name)}" data-sp="${i}" data-k="name"></label>
               <label class="f">Бренд<input id="sp-br-${i}" value="${esc(p.brand)}" data-sp="${i}" data-k="brand"></label>
-              ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="sp-cost-${i}" value="${esc(nv(p.cost))}" data-sp="${i}" data-k="cost" inputmode="decimal" title="${esc(stockCostTip(p))}"></label>`}${oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="sp-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-sp="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
+              ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="sp-cost-${i}" value="${esc(nv(p.cost))}" data-sp="${i}" data-k="cost" inputmode="decimal" title="${esc(stockCostTip(p))}"></label>`}${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stockByArt[p.art]?.fundRate != null && !X.stockByArt[p.art]?.preFundRows?.[p.id]) ? `<label class="f num ro">В кассу с единицы<b>${rub(p.fundArt === p.art && p.fundUnit != null ? p.fundUnit : X.stockByArt[p.art].fundRate)}</b></label>` : oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="sp-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-sp="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
               <label class="f num">Кол-во<input id="sp-qty-${i}" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-sp="${i}" data-k="qty" inputmode="decimal" placeholder="1"></label>
               <label class="f num">Цена<input id="sp-pr-${i}" value="${esc(nv(p.price))}" data-sp="${i}" data-k="price" inputmode="decimal"></label>
               <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
@@ -5559,6 +5583,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
         <label class="f">Артикул<input id="sn-art" class="mono" value="${esc(f.art)}" data-sf="art"></label>
         <label class="f span2">Название<input id="sn-name" value="${esc(f.name)}" data-sf="name"></label>
         <label class="f">Бренд<input id="sn-brand" value="${esc(f.brand)}" data-sf="brand"></label>
+        <label class="f">В кассу «Масло/антифриз», ₽/${f.oil ? 'л' : 'шт.'}<input id="sn-fund" value="${esc(nv(f.fundRate))}" data-sf="fundRate" inputmode="decimal" placeholder="Не задано"></label>
         <label class="f">Цена продажи<input id="sn-price" value="${esc(nv(f.price))}" data-sf="price" inputmode="decimal"></label>
         <label class="f">Сейчас на складе<input id="sn-qty" value="${esc(nv(f.qty))}" data-sf="qty" inputmode="decimal"></label>
         <label class="f" title="Масла и жидкости — продаются на литры, закупка берётся из бочки + запас, деньги идут в кассу «Масло/антифриз». Остальное — обычные запчасти.">Блок<select id="sn-grp" data-sf="blk">${[['oil', 'Масла и жидкости (касса «Масло/антифриз»)'], ['sto', 'Артикулы для заказов СТО'], ['', 'Запчасти на складе']].map(([v, l]) => `<option value="${v}"${(f.oil ? 'oil' : f.grp === 'sto' ? 'sto' : '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -6846,7 +6871,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         break;
       }
       case 'stock-new': ui.stockForm = { mode: 'new', art: '', name: '', brand: '', price: null, qty: 0, oil: false, cost: null, grp: '' }; render(); setTimeout(() => { const t = $('#sn-art'); if (t) { t.scrollIntoView({ block: 'center' }); t.focus(); } }, 30); break;
-      case 'stock-edit': { const s = D.stock.find(x => x.id === b.dataset.id); ui.stockForm = { mode: 'edit', id: s.id, art: s.art, name: s.name, brand: s.brand, price: s.price, qty: S.stockQty(s, D), oil: s.oil, cost: s.cost, grp: s.grp || '' }; render(); break; }
+      case 'stock-edit': { const s = D.stock.find(x => x.id === b.dataset.id); ui.stockForm = { mode: 'edit', id: s.id, fundRate: s.fundRate, art: s.art, name: s.name, brand: s.brand, price: s.price, qty: S.stockQty(s, D), oil: s.oil, cost: s.cost, grp: s.grp || '' }; render(); break; }
       case 'stock-cancel': ui.stockForm = null; render(); break;
       case 'stock-save': saveStockItem(); break;
       case 'sched-add': { const f = ui.schedForm; if (!f.client || !f.date) { toast('Укажи дату и клиента'); break; } D.schedule.push({ id: uid('r'), date: f.date, client: f.client, car: f.car, note: f.note, cid: f.cid || null, carId: f.carId || null }); ui.schedForm = { date: f.date, client: '', car: '', note: '' }; toast('Записал'); changed(); break; }
@@ -6979,7 +7004,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (el.dataset.oilc) { if (ui.oilc) { ui.oilc[el.dataset.oilc] = el.value; const st = D.stock.find(x => x.id === ui.oilc.id), t = $('#oilc-sum'); if (st && t) { const b = barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), 1, st.cost).avg; t.textContent = b ? rub(r2(b + (numIn(el.value) || 0))) : '—'; } } return; }
     if (el.dataset.jrel) { if (ui.jAsk) ui.jAsk.rel = el.checked; render(); return; }
     if (el.dataset.sf === 'blk') { const f = ui.stockForm; f.oil = el.value === 'oil'; f.grp = el.value === 'sto' ? 'sto' : ''; render(); return; }
-    if (el.dataset.sf) { const f = ui.stockForm, k = el.dataset.sf; f[k] = el.type === 'checkbox' ? el.checked : ['qty', 'cost', 'price'].includes(k) ? numIn(el.value) : el.value; if (k === 'oil') render(); return; }
+    if (el.dataset.sf) { const f = ui.stockForm, k = el.dataset.sf; f[k] = el.type === 'checkbox' ? el.checked : ['qty', 'cost', 'price', 'fundRate'].includes(k) ? numIn(el.value) : el.value; if (k === 'oil') render(); return; }
     if (el.dataset.xp) { ui.xpaste[el.dataset.xp] = el.value; if (el.dataset.xp === 'how') ui.xpaste.howSet = true; if (el.dataset.xp !== 'date') render(); return; }
     if (el.dataset.xpq != null) { ui.xpaste.items[+el.dataset.xpq].qty = numIn(el.value) || 0; clearTimeout(ui.xpT); ui.xpT = setTimeout(render, 400); return; }
     if (el.dataset.xpno) { ui.xpaste.no = el.checked; return; }
@@ -7131,6 +7156,30 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   function saveStockItem() {
     const f = ui.stockForm;
     if (!f.name) { toast('Напиши название'); return; }
+    const article = String(f.art || f.name).trim();
+    const key = article.toUpperCase();
+    const existing = D.stock.find(item => item.id !== f.id && String(item.art || '').trim().toUpperCase() === key);
+    if (existing) {
+      toast(existing.archived ? 'Этот артикул уже есть в архиве склада' : 'Этот артикул уже есть на складе. Открой его через «Изменить».');
+      return;
+    }
+    const original = f.id && D.stock.find(item => item.id === f.id);
+    if (original && original.art !== article && (original.oil || f.oil) && D.parts.some(p => p.art === original.art || p.art === article)) {
+      toast('У артикула есть история операций. Для другого артикула создай отдельную карточку.');
+      return;
+    }
+    f.art = article;
+    const oilSetup = f.oil && !original?.oil ? {
+      oilStart: S.todayISO(),
+      preOilRows: Object.fromEntries(D.parts.filter(p => p.art === article).map(p => [p.id, true])),
+      displayGroup: 'oil',
+    } : {};
+    if (f.fundRate != null && (!Number.isFinite(f.fundRate) || f.fundRate < 0)) { toast('Укажи сумму от нуля'); return; }
+    if (f.fundRate != null || original?.fundRate != null) oilSetup.fundRate = f.fundRate == null ? null : r2(f.fundRate);
+    if (f.fundRate != null && original?.fundRate == null) {
+      oilSetup.fundStart = S.todayISO();
+      oilSetup.preFundRows = Object.fromEntries(D.parts.filter(p => p.art === article).map(p => [p.id, true]));
+    }
     if (f.mode === 'edit') {
       const s = D.stock.find(x => x.id === f.id);
       const curQ = S.stockQty(s, D), oldA = s.art, newA = (f.art || '').trim();
@@ -7140,12 +7189,12 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         if (s.oil && !D.stock.some(x => x !== s && x.art === newA)) D.parts.forEach(p => { if (p.art === newA && p.oilCost == null && p.client !== 'СТО (масло/антифриз)') { p.oilCost = 0; p.oilArt = newA; } });
         D.parts.forEach(p => { if (p.art === oldA) { p.art = newA; if (p.oilArt === oldA) p.oilArt = newA; renamed++; } });
       }
-      Object.assign(s, { art: f.art || s.art, name: f.name, brand: f.brand, price: f.price, cost: f.oil ? f.cost : s.cost, oil: !!f.oil, grp: f.oil ? undefined : (f.grp || undefined) });
+      Object.assign(s, oilSetup, { art: f.art || s.art, name: f.name, brand: f.brand, price: f.price, cost: f.oil ? f.cost : s.cost, oil: !!f.oil, grp: f.oil ? undefined : (f.grp || undefined) });
       if (renamed) { X = S.index(D); }
       const nowQ = S.stockQty(s, D), want = f.qty != null ? f.qty : curQ;
       if (Math.abs(want - nowQ) > 1e-9) s.qtyBase = r2((s.qtyBase || 0) + (want - nowQ));
       if (renamed) toast(`Артикул заменён и в ${renamed} записях (продажи и покупки этой позиции)`);
-    } else D.stock.push({ id: uid('s'), art: f.art || f.name, name: f.name, brand: f.brand, price: f.price, cost: f.oil ? f.cost : null, qtyBase: f.qty || 0, oil: !!f.oil, grp: f.oil ? undefined : (f.grp || undefined) });
+    } else D.stock.push({ ...oilSetup, id: uid('s'), art: f.art || f.name, name: f.name, brand: f.brand, price: f.price, cost: f.oil ? f.cost : null, qtyBase: f.qty || 0, oil: !!f.oil, grp: f.oil ? undefined : (f.grp || undefined) });
     ui.stockForm = null; toast('Склад сохранён'); changed();
   }
 
