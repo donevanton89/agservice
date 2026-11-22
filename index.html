@@ -723,18 +723,19 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 @media(min-width:561px){table.tbl.stk {width:100%;min-width:0} .tbl.stk :is(td,th):not(.chkc){padding-inline:4px;overflow-wrap:anywhere}}
 tr[data-stock-editable] {cursor:pointer}
 tr[data-stock-editable]:focus-visible {outline:2px solid var(--accent);outline-offset:-2px}
+.tbl.stk {--stock-action-size:24px}
 .stock-actions {display:flex;justify-content:flex-start;align-items:center;gap:3px}
-.stock-actions .btn.stock-icon {display:inline-grid;place-items:center;flex:0 0 31px;width:31px;height:31px;padding:0;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
-.stock-actions .stock-icon svg {width:19px;height:19px;display:block}
+.stock-actions .btn.stock-icon {display:inline-grid;place-items:center;flex:0 0 var(--stock-action-size);width:var(--stock-action-size);height:var(--stock-action-size);padding:0;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.stock-actions .stock-icon svg {width:16px;height:16px;display:block}
 .stock-actions .stock-icon[data-act="stock-commit"] {background:var(--accent);border-color:var(--accent);color:white}
-.stock-actions .stock-icon[data-act="stock-del-ask"] {color:var(--bad)}
+.stock-actions .stock-icon[data-act="stock-del-ask"] {color:var(--ink)}
 .stock-actions .stock-icon:hover {box-shadow:inset 0 0 0 1px currentColor}
 .stock-create-grid {align-items:start}
 .stock-create-grid .f input,.stock-create-grid .f select {height:39px;box-sizing:border-box}
 .stock-pack-note {grid-column:-2/-1;margin:0;font-weight:400;line-height:1.3;align-self:start}
 @media(max-width:720px){.stock-create-grid .stock-pack-note {grid-column:auto}.stock-create-grid .f:has(#sn-cost){order:2}.stock-create-grid .stock-pack-note{grid-column:-2/-1}}
 
-.stock-actions .btn {padding:3px 4px;font-size:12px}
+.stock-actions .btn {box-sizing:border-box;height:var(--stock-action-size);min-height:0;line-height:1;padding:0 4px;font-size:12px}
 .stock-input {width:100%;min-width:0;box-sizing:border-box;font:inherit;color:inherit;text-align:inherit;border:1px solid var(--line);border-radius:4px;padding:2px 3px}
 .stock-input:focus {outline:1px solid var(--accent)}
 .tbl.stk .muted .stock-input[data-row-key="fundRate"] {width:58%}
@@ -5504,7 +5505,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const stockIcons = {
       'stock-commit': 'M4 10l4 4 8-9',
       'stock-discard': 'M7 4L3 8l4 4 M4 8h7a5 5 0 0 1 0 10',
-      'stock-del-ask': 'M3 5h14 M7 5V3h6v2 M5 5l1 12h8l1-12 M8 8v6 M12 8v6'
+      'stock-del-ask': 'M3 5.5h14 M7.5 5V3h5v2 M5 7.5v8.75q0 1.25 1.25 1.25h7.5q1.25 0 1.25-1.25V7.5 M8 8.5v6 M12 8.5v6'
     };
     const action = (s, act, label, title, primary = false) => `<button type="button" class="btn small ${stockIcons[act] ? 'stock-icon' : ''} ${primary ? 'primary-t' : 'ghost'}" data-act="${act}" data-id="${esc(s.id)}" title="${title}" aria-label="${title}">${stockIcons[act] ? `<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${stockIcons[act]}"/></svg>` : label}</button>`;
     const acts = s => `<td class="r"><div class="stock-actions">${editing(s)
@@ -5529,7 +5530,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
         <td class="r">${cell(s,'price',rub(s.price))}</td>${acts(s)}</tr>${deleteRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
     };
     const head = `<thead><tr><th class="chkc"></th><th>Артикул</th><th>Название</th><th class="r">Остаток</th><th class="r cst">Закупка</th><th class="r">Цена</th><th></th></tr></thead>`;
-    const tbl = (rows, group) => `<div class="scroll" data-stock-group="${group}"><table class="tbl stk"><colgroup><col style="width:52px"><col style="width:14%"><col><col style="width:8%"><col style="width:14%"><col style="width:9%"><col style="width:134px"></colgroup>${head}<tbody>${rows.map(row).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
+    const tbl = (rows, group) => `<div class="scroll" data-stock-group="${group}"><table class="tbl stk"><colgroup><col style="width:52px"><col style="width:13%"><col><col style="width:7%"><col style="width:13%"><col style="width:8%"><col style="width:calc(3 * var(--stock-action-size) + 15px)"></colgroup>${head}<tbody>${rows.map(row).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
     const selItems = D.stock.filter(x => SEL.has(x.id));
     const openOrders = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num);
     const bar = selItems.length ? `<div class="stk-bar"><b>Выбрано: ${selItems.length}</b><span class="muted small">${esc(selItems.map(x => x.name).join(', ').slice(0, 120))}</span>
