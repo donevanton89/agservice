@@ -722,6 +722,7 @@ ul.plain.rk-rows > li.on { background: var(--accent-soft); }
 .tbl.stk {table-layout:fixed;width:100%}
 @media(min-width:561px){table.tbl.stk {width:100%;min-width:0} .tbl.stk :is(td,th):not(.chkc){padding-inline:4px;overflow-wrap:anywhere}}
 tr[data-stock-editable] {cursor:pointer}
+tr[data-stock-editable] .stock-article {cursor:text;user-select:text}
 tr[data-stock-editable]:focus-visible {outline:2px solid var(--accent);outline-offset:-2px}
 .tbl.stk {--stock-action-size:24px}
 .stock-actions {display:flex;justify-content:flex-start;align-items:center;gap:3px}
@@ -5524,7 +5525,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       const cost = stockUnitCost(s), inFund = stockGroup(s) === 'oil';
       const rate = inFund ? initialFundRate(s) : null;
       return `<tr ${dragAttr(s)} ${editing(s) || isRO() ? '' : 'data-stock-editable tabindex="0" title="Редактировать строку"'} class="stk-row ${SEL.has(s.id) ? 'sel' : ''}">${chk(s)}
-        <td class="mono">${s.oil && !editing(s) ? `<button type="button" class="stock-value" data-act="toggle-row" data-id="stk-${esc(s.id)}" aria-label="История продаж" aria-expanded="${!!open}">${open ? '▾' : '▸'}</button> ` : ''}${cell(s,'art',s.art || '—')}${editing(s) && s.oil && s.packLitres == null ? cell(s,'packLitres','') : ''}</td>
+        <td class="mono stock-article">${s.oil && !editing(s) ? `<button type="button" class="stock-value" data-act="toggle-row" data-id="stk-${esc(s.id)}" aria-label="История продаж" aria-expanded="${!!open}">${open ? '▾' : '▸'}</button> ` : ''}${cell(s,'art',s.art || '—')}${editing(s) && s.oil && s.packLitres == null ? cell(s,'packLitres','') : ''}</td>
         <td>${cell(s,'name',s.name)}<div class="muted small">${cell(s,'brand',s.brand || 'Бренд')}</div></td>
         <td class="r"><b>${cell(s,'qty',fmt(q,q % 1 ? 2 : 0))}</b></td>
         <td class="r cst">${cell(s,'cost',cost == null ? '—' : rub(cost))}${inFund ? `<div class="muted small">${cell(s,'fundRate','В кассу: ' + (rate == null ? '—' : rub(rate)))}</div>` : ''}</td>
@@ -6583,7 +6584,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const b = e.target.closest('[data-act]');
     if (!b) {
       const row = e.target.closest('tr[data-stock-editable]');
-      if (row && !e.target.closest('input,button,select,textarea,a,.chkc,.stock-actions,.stock-grip')) beginStockEdit(row.dataset.stockDrag);
+      if (row && !e.target.closest('input,button,select,textarea,a,.chkc,.stock-article,.stock-actions,.stock-grip')) beginStockEdit(row.dataset.stockDrag);
       return;
     }
     if (b.tagName === 'INPUT' || b.tagName === 'TEXTAREA' || b.tagName === 'SELECT') return;
