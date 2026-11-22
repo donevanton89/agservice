@@ -321,16 +321,17 @@ ul.plain.kv li > span:first-child { color: var(--ink); font-size: 14px; flex: 1;
 .fold-h:hover .drag-h { opacity: .9; }
 #rep-grid .fold-h { cursor: pointer; }
 .stk [data-stock-drag].dragging, #rep-grid [data-blk].dragging { opacity: .45; outline: 2px dashed var(--accent); outline-offset: 2px; }
-.stk .chkc { white-space: nowrap; }
+.tbl.stk td.chkc { position: relative; padding-left: 32px; white-space: nowrap; vertical-align: middle; }
 .stock-grip, .stock-remove { display: inline-grid; place-items: center; width: 25px; height: 28px; color: var(--muted); vertical-align: middle; border-radius: 5px; }
-.stock-grip { letter-spacing: -2px; cursor: grab; user-select: none; touch-action: none; }
+.stock-grip { position: absolute; top: 50%; left: 3px; transform: translateY(-50%); cursor: grab; user-select: none; touch-action: none; }
+.stock-grip::before { content: ""; width: 8px; height: 12px; background: radial-gradient(circle at 2px 2px, currentColor 1px, transparent 1.2px) 0 0 / 4px 4px; }
 .stock-grip:hover, .stock-grip:active { background: var(--accent-soft); color: var(--accent); }
 .stock-remove { background: transparent; border: 0; cursor: pointer; font: 20px/1 sans-serif; }
 .stock-remove:hover, .stock-remove:focus-visible { color: var(--bad); background: var(--bad-soft); }
 .stk .stock-before td { box-shadow: inset 0 2px var(--accent); }
 .stk .stock-after td { box-shadow: inset 0 -2px var(--accent); }
 .stock-empty { outline: 2px dashed var(--accent); outline-offset: -2px; }
-@media (max-width: 560px) { .stock-grip { display: grid; } }
+@media (max-width: 560px) { .tbl.stk tr[data-stock-drag] { grid-template-columns: 52px minmax(0, 1fr) auto; } .tbl.stk td.chkc { align-self: stretch; display: flex; align-items: center; padding-left: 28px; } }
 .rep-help { margin: 0 0 6px; }
 #rep-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
 #rep-grid .rep-col { display: flex; flex-direction: column; gap: 14px; min-height: 80px; border-radius: var(--r); }
@@ -5431,13 +5432,13 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
   }
   const stockGroup = s => s.displayGroup ?? (s.oil ? 'oil' : s.grp || '');
   function moveStock(id, group, target, after) {
-    const items = orderedStock(), item = items.find(s => s.id === id);
+    const items = orderedStock(), item = items.find(s => String(s.id) === id);
     if (!item || id === target || !['oil', 'sto', ''].includes(group)) return;
     const groupChanged = stockGroup(item) !== group;
     const ids = items.filter(s => s !== item).map(s => s.id);
-    const at = target ? ids.indexOf(target) : ids.length;
+    const at = target ? ids.findIndex(v => String(v) === target) : ids.length;
     if (at < 0) return;
-    ids.splice(at + (target && after ? 1 : 0), 0, id);
+    ids.splice(at + (target && after ? 1 : 0), 0, item.id);
     if (!groupChanged && ids.every((v, i) => v === items[i].id)) return;
     if (groupChanged) item.displayGroup = group;
     D.cfg.stockOrder = ids;
@@ -5450,7 +5451,7 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const value = items.reduce((a, { s, q }) => a + (q > 0 ? q * ((s.oil ? s.cost : stockCost(s)) || s.price || 0) : 0), 0);
     ui.stockSel = ui.stockSel || new Set();
     const SEL = ui.stockSel, F = ui.stockForm;
-    const chk = s => `<td class="chkc"><span class="stock-grip" draggable="true" title="Перетащить позицию" aria-label="Перетащить позицию">⋮⋮</span><input type="checkbox" id="ss-${esc(s.id)}" data-ssel="${esc(s.id)}" ${SEL.has(s.id) ? 'checked' : ''} aria-label="Выбрать"></td>`;
+    const chk = s => `<td class="chkc"><span class="stock-grip" title="Перетащить позицию" aria-label="Перетащить позицию"></span><input type="checkbox" id="ss-${esc(s.id)}" data-ssel="${esc(s.id)}" ${SEL.has(s.id) ? 'checked' : ''} aria-label="Выбрать"></td>`;
     const formRow = s => F && F.mode === 'edit' && F.id === s.id ? `<tr class="stk-form"><td colspan="7">${stockForm(F)}</td></tr>` : '';
     const acts = s => `<td class="r nowrap"><button class="btn small primary-t" data-act="stock-sell" data-id="${esc(s.id)}">Продать</button> <button class="link small" data-act="stock-edit" data-id="${esc(s.id)}">Изменить</button> <button class="stock-remove" data-act="stock-del-ask" data-id="${esc(s.id)}" title="Удалить со склада" aria-label="Удалить со склада: ${esc(s.name)}">×</button></td>`;
     const dragAttr = s => `data-stock-drag="${esc(s.id)}"`;
@@ -6361,7 +6362,13 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const block = el?.closest('[data-stock-group]');
     if (!block) return null;
     const row = el.closest('[data-stock-drag]');
-    return { block, row, after: row && y > row.getBoundingClientRect().top + row.offsetHeight / 2 };
+    if (!row) return { block, row: null, after: false };
+    const bounds = row.getBoundingClientRect();
+    const fraction = (y - bounds.top) / Math.max(bounds.height, 1);
+    const sameBlock = stockDrag.closest('[data-stock-group]') === block;
+    const belowSource = !!(stockDrag.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const after = sameBlock && fraction >= 0.35 && fraction <= 0.65 ? belowSource : fraction > 0.5;
+    return { block, row, after };
   }
   function markStockDrop(hit) {
     stockMark?.classList.remove('stock-before', 'stock-after', 'stock-empty');
@@ -6374,39 +6381,39 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     markStockDrop(null);
     if (id && hit) moveStock(id, hit.block.dataset.stockGroup, hit.row?.dataset.stockDrag, hit.after);
   }
-  document.addEventListener('dragstart', e => {
-    if (!e.target.closest('.stock-grip')) return;
-    stockDrag = e.target.closest('[data-stock-drag]');
-    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', stockDrag.dataset.stockDrag);
-    e.dataTransfer.setDragImage(stockDrag, 12, stockDrag.offsetHeight / 2);
-    stockDrag.classList.add('dragging');
-  });
-  document.addEventListener('dragover', e => {
-    if (!stockDrag) return;
-    const hit = stockDropAt(e.target, e.clientY);
-    markStockDrop(hit);
-    if (hit) e.preventDefault();
-  });
-  document.addEventListener('drop', e => {
-    if (!stockDrag) return;
-    e.preventDefault(); finishStockDrop(stockDropAt(e.target, e.clientY));
-  });
-  document.addEventListener('dragend', () => finishStockDrop(null));
+  let stockPointer = null;
   document.addEventListener('pointerdown', e => {
     const grip = e.target.closest('.stock-grip');
-    if (!grip || e.pointerType === 'mouse' || !e.isPrimary) return;
-    e.preventDefault(); grip.setPointerCapture(e.pointerId);
-    stockDrag = grip.closest('[data-stock-drag]'); stockDrag.classList.add('dragging');
+    if (!grip || !e.isPrimary || e.button !== 0) return;
+    e.preventDefault();
+    stockPointer = e.pointerId;
+    stockDrag = grip.closest('[data-stock-drag]');
+    stockDrag.classList.add('dragging');
+    // Захват на документе переживает перерисовку строки при синхронизации.
+    document.documentElement.setPointerCapture(e.pointerId);
   });
+  function stockHit(e) {
+    return stockDropAt(document.elementFromPoint(e.clientX, e.clientY), e.clientY);
+  }
   document.addEventListener('pointermove', e => {
-    if (!stockDrag || !e.target.hasPointerCapture?.(e.pointerId)) return;
+    if (stockPointer !== e.pointerId) return;
     if (e.clientY < 50 || e.clientY > innerHeight - 50) window.scrollBy(0, e.clientY < 50 ? -20 : 20);
-    markStockDrop(stockDropAt(document.elementFromPoint(e.clientX, e.clientY), e.clientY));
+    markStockDrop(stockHit(e));
   });
+  function endStockPointer(hit) {
+    if (stockPointer == null) return;
+    const id = stockPointer;
+    stockPointer = null;
+    if (document.documentElement.hasPointerCapture(id)) document.documentElement.releasePointerCapture(id);
+    finishStockDrop(hit);
+  }
   document.addEventListener('pointerup', e => {
-    if (stockDrag && e.target.hasPointerCapture?.(e.pointerId)) finishStockDrop(stockDropAt(document.elementFromPoint(e.clientX, e.clientY), e.clientY));
+    if (e.pointerId === stockPointer) endStockPointer(stockHit(e));
   });
-  document.addEventListener('pointercancel', e => { if (e.target.closest('.stock-grip')) finishStockDrop(null); });
+  for (const name of ['pointercancel', 'lostpointercapture']) {
+    document.addEventListener(name, e => { if (e.pointerId === stockPointer && (name !== 'lostpointercapture' || e.target === document.documentElement)) endStockPointer(null); });
+  }
+  window.addEventListener('blur', () => endStockPointer(null));
   let repDrag = null, repDragged = false;
   document.addEventListener('dragstart', e => {
     const h = e.target.closest && e.target.closest('#rep-grid .fold-h'); if (!h) return;
