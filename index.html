@@ -3401,20 +3401,12 @@ ${oilSt(p) ? `<label class="f num" title="Закупка масла, котор�
     const st = D.stock.find(s => s.id === 'smwqb1ps40ezb' && !s.archived && s.oil && !s.pack && low(s.art) === 'v272085324');
     if (!st) return null;
     const buy = D.parts.find(p => p.id === 'pmws1m4ptqnu8' && low(p.art) === low(st.art) && p.qty === 6 && p.cost === 3733 && !p.ret && p.order == null);
-    const prev = D.log.find(l => l.id === 'lmws1ngmpivn2')?.rev?.parts?.ch;
-    return buy && prev ? { st, buy, prev } : null;
+    return buy ? { st, buy } : null;
   }
   function repairPack() {
     const fix = pendingPackRepair();
     if (!fix || isRO()) return;
-    const { st, buy, prev } = fix;
-    for (const old of prev) {
-      const p = D.parts.find(x => x.id === old.id);
-      if (!p || low(p.art) !== low(st.art) || low(p.sup) === 'склад' || p.oilCost !== 3733) continue;
-      for (const k of ['oilBase','oilAdd','oilCost','oilArt','oilFrom','oilPct']) {
-        if (k in old) p[k] = old[k]; else delete p[k];
-      }
-    }
+    const { st, buy } = fix;
     st.pack = true; st.cost = buy.cost; buy.stockId = st.id; buy.stockIn = true;
     changed('Фасованное масло: привязка покупки V272085324');
   }
