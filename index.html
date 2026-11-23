@@ -4145,7 +4145,10 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       if (PL) { if (PL.adj && !fold(prP.filter(p => +p.qty === 1), PL.adj)) rndLine = PL.adj; prHead = PL.sum; }
       else if (Math.abs(C.diff) > 0.004 && !grp.length) rndLine = C.diff;
     }
-    const total = r2(prP.reduce((a, p) => a + (p.sum || 0), 0) + (grp ? grp.reduce((a, g) => a + g.ws.reduce((b, w) => b + (w.sum || 0), 0), 0) : wk.reduce((a, w) => a + (w.sum || 0), 0)) + rndLine);
+    const partsSubtotal = prP.reduce((a, p) => a + (p.sum || 0), 0);
+    const worksSubtotal = (grp ? grp.flatMap(g => g.ws) : wk).reduce((a, w) => a + (w.sum || 0), 0);
+    const total = r2(partsSubtotal + worksSubtotal + rndLine);
+    const subtotalRow = (label, span, sum) => `<tr class="zn-grp"><td class="n"></td><td colspan="${span}">${label}</td><td class="r b">${money(sum)}</td></tr>`;
     const paid = r2(t.paid - tip), due = r2(total - paid);
     /* заказчик — только имя, без прозвища */
     const who = (o.cid && X.clientById[o.cid] ? X.clientById[o.cid].name : o.client || '').trim();
@@ -4172,9 +4175,9 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       </div>
       ${wk.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cw"></colgroup><thead><tr><th class="n">№</th><th>Выполненные работы</th><th class="r">Стоимость, ₽</th></tr></thead>
         <tbody>${grp ? (() => { let n = 0; return grp.map(g => `<tr class="zn-grp"><td class="n"></td><td>${esc(g.name)}</td><td class="r b">${money(g.sum)}</td></tr>` + g.ws.map(w => `<tr class="zn-gw"><td class="n">${++n}</td><td>${esc(w.name)}</td><td class="r mut">${(+w.sum || 0) > 0.004 || (+w.sum || 0) < -0.004 ? money(w.sum) : 'входит в стоимость'}</td></tr>`).join('')).join(''); })()
-          : wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td>${esc(w.name)}</td><td class="r b">${(+w.sum || 0) > 0.004 ? money(w.sum) : '<span class="mut">входит в стоимость</span>'}</td></tr>`).join('')}</tbody></table>` : ''}
+          : wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td>${esc(w.name)}</td><td class="r b">${(+w.sum || 0) > 0.004 ? money(w.sum) : '<span class="mut">входит в стоимость</span>'}</td></tr>`).join('')}${subtotalRow('Итого по работам', 1, worksSubtotal)}</tbody></table>` : ''}
       ${prP.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cq"><col class="cp"><col class="cs"></colgroup><thead><tr><th class="n">№</th><th>${prHead != null ? esc(PARTS_LINE) : 'Запасные части и материалы'}</th><th class="c">Кол-во</th><th class="r">Цена, ₽</th><th class="r">Сумма, ₽</th></tr></thead>
-        <tbody>${prP.map((p, i) => { const sub = [p.brand || '', p.art || ''].filter(Boolean).join(' · '); return `<tr><td class="n">${i + 1}</td><td>${esc(p.name || p.art)}${sub && p.name ? `<div class="sub">${esc(sub)}</div>` : ''}</td><td class="c">${fmt(p.qty, p.qty % 1 ? 2 : 0)}${unit(p) === 'л' ? '\u00a0л' : ''}</td><td class="r mut">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`; }).join('')}${prHead != null ? `<tr class="zn-grp"><td class="n"></td><td colspan="3">Итого</td><td class="r b">${money(prHead)}</td></tr>` : ''}</tbody></table>` : ''}
+        <tbody>${prP.map((p, i) => { const sub = [p.brand || '', p.art || ''].filter(Boolean).join(' · '); return `<tr><td class="n">${i + 1}</td><td>${esc(p.name || p.art)}${sub && p.name ? `<div class="sub">${esc(sub)}</div>` : ''}</td><td class="c">${fmt(p.qty, p.qty % 1 ? 2 : 0)}${unit(p) === 'л' ? '\u00a0л' : ''}</td><td class="r mut">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`; }).join('')}${subtotalRow('Итого по запчастям и материалам', 3, partsSubtotal)}</tbody></table>` : ''}
       <div class="zn-blk"><div class="zn-sum">${rndLine ? `<div><span>Округление:</span><b>${rndLine > 0 ? '+' : '−'}${money(Math.abs(rndLine))}&nbsp;₽</b></div>` : ''}<div class="zn-total"><span>Итоговая стоимость ремонта:</span><b>${money(total)}&nbsp;₽</b></div>
         <div><span>Оплачено:</span><b>${money(paid)}&nbsp;₽</b></div>
         <div class="zn-due"><span>${due < -0.005 ? 'Переплата:' : 'К оплате:'}</span><b>${money(Math.abs(due))}&nbsp;₽</b></div></div>
