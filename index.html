@@ -690,9 +690,11 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 .zn-t thead tr { break-after: avoid; }
 .zn-t tr, .zn-t td { break-inside: avoid; page-break-inside: avoid; }
 .zn-sum { margin: 2mm 0 0 auto; width: 95mm; display: grid; gap: 1.5mm; font-size: 10pt; page-break-inside: avoid; }
-.zn-sum > div { display: flex; justify-content: space-between; gap: 6mm; }
-.zn-total { font-size: 11pt; margin-bottom: 5mm; }
-.zn-total b { font-weight: 700; }
+.zn-sum > div { display: flex; align-items: baseline; justify-content: space-between; gap: 6mm; }
+.zn-total { font-size: inherit; margin-bottom: 5mm; }
+.zn-total b { font-weight: 400; }
+.zn-due { font-size: 11pt; }
+.zn-note.zn-reason { margin: 0 0 3mm; }
 .zn-due b { font-weight: 700; }
 .zn-words { font-size: 9pt; color: #333; text-align: right; white-space: nowrap; margin-top: 1.5mm; }
 .zn-note { font-size: 10pt; margin: 4mm 0 0; }
@@ -4175,18 +4177,19 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
           <div><small>Гос. номер</small><b>${esc(o.plate || '—')}</b></div>
         </div>
       </div>
+      ${reason ? `<p class="zn-note zn-reason"><span>Причина обращения:</span> ${esc(reason)}</p>` : ''}
       ${wk.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cw"></colgroup><thead><tr><th class="n">№</th><th>Выполненные работы</th><th class="r">Стоимость, ₽</th></tr></thead>
         <tbody>${grp ? (() => { let n = 0; return grp.map(g => `<tr class="zn-grp"><td class="n"></td><td>${esc(g.name)}</td><td class="r b">${money(g.sum)}</td></tr>` + g.ws.map(w => `<tr class="zn-gw"><td class="n">${++n}</td><td>${esc(w.name)}</td><td class="r mut">${(+w.sum || 0) > 0.004 || (+w.sum || 0) < -0.004 ? money(w.sum) : 'входит в стоимость'}</td></tr>`).join('')).join(''); })()
-          : wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td>${esc(w.name)}</td><td class="r b">${(+w.sum || 0) > 0.004 ? money(w.sum) : '<span class="mut">входит в стоимость</span>'}</td></tr>`).join('')}${subtotalRow('Итого по работам', 1, worksSubtotal)}</tbody></table>` : ''}
+          : wk.map((w, i) => `<tr><td class="n">${i + 1}</td><td>${esc(w.name)}</td><td class="r b">${(+w.sum || 0) > 0.004 ? money(w.sum) : '<span class="mut">входит в стоимость</span>'}</td></tr>`).join('')}${subtotalRow('Итого по работам:', 1, worksSubtotal)}</tbody></table>` : ''}
       ${prP.length ? `<table class="zn-t2"><colgroup><col class="cn"><col><col class="cq"><col class="cp"><col class="cs"></colgroup><thead><tr><th class="n">№</th><th>${prHead != null ? esc(PARTS_LINE) : 'Запасные части и материалы'}</th><th class="c">Кол-во</th><th class="r">Цена, ₽</th><th class="r">Сумма, ₽</th></tr></thead>
-        <tbody>${prP.map((p, i) => { const sub = [p.brand || '', p.art || ''].filter(Boolean).join(' · '); return `<tr><td class="n">${i + 1}</td><td>${esc(p.name || p.art)}${sub && p.name ? `<div class="sub">${esc(sub)}</div>` : ''}</td><td class="c">${fmt(p.qty, p.qty % 1 ? 2 : 0)}${unit(p) === 'л' ? '\u00a0л' : ''}</td><td class="r mut">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`; }).join('')}${subtotalRow('Итого по запчастям и материалам', 3, partsSubtotal)}</tbody></table>` : ''}
+        <tbody>${prP.map((p, i) => { const sub = [p.brand || '', p.art || ''].filter(Boolean).join(' · '); return `<tr><td class="n">${i + 1}</td><td>${esc(p.name || p.art)}${sub && p.name ? `<div class="sub">${esc(sub)}</div>` : ''}</td><td class="c">${fmt(p.qty, p.qty % 1 ? 2 : 0)}&nbsp;${unit(p)}</td><td class="r mut">${money(p.price)}</td><td class="r b">${money(p.sum)}</td></tr>`; }).join('')}${subtotalRow('Итого по запчастям и материалам:', 3, partsSubtotal)}</tbody></table>` : ''}
       <div class="zn-blk"><div class="zn-sum">${rndLine ? `<div><span>Округление:</span><b>${rndLine > 0 ? '+' : '−'}${money(Math.abs(rndLine))}&nbsp;₽</b></div>` : ''}<div class="zn-total"><span>Итоговая стоимость ремонта:</span><b>${money(total)}&nbsp;₽</b></div>
         <div><span>Оплачено:</span><b>${money(paid)}&nbsp;₽</b></div>
         <div class="zn-due"><span>${due < -0.005 ? 'Переплата:' : 'К оплате:'}</span><b>${money(Math.abs(due))}&nbsp;₽</b></div></div>
         <div class="zn-words">${esc(rubWords(Math.abs(due)))}</div></div>
-      ${reason || advice ? `<div class="zn-blk">${reason ? `<p class="zn-note"><span>Причина обращения:</span> ${esc(reason)}</p>` : ''}${advice ? `<p class="zn-note"><span>Рекомендации:</span> ${esc(advice)}</p>` : ''}</div>` : ''}
+      ${advice ? `<div class="zn-blk"><p class="zn-note"><span>Рекомендации:</span> ${esc(advice)}</p></div>` : ''}
       <div class="zn-blk">${P.footer ? `<p class="zn-foot">${esc(P.footer)}</p>` : ''}
-      <div class="zn-sign"><span>Исполнитель ____________________</span><span>Заказчик ____________________</span></div></div>
+      ${withReceipt ? '<div class="zn-sign"><span>Исполнитель ____________________</span><span>Заказчик ____________________</span></div>' : ''}</div>
     </div>`;
   }
   function doPrint(html, title) {
