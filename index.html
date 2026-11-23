@@ -671,8 +671,8 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 .zn-t td.c { text-align: center; }
 .zn-t td.nw { white-space: nowrap; }
 .zn-t td.r { text-align: right; white-space: nowrap; }
-.zn-t2 { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 3mm; font-size: 9pt; line-height: 1.3; }
-.zn-t2 col.cn { width: 8mm; } .zn-t2 col.cw { width: 38mm; } .zn-t2 col.cq { width: 16mm; } .zn-t2 col.cp { width: 24mm; } .zn-t2 col.cs { width: 26mm; }
+.zn-t2 { --zn-amount-width: 26mm; width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 3mm; font-size: 9pt; line-height: 1.3; }
+.zn-t2 col.cn { width: 8mm; } .zn-t2 col.cw { width: 38mm; } .zn-t2 col.cq { width: 16mm; } .zn-t2 col.cp { width: 24mm; } .zn-t2 col.cs { width: var(--zn-amount-width); }
 .zn-t2 thead { display: table-header-group; }
 .zn-t2 th { background: #f1f1f1; font-weight: 400; font-size: 9pt; padding: 1.1mm 1.5mm; text-align: left; vertical-align: middle; }
 .zn-t2 th.r { text-align: right; } .zn-t2 th.c, .zn-t2 td.c { text-align: center; }
@@ -681,6 +681,8 @@ li.is-open > .sale { border-color: var(--accent); border-bottom-left-radius: 0; 
 .zn-t2 td.r { text-align: right; white-space: nowrap; }
 .zn-t2 .mut { color: #666; } .zn-t2 td.b { font-family: Arial, sans-serif; font-weight: 600; }
 .zn-t2 tr.zn-grp td { background: #f7f7f7; font-weight: 600; border-bottom: .5pt solid #cfcfcf; }
+.zn-subtotal { display: grid; grid-template-columns: minmax(0,1fr) var(--zn-amount-width); text-align: right; align-items: baseline; }
+.zn-subtotal b { font-family: Arial,sans-serif; font-weight: 600; white-space: nowrap; }
 .zn-t2 tr.zn-gw td:nth-child(2) { padding-left: 4mm; }
 .zn-t2 .sub { font-size: 7pt; color: #777; line-height: 1.15; }
 .zn-t2 tr, .zn-t2 td { break-inside: avoid; page-break-inside: avoid; }
@@ -4148,7 +4150,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const partsSubtotal = prP.reduce((a, p) => a + (p.sum || 0), 0);
     const worksSubtotal = (grp ? grp.flatMap(g => g.ws) : wk).reduce((a, w) => a + (w.sum || 0), 0);
     const total = r2(partsSubtotal + worksSubtotal + rndLine);
-    const subtotalRow = (label, span, sum) => `<tr class="zn-grp"><td class="n"></td><td colspan="${span}">${label}</td><td class="r b">${money(sum)}</td></tr>`;
+    const subtotalRow = (label, span, sum) => `<tr class="zn-grp"><td class="n"></td><td colspan="${span + 1}"><div class="zn-subtotal"><span>${label}</span><b>${money(sum)}</b></div></td></tr>`;
     const paid = r2(t.paid - tip), due = r2(total - paid);
     /* заказчик — только имя, без прозвища */
     const who = (o.cid && X.clientById[o.cid] ? X.clientById[o.cid].name : o.client || '').trim();
