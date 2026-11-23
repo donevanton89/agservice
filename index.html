@@ -873,6 +873,8 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
   .cr-w.editing .wsum { flex-wrap: wrap; } .cr-w.editing .wsum .crl-t { flex-basis: 100%; margin: 0; }
   .cr-w.editing input { font-size: 16px !important; padding: 8px 10px !important; }
 }
+.customer-name {font:inherit;color:inherit;background:none;border:0;padding:0;text-align:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.customer-name:hover,.customer-name:focus-visible {color:var(--accent);text-decoration-color:currentColor}
 </style>
 
 <header class="top">
@@ -2061,6 +2063,10 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     return out;
   }
+  function clientLink(person, text) {
+    if (!person) return text === 'Открыть карточку клиента' ? '' : esc(text);
+    return `<button type="button" class="customer-name" data-act="visit-customer" data-id="${esc(person.id)}" title="Открыть карточку клиента">${esc(text)}</button>`;
+  }
   function orderWho(o) { const p = o.cid && X.clientById[o.cid]; return p ? label(p) : (o.client + (o.note ? ' ' + o.note : '')).trim(); }
   function clientSearch(q) {
     const vs = qVars(low(q)).map(v => v.split(' ').filter(Boolean));
@@ -3079,7 +3085,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     return `<li class="${open ? 'is-open' : ''}"><div class="order" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}">
       <span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span>
       <span class="o-num">${o.num != null ? '№ ' + o.num : 'б/н'}${o.docNum ? `<small class="doc-num" title="Официальный номер (оплата с чеком)">${esc(o.docNum)}</small>` : ''}</span>
-      <span class="o-main"><b>${esc(orderWho(o) || 'Без имени')}</b><span class="muted">${esc(o.car)}</span>${hp && hp.length ? `<span class="hit small">${hp.slice(0, 3).map(p => esc([p.art, p.name, p.brand].filter(Boolean).join(' · '))).join('; ')}${hp.length > 3 ? ' и ещё ' + (hp.length - 3) : ''}</span>` : ''}</span>
+      <span class="o-main"><b>${clientLink(X.clientById[o.cid] || personOf(o.client,o.note), orderWho(o) || 'Без имени')}</b><span class="muted">${esc(o.car)}</span>${hp && hp.length ? `<span class="hit small">${hp.slice(0, 3).map(p => esc([p.art, p.name, p.brand].filter(Boolean).join(' · '))).join('; ')}${hp.length > 3 ? ' и ещё ' + (hp.length - 3) : ''}</span>` : ''}</span>
       <span class="o-plate">${plate(o.plate)}</span>
       <span class="o-meta"><span class="pill ${st[0]}">${st[1]}</span>${t.waiting ? `<span class="pill st-wait">нет запчастей: ${t.waiting}</span>` : ''}<span class="muted small">${date || ''}</span></span>
       <span class="o-sum"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 ? `<span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : ''}</span>
@@ -4349,7 +4355,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     return `<li class="${open ? 'is-open' : ''}"><div class="sale" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="s:${esc(g.id)}">
       <span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span>
       <span class="muted small nowrap">${dshort(g.date)}</span>
-      <span class="s-main"><b>${esc(saleWho(g))}</b>${isOwn(g.client) ? ' <span class="pill st-wait">себе</span>' : ''} <span class="muted">${esc(g.car)}</span><span class="muted small s-items">${esc(g.rows.filter(p => !p.kind).map(p => p.name || p.art).join(', '))}</span></span>
+      <span class="s-main"><b>${clientLink(g.person, saleWho(g))}</b>${isOwn(g.client) ? ' <span class="pill st-wait">себе</span>' : ''} <span class="muted">${esc(g.car)}</span><span class="muted small s-items">${esc(g.rows.filter(p => !p.kind).map(p => p.name || p.art).join(', '))}</span></span>
       <span class="s-sum"><b>${rub(g.sum)}</b>${g.debt > 5 ? `<span class="neg small">долг ${rub(g.debt)}</span>` : g.debt < -5 ? `<span class="pos small">переплата ${rub(-g.debt)}</span>` : ''}${g.wait ? `<span class="warn small">нет: ${g.wait}</span>` : ''}</span>
     </div>${open ? saleDetail(g) : ''}</li>`;
   }
@@ -4635,7 +4641,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
           <label class="f span2">Кому<input id="sa-client" list="dl-clients" value="${esc((Sx.client + (Sx.note ? ' ' + Sx.note : '')).trim())}" data-sa="client" autocomplete="off" placeholder="Клиент, Антон или Глеб"></label>
           <label class="f">Машина<input id="sa-car" value="${esc(Sx.car)}" data-sa="car"></label>
           <label class="f">Дата<input id="sa-date" type="date" value="${esc(Sx.date)}" data-sa="date"></label>
-        </div>${own ? `<p class="small">Покупка для себя: цена = закупка, без наценки.</p>` : ''}</section>
+        </div><div id="sale-client-link">${clientLink(X.clientById[Sx.cid] || personOf(Sx.client,Sx.note), 'Открыть карточку клиента')}</div>${own ? `<p class="small">Покупка для себя: цена = закупка, без наценки.</p>` : ''}</section>
         <section class="block"><div class="block-head"><h3>${fromStock ? 'Со склада' : 'Запчасти'}</h3><span class="muted">${rub(t.sum)}</span></div>
           <div class="lines">${Sx.rows.map((p, i) => p.kind ? '' : `
             <div class="line part${p.no ? ' is-no' : ''}${p.ret ? ' is-ret' : ''}">
@@ -4703,6 +4709,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
         else { Sx.client = el.value.trim(); Sx.note = ''; Sx.cid = null; }
         if (isOwn(Sx.client) !== wasOwn) Sx.rows.forEach(p => { if (p.cost != null) { p.price = salePrice(p.cost); p.sum = r2((p.price || 0) * (p.qty || 0)); } });
         if (r || isOwn(Sx.client) !== wasOwn) paintSale();
+        else $('#sale-client-link').innerHTML = clientLink(personOf(Sx.client,Sx.note), 'Открыть карточку клиента');
         return;
       }
       Sx[k] = el.value; if (k === 'date') Sx.rows.forEach(p => { if (p.app) p.date = el.value; });
@@ -4858,7 +4865,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       const open = ui.openRows.has(o.id), hh = hits[o.id];
       return `<li class="${open ? 'is-open' : ''}${hh ? ' clq-hit' : ''}"><div class="hist" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="o-num">${o.num != null ? '№\u00a0' + o.num : 'б/н'}${o.docNum ? '<small class="doc-num">' + esc(o.docNum) + '</small>' : ''}</span><span>${dshort(o.start || o.doneDate)}</span><span>${esc(car ? car.car : o.car)}</span><span class="mil">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</span><span class="r"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 && o.doneDate ? ` <span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : !o.doneDate ? ' ' + (inSched(o) ? '<span class="pill st-sched">запись</span>' : '<span class="pill st-work">в работе</span>') : ''}</span></div>${hh ? `<ul class="clq-found">${hh.ps.map(p => clqLine(p)).join('')}${hh.ws.map(w => clqLine(w, true)).join('')}</ul>` : ''}${open ? orderDetail(o, t) : ''}</li>`; }).join('');
     const used = new Set(orders.map(o => o.carId));
-    return `<div class="toolbar"><button class="btn ghost" data-act="cl-back">‹ Все клиенты</button></div>
+    return `<div class="toolbar">${ui.returnSale ? '<button class="btn ghost" data-act="resume-client-sale">‹ Вернуться в продажу</button>' : '<button class="btn ghost" data-act="cl-back">‹ Все клиенты</button>'}</div>
       ${ui.cerr ? `<div class="note bad">${esc(ui.cerr)}</div>` : ''}
       <section class="block"><div class="block-head"><h3>${isNew ? 'Новый клиент' : esc(label(d))}</h3></div>
         <div class="grid g3">
@@ -5539,7 +5546,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       return `<tr ${dragAttr(s)} ${editing(s) || isRO() ? '' : 'data-stock-editable tabindex="0" title="Редактировать строку"'} class="stk-row ${SEL.has(s.id) ? 'sel' : ''}">${chk(s)}
         <td class="mono stock-article">${s.oil && !editing(s) ? `<button type="button" class="stock-value" data-act="toggle-row" data-id="stk-${esc(s.id)}" aria-label="История продаж" aria-expanded="${!!open}">${open ? '▾' : '▸'}</button> ` : ''}${cell(s,'art',s.art || '—')}${editing(s) && stockGroup(s) === 'oil' && s.packLitres == null ? `<label class="muted small">Розлив, л/уп.${cell(s,'packLitres','')}</label>` : '' }</td>
         <td>${cell(s,'name',s.name)}<div class="muted small">${cell(s,'brand',s.brand || 'Бренд')}</div></td>
-        <td class="r"><b>${cell(s,'qty',fmt(q,q % 1 ? 2 : 0) + (s.pourByLitre ? ' л' : ''))}</b></td>
+        <td class="r"><b>${cell(s,'qty',fmt(q,q % 1 ? 2 : 0))}</b></td>
         <td class="r cst">${cell(s,'cost',cost == null ? '—' : rub(cost))}${inFund ? `<div class="muted small">${cell(s,'fundRate','В кассу: ' + (rate == null ? '—' : rub(rate)))}</div>` : ''}</td>
         <td class="r">${cell(s,'price',rub(s.price))}</td>${acts(s)}</tr>${deleteRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
     };
@@ -6860,6 +6867,24 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'pick-new': { const o = E.order, q = (E.pickQ || '').trim(); Object.assign(o, { cid: null, carId: null, client: /\d/.test(q) ? '' : q.replace(/(^|\s)\S/g, m => m.toUpperCase()), note: '', phone: '', car: '', plate: '', vin: '' }); E.picking = false; E.newClient = true; paintEditor(); setTimeout(() => { const f = $(o.client ? '#e-note' : '#e-client'); if (f) f.focus(); }, 30); break; }
       case 'pick-change': E.picking = true; E.pickQ = ''; paintEditor(); setTimeout(() => { const f = $('#e-pick'); if (f) f.focus(); }, 30); break;
       case 'pick-cancel': E.picking = false; paintEditor(); break;
+      case 'visit-customer': {
+        if (!X.clientById[b.dataset.id]) break;
+        if (ui.sale) {
+          ui.returnSale = {draft:ui.sale, tab:ui.tab};
+          ui.sale = null;
+          paintSale();
+        }
+        goClient(b.dataset.id);
+        break;
+      }
+      case 'resume-client-sale': {
+        const prev = ui.returnSale;
+        if (!prev) break;
+        ui.returnSale = null; ui.cdraft = null; ui.tab = prev.tab; ui.sale = prev.draft;
+        try { localStorage.setItem('sto.tab',ui.tab); } catch (er) {}
+        render(); paintSale(true);
+        break;
+      }
       case 'cl-open': openClient(b.dataset.id); break;
       case 'cl-new': ui.cdraft = { id: null, name: '', nick: '', phone: '', cars: [{ id: uid('a'), car: '', plate: '', vin: '' }] }; ui.cerr = ''; render(); break;
       case 'cl-back': ui.cdraft = null; ui.cerr = ''; ui.cmove = null; ui.cpick = null; ui.cmvSale = null; ui.cmvSaleOpen = null; render(); break;
