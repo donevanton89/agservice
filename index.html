@@ -1515,8 +1515,8 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     let q = s.qtyBase || 0;
     D.parts.forEach(p => {
       if (!p.app || p.ret || p.art !== s.art || p.no) return;
-      if (p.stockIn) q += (p.qty || 0) * (p.receiptLitres || 1);
-      else if (p.sup === 'Склад') q -= p.qty || 0;
+      if (p.stockIn) q += (p.qty || 0) * (p.receiptLitres || (s.pourByLitre ? s.packLitres : 1));
+      else if (p.sup === 'Склад') q -= (p.qty || 0) * (s.pourByLitre && s.packSaleRows?.[p.id] ? s.packLitres : 1);
     });
     return r2(q);
   }
@@ -4109,9 +4109,14 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const wk = works.filter(w => ((w.name || '').trim() || w.sum) && !isTip(w) && !w.kind).map(w => Object.assign({}, w));
     const prP0 = pr.filter(p => !isTip(p) && !p.kind).map(p => Object.assign({}, p));
     /* одинаковые позиции (тот же артикул/название, цена, получено или нет) печатаем одной строкой; в программе строки остаются как есть */
+    const liquidStock = new Map(D.stock.filter(st => st.oil || st.pourByLitre).map(st => [artN(st.art), st]));
+    const unit = p => {
+      const st = low(p.sup) === 'склад' && liquidStock.get(artN(p.art));
+      return st && !st.packSaleRows?.[p.id] ? 'л' : 'шт.';
+    };
     const prP = [], seen = new Map();
     prP0.forEach(p => {
-      const k = (String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase() || low(p.name || '')) + '|' + low(p.name || '') + '|' + r2(+p.price || 0) + '|' + low(p.sup) + '|' + !!p.no;
+      const k = (String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase() || low(p.name || '')) + '|' + low(p.name || '') + '|' + r2(+p.price || 0) + '|' + low(p.sup) + '|' + !!p.no + '|' + unit(p);
       const m = seen.get(k);
       if (m) { m.qty = r2((+m.qty || 0) + (+p.qty || 0)); m.sum = r2((m.sum || 0) + (p.sum || 0)); } else { seen.set(k, p); prP.push(p); }
     });
@@ -4159,8 +4164,6 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     /* исполнитель с ИНН — только если по наряду пробит чек; иначе просто «Станция технического обслуживания» */
     const docN = withReceipt ? (o.docNum || docNext(hasReceipt(pays) ? docYearOf(pays) : (o.doneDate || S.todayISO()).slice(2, 4)).num) : null;
     const logo = P.logo || 'data:image/png;base64,' + LOGO_B64;
-    const oilArts = new Set(D.stock.filter(x => x.oil).map(x => String(x.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase()));
-    const unit = p => (low(p.sup) === 'склад' && oilArts.has(String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase())) ? 'л' : 'шт.';
     const reason = (o.reason || '').trim(), advice = (o.advice || '').trim();
     const phone = (o.phone || (o.cid && X.clientById[o.cid] ? X.clientById[o.cid].phone : '') || '').trim();
     return `<div class="zn">
@@ -5502,6 +5505,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (groupChanged) item.displayGroup = group;
     D.cfg.stockOrder = ids;
     changed('Перемещение позиции склада');
+    if (groupChanged && group === 'oil' && item.packLitres == null && !ui.stockDraft) beginStockEdit(item.id);
   }
   function viewStock() {
     const q = ui.stockQ.trim().toLowerCase();
@@ -5533,9 +5537,9 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       const cost = stockUnitCost(s), inFund = stockGroup(s) === 'oil';
       const rate = inFund ? initialFundRate(s) : null;
       return `<tr ${dragAttr(s)} ${editing(s) || isRO() ? '' : 'data-stock-editable tabindex="0" title="Редактировать строку"'} class="stk-row ${SEL.has(s.id) ? 'sel' : ''}">${chk(s)}
-        <td class="mono stock-article">${s.oil && !editing(s) ? `<button type="button" class="stock-value" data-act="toggle-row" data-id="stk-${esc(s.id)}" aria-label="История продаж" aria-expanded="${!!open}">${open ? '▾' : '▸'}</button> ` : ''}${cell(s,'art',s.art || '—')}${editing(s) && s.oil && s.packLitres == null ? cell(s,'packLitres','') : ''}</td>
+        <td class="mono stock-article">${s.oil && !editing(s) ? `<button type="button" class="stock-value" data-act="toggle-row" data-id="stk-${esc(s.id)}" aria-label="История продаж" aria-expanded="${!!open}">${open ? '▾' : '▸'}</button> ` : ''}${cell(s,'art',s.art || '—')}${editing(s) && stockGroup(s) === 'oil' && s.packLitres == null ? `<label class="muted small">Розлив, л/уп.${cell(s,'packLitres','')}</label>` : '' }</td>
         <td>${cell(s,'name',s.name)}<div class="muted small">${cell(s,'brand',s.brand || 'Бренд')}</div></td>
-        <td class="r"><b>${cell(s,'qty',fmt(q,q % 1 ? 2 : 0))}</b></td>
+        <td class="r"><b>${cell(s,'qty',fmt(q,q % 1 ? 2 : 0) + (s.pourByLitre ? ' л' : ''))}</b></td>
         <td class="r cst">${cell(s,'cost',cost == null ? '—' : rub(cost))}${inFund ? `<div class="muted small">${cell(s,'fundRate','В кассу: ' + (rate == null ? '—' : rub(rate)))}</div>` : ''}</td>
         <td class="r">${cell(s,'price',rub(s.price))}</td>${acts(s)}</tr>${deleteRow(s)}${open ? `<tr class="stk-detail"><td colspan="7">${stockSalesHTML(s)}</td></tr>` : ''}`;
     };
@@ -5619,7 +5623,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (ui.stockDraft && ui.stockDraft.id !== id) { toast('Сохрани или отмени открытую правку'); return; }
     const values = {art:st.art,name:st.name,brand:st.brand,qty:S.stockQty(st,D),price:st.price};
     if (stockGroup(st) === 'oil') values.fundRate = initialFundRate(st);
-    if (st.oil && st.packLitres == null) values.packLitres = '';
+    if (stockGroup(st) === 'oil' && st.packLitres == null) values.packLitres = '';
     ui.stockDraft = {id,values:{...values},original:values};
     ui.stockDelete = null; render();
   }
@@ -5646,6 +5650,13 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
         }
         st.fundRate = r2(val);
       } else if (key === 'packLitres') {
+        if (!st.oil) {
+          st.pourByLitre = true;
+          st.packSaleRows = Object.fromEntries(D.parts.filter(p => p.art === st.art && low(p.sup) === 'склад' && !p.stockIn).map(p => [p.id, true]));
+          st.qtyBase = (st.qtyBase || 0) * val;
+          if (st.price != null) st.price = r2(st.price / val);
+          if (st.fundRate != null) st.fundRate = r2(st.fundRate / val);
+        }
         st.packLitres = val;
         D.parts.forEach(p => { if (p.stockIn && p.no && !p.ret && p.art === st.art && p.month === NOW_M() && !isLockedM(p.month)) p.receiptLitres = val; });
       } else st[key] = val;
@@ -5654,7 +5665,10 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (Object.keys(updates).length) changed('Изменение позиции склада'); else render();
   }
   function stockUnitCost(st) {
-    if (!st.oil) return stockLast(st)?.c ?? null;
+    if (!st.oil) {
+      const purchase = stockLast(st);
+      return purchase ? purchase.c / (st.pourByLitre ? st.packLitres : 1) : null;
+    }
     const buys = oilBuys(st, true);
     if (!buys.length) return null;
     return barrelAvg(buys, Math.max(0, S.stockQty(st, D) - 1), 1, st.cost).avg;
@@ -5910,7 +5924,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       const sum = r2((it.cost || 0) * it.qty);
       const st = D.stock.find(s => s.art && low(s.art) === low(it.art));
       D.parts.push({ id, date: P.date, sup: P.sup, order: null, art: st?.art || it.art, name: it.name, brand: it.brand, cost: it.cost, qty: it.qty, price: it.cost, sum, client: P.to, car: '', note: '', vin: '', plate: '', phone: '',
-        paid: i === 0 ? total : null, no: it.no != null ? it.no : !!P.no, ret: false, retDone: false, month: m, app: true, link, blk, stockIn: !!st || undefined, receiptLitres: st?.oil ? st.packLitres || 1 : undefined, rk: it.rk || undefined });
+        paid: i === 0 ? total : null, no: it.no != null ? it.no : !!P.no, ret: false, retDone: false, month: m, app: true, link, blk, stockIn: !!st || undefined, receiptLitres: (st?.oil || st?.pourByLitre) ? st.packLitres || 1 : undefined, rk: it.rk || undefined });
     });
     const what = items.length === 1 ? items[0].name : items[0].name + ' и ещё ' + (items.length - 1) + ' поз.';
     const fund = P.to === 'СТО (масло/антифриз)' ? 'oil' : P.to === 'СТО (копилка)' ? 'piggy' : null;
