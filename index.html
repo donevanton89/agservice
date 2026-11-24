@@ -7569,15 +7569,24 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   async function gunzipText(blob) {
     const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
     if (head[0] !== 0x1f || head[1] !== 0x8b) return await blob.text();
+    if (!('DecompressionStream' in window)) throw new Error('Этот браузер не умеет распаковывать базу с Яндекс Диска');
     return await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
   }
   async function yaGet(path) {
     const dl = await yaApi('/resources/download?path=' + encodeURIComponent(path));
     let r, body;
-    try { ({ r, body } = await fetchT(dl.href, { referrerPolicy: 'no-referrer', credentials: 'omit', cache: 'no-store' }, 90000, res => res.ok ? res.blob() : null)); }
+    try {
+      ({ r, body } = await fetchT(dl.href, { referrerPolicy: 'no-referrer', credentials: 'omit', cache: 'no-store' }, 90000, async res => {
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        try { return { text: await gunzipText(blob) }; }
+        catch (error) { return { error }; }
+      }));
+    }
     catch (e) { const er = new Error('нет связи с Яндексом'); er.offline = true; throw er; }
     if (!r.ok) throw new Error('Яндекс не отдал файл: HTTP ' + r.status);
-    return await gunzipText(body);
+    if (body.error) throw body.error;
+    return body.text;
   }
   async function yaPut(path, text) {
     const up = await yaApi('/resources/upload?path=' + encodeURIComponent(path) + '&overwrite=true');
