@@ -110,10 +110,23 @@ li.is-open > .order, li.is-open > .client { border-color: var(--accent); border-
 .o-plate { grid-area: plate; justify-self: start; align-self: start; }
 .o-meta { grid-area: meta; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .o-sum { grid-area: sum; display: grid; justify-items: end; text-align: right; }
+.order-statuses { display: contents; }
 @media (max-width: 620px) {
-  .order { grid-template-columns: 12px max-content minmax(0, 1fr) auto; column-gap: 8px; grid-template-areas: "arr num main sum" "arr num plate sum" "arr num meta meta"; }
-  .order > .o-plate { align-self: start; }
+  .order {
+    grid-template-columns: 10px minmax(0, 1fr) fit-content(52%);
+    grid-template-areas: "arr num date" "client client client" "car car total" "plate plate balance" "statuses statuses statuses";
+    gap: 4px 6px;
+    overflow-wrap: anywhere;
+  }
+  .order > :is(.o-main, .o-sum, .o-meta) { display: contents; }
   .order > .o-num { font-size: 14px; }
+  .order .o-main > b { grid-area: client; }
+  .order .o-main > .muted { grid-area: car; }
+  .order .o-main > .hit { grid-column: 1 / -1; grid-row: 6; }
+  .order .o-date { grid-area: date; justify-self: end; }
+  .order .o-sum > b { grid-area: total; justify-self: end; }
+  .order .o-sum > span { grid-area: balance; justify-self: end; }
+  .order .order-statuses { grid-area: statuses; display: flex; flex-wrap: wrap; gap: 6px; }
 }
 
 .plate { display: inline-flex; align-items: stretch; border: 1.5px solid var(--plate-line); border-radius: 4px; background: var(--plate-bg); color: var(--plate-ink); font-family: var(--f-mono); line-height: 1; height: 24px; overflow: hidden; }
@@ -3102,7 +3115,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
       <span class="o-num">${o.num != null ? '№ ' + o.num : 'б/н'}${o.docNum ? `<small class="doc-num" title="Официальный номер (оплата с чеком)">${esc(o.docNum)}</small>` : ''}</span>
       <span class="o-main"><b>${clientLink(X.clientById[o.cid] || personOf(o.client,o.note), orderWho(o) || 'Без имени')}</b><span class="muted">${esc(o.car)}</span>${hp && hp.length ? `<span class="hit small">${hp.slice(0, 3).map(p => esc([p.art, p.name, p.brand].filter(Boolean).join(' · '))).join('; ')}${hp.length > 3 ? ' и ещё ' + (hp.length - 3) : ''}</span>` : ''}</span>
       <span class="o-plate">${plate(o.plate)}</span>
-      <span class="o-meta"><span class="pill ${st[0]}">${st[1]}</span>${t.waiting ? `<span class="pill st-wait">нет запчастей: ${t.waiting}</span>` : ''}<span class="muted small">${date || ''}</span></span>
+      <span class="o-meta"><span class="order-statuses"><span class="pill ${st[0]}">${st[1]}</span>${t.waiting ? `<span class="pill st-wait">нет запчастей: ${t.waiting}</span>` : ''}</span><span class="muted small o-date">${date || ''}</span></span>
       <span class="o-sum"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 ? `<span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : ''}</span>
     </div>${open ? orderDetail(o, t) : ''}</li>`;
   }
