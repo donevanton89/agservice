@@ -111,9 +111,9 @@ li.is-open > .order, li.is-open > .client { border-color: var(--accent); border-
 .o-meta { grid-area: meta; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .o-sum { grid-area: sum; display: grid; justify-items: end; text-align: right; }
 @media (max-width: 620px) {
-  .order { grid-template-columns: 12px 58px minmax(0, 1fr) auto; grid-template-areas: "arr num main sum" "arr num plate sum" "arr num meta meta"; }
+  .order { grid-template-columns: 12px max-content minmax(0, 1fr) auto; column-gap: 8px; grid-template-areas: "arr num main sum" "arr num plate sum" "arr num meta meta"; }
   .order > .o-plate { align-self: start; }
-  .o-num { font-size: 15px; }
+  .order > .o-num { font-size: 14px; }
 }
 
 .plate { display: inline-flex; align-items: stretch; border: 1.5px solid var(--plate-line); border-radius: 4px; background: var(--plate-bg); color: var(--plate-ink); font-family: var(--f-mono); line-height: 1; height: 24px; overflow: hidden; }
@@ -402,8 +402,6 @@ html, body { margin: 0; }
 .memo summary { cursor: pointer; font-weight: 600; }
 .memo ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 3px; }
 .block h4 { margin: 8px 0 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.soon { display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; font-size: 14px; }
-.soon-i { background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; }
 .nowrap { white-space: nowrap; }
 .tbl.pays td { padding: 6px 10px; }
 .toolbar .mnav { flex: none; }
@@ -844,6 +842,19 @@ tr[data-stock-editable]:focus-visible {outline:2px solid var(--accent);outline-o
 .status { width: 230px; flex: none; text-align: center; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
 #ckbadge { min-width: 128px; text-align: center; box-sizing: border-box; }
 #waitbadge { min-width: 86px; text-align: center; box-sizing: border-box; }
+.header-badges { display: contents; }
+@media (max-width: 600px) {
+  .header-badges {
+    --header-left: max(16px, env(safe-area-inset-left, 0px));
+    --header-right: max(16px, env(safe-area-inset-right, 0px));
+    display: flex; align-items: center; justify-content: space-evenly;
+    flex: 0 0 calc(100% + var(--header-left) + var(--header-right));
+    margin-inline: calc(0px - var(--header-left)) calc(0px - var(--header-right));
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+  }
+  .header-badges :is(#userchip, #waitbadge, #ckbadge) { min-width: 0; padding-inline: 6px; overflow: hidden; text-overflow: ellipsis; }
+  .header-badges #costeye { flex: none; }
+}
 .seg.seg3 button{flex:1 1 auto;white-space:nowrap;padding-left:6px;padding-right:6px}
 #wt-ask{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:32;background:var(--surface);border:2px solid var(--accent);color:var(--ink);padding:12px 14px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.18);width:min(560px,calc(100% - 32px));font-size:14px}
 #wt-ask[hidden]{display:none}#wt-ask ul{margin:8px 0}#wt-ask li{display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px solid var(--line)}#wt-ask li>span:first-child{flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}#wt-ask .ck-btns{display:flex;gap:6px;justify-content:flex-end;flex-shrink:0}#wt-ask ul{max-height:50vh;overflow:auto}
@@ -887,10 +898,12 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     <div id="fname" class="fname"></div>
     <div id="status" class="status wait">Загружаю…</div>
     <button id="undoBtn" class="hbtn" data-act="undo" aria-label="Отменить" hidden disabled>↶</button><button id="redoBtn" class="hbtn" data-act="redo" aria-label="Повторить" hidden disabled>↷</button>
-    <button id="userchip" class="userchip" data-act="user-switch" hidden></button>
-    <button id="costeye" class="costeye" data-act="cost-eye" aria-label="Глаз"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path class="eye-off" d="M3 3l18 18" stroke="currentColor" stroke-width="2"/></svg></button>
-    <button id="waitbadge" class="ckbadge waitb" data-act="go-wait" hidden></button>
-    <button id="ckbadge" class="ckbadge" data-act="go-check" hidden></button>
+    <div class="header-badges">
+      <button id="userchip" class="userchip" data-act="user-switch" hidden></button>
+      <button id="costeye" class="costeye" data-act="cost-eye" aria-label="Глаз"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path class="eye-off" d="M3 3l18 18" stroke="currentColor" stroke-width="2"/></svg></button>
+      <button id="waitbadge" class="ckbadge waitb" data-act="go-wait" hidden></button>
+      <button id="ckbadge" class="ckbadge" data-act="go-check" hidden></button>
+    </div>
     <nav id="tabs" aria-label="Разделы"></nav>
   </div>
 </header>
@@ -3071,13 +3084,11 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     list.sort((a, b) => (nk(b.o) - nk(a.o)) || sk(b.o).localeCompare(sk(a.o)));
     const shown = list.slice(0, ui.limit);
     const chip = (k, l, n) => `<button class="chip${ui.filter === k ? ' on' : ''}" data-act="filter" data-k="${k}">${l}${n != null ? ` <b>${n}</b>` : ''}</button>`;
-    const soon = D.schedule.filter(s => s.date >= S.todayISO()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
     return `
       <div class="toolbar">
         <input id="q" class="search" type="search" placeholder="Поиск: клиент, авто, номер наряда, госномер, запчасть, артикул, бренд" value="${esc(ui.q)}" data-act="search" autocomplete="off">
         <button class="btn primary" data-act="new-order">+ Новый наряд</button>
       </div>
-      ${soon.length ? `<div class="soon"><span class="muted small">Записаны:</span>${soon.map(s => `<span class="soon-i"><b>${dshort(s.date)}</b> ${esc(s.client)} · ${esc(s.car)}</span>`).join('')}<button class="link small" data-act="tab" data-k="sched">все</button></div>` : ''}
       <div class="chips">${chip('open', 'В работе', counts.open)}${chip('debt', 'С долгом', counts.debt)}${chip('wait', 'Ждут запчасти', counts.wait)}${chip('ip', 'ИП', counts.ip)}${chip('all', 'Все', null)}</div>
       ${shown.length ? `<ul class="orders">${shown.map(({ o, t }) => orderCard(o, t, hits[o.id])).join('')}</ul>` : `<p class="muted pad">${ui.filter === 'open' && !q ? 'Сейчас машин в работе нет.' : 'Ничего не нашлось.'}${q && ui.filter !== 'all' ? ' <button class="link small" data-act="filter" data-k="all">Искать во всех нарядах</button>' : ''}</p>`}
       ${list.length > shown.length ? `<button class="btn wide" data-act="more">Показать ещё (${list.length - shown.length})</button>` : ''}`;
