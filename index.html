@@ -7691,10 +7691,10 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     cloud = true; ui.fileName = 'Яндекс Диск'; cl.empty = false;
     /* просим браузер не удалять копию базы на устройстве при нехватке места */
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
-    const meta = (await idb.get('cl.meta')) || {};
+    const [savedMeta, cur] = await Promise.all([idb.get('cl.meta'), idb.get('cl.cur')]);
+    const meta = savedMeta || {};
     cl.baseMd5 = meta.baseMd5 || null; cl.pending = !!meta.pending; cl.last = meta.last ? new Date(meta.last) : null;
-    cl.baseJson = (await idb.get('cl.base')) || null;
-    const cur = await idb.get('cl.cur');
+    cl.baseJson = null;
     if (cur) { D = normalize(JSON.parse(cur)); reindex(); histReset(); dirty = false; render(); }
     else render();
     await cloudSync();
@@ -7726,7 +7726,8 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
           cl.busy = 'Скачиваю базу с Диска…'; paintStatus();
           const theirsJson = await yaGet(CLOUD_FILE), theirs = JSON.parse(theirsJson);
           if (cl.pending && D) {
-            const baseObj = cl.baseJson ? JSON.parse(cl.baseJson) : {}, mineObj = JSON.parse(JSON.stringify(D));
+            const baseJson = cl.baseJson || await idb.get('cl.base');
+            const baseObj = baseJson ? JSON.parse(baseJson) : {}, mineObj = JSON.parse(JSON.stringify(D));
             const { data, disputes } = merge3(baseObj, mineObj, theirs);
             const renum = mergeRenum(baseObj, mineObj, theirs, data);
             D = normalize(data); reindex(); histReset();
@@ -7801,9 +7802,10 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     cloud = true; ui.fileName = 'Яндекс Диск'; cl.empty = false; lsSet('ag.mode', 'cloud');
     if (!hadBase) { clearInterval(cl.pull); cl.pull = setInterval(() => { if (!document.hidden) cloudSync(); }, 60000); afterOpen(); }
     try {
-      if (hadBase && cl.baseJson) { /* старая версия на Диске остаётся копией */
+      const baseJson = hadBase && (cl.baseJson || await idb.get('cl.base'));
+      if (baseJson) { /* старая версия на Диске остаётся копией */
         await yaMkdir(CLOUD_COPIES);
-        await yaPut(CLOUD_COPIES + '/до замены ' + new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-') + '.json.gz', cl.baseJson);
+        await yaPut(CLOUD_COPIES + '/до замены ' + new Date().toISOString().slice(0, 16).replace(/[T:]/g, '-') + '.json.gz', baseJson);
       }
       await cloudUpload(); toast('База загружена на Яндекс Диск'); lsSet('cl.copyDay', null); cloudDailyCopy();
     } catch (e) { cl.pending = true; await cloudStateSave(); toast('Не получилось отправить: ' + e.message + '. Отправлю, когда будет связь.'); clearTimeout(cl.timer); cl.timer = setTimeout(cloudSync, 30000); }

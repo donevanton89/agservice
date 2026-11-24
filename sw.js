@@ -6,6 +6,21 @@ self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Pr
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== self.location.origin) return;
+  const home = new URL('./', self.location.href);
+  if (e.request.mode === 'navigate' && (u.pathname === home.pathname || u.pathname === home.pathname + 'index.html')) {
+    const cache = caches.open(C);
+    const saved = cache.then(c => c.match(home.href));
+    const network = fetch(e.request, { cache: 'no-cache' });
+    const update = network.then(async response => {
+      if (response.ok && response.headers.get('content-type')?.includes('text/html')) {
+        const copy = response.clone();
+        await (await cache).put(home.href, copy);
+      }
+    });
+    e.waitUntil(update.catch(() => {}));
+    e.respondWith(saved.catch(() => null).then(response => response || network));
+    return;
+  }
   const cached = () => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('./'));
   const net = fetch(e.request).then(r => { if (r.ok) { const cp = r.clone(); caches.open(C).then(c => c.put(e.request, cp)); } return r; });
   e.respondWith(new Promise(resolve => {
