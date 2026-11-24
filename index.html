@@ -875,6 +875,9 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
 }
 .customer-name {font:inherit;color:inherit;background:none;border:0;padding:0;text-align:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
 .customer-name:hover,.customer-name:focus-visible {color:var(--accent);text-decoration-color:currentColor}
+.round-detail { position:relative; cursor:help; }
+.round-list { display:none; position:absolute; z-index:20; top:100%; left:0; right:0; max-height: min(16rem, 40vh); overflow:auto; padding:12px; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 6px 18px #0002; }
+.round-detail:hover .round-list, .round-detail:focus-within .round-list { display:block; }
 </style>
 
 <header class="top">
@@ -6075,6 +6078,31 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       ${L('На конец', P.ipEnd, 'total')}`;
     return { sum: 'осталось ' + rub(P.left), html: h };
   }
+  function roundingRow(month, report) {
+    const clients = new Map();
+    let deductions = 0;
+    function add(name, amount) {
+      if (amount < 0) deductions += amount;
+      if (amount > 0) clients.set(name, (clients.get(name) || 0) + amount);
+    }
+    D.orders.forEach(o => o.works.forEach(w => {
+      if (w.kind && w.done && w.done.slice(0, 7) === month) add(orderWho(o) || 'Без имени', w.sum);
+    }));
+    D.parts.forEach(p => {
+      if (!p.kind || p.no || p.ret || S.partPeriod(p, X) !== month) return;
+      const order = p.order != null && X.ordersByNum[p.order];
+      const person = p.cid && X.clientById[p.cid];
+      add((order ? orderWho(order) : person ? label(person) : [p.client, p.note].filter(Boolean).join(' ')) || 'Без имени', p.sum);
+    });
+    const rows = [...clients].sort((a,b) => b[1] - a[1]).map(([name, amount]) =>
+      `<div class="rl"><span>${esc(name)}</span><b>${rub(amount)}</b></div>`).join('');
+    const sum = [...clients.values()].reduce((a,b) => a+b, deductions);
+    return `<div class="rl round-detail${report.rnd ? '' : ' rl-z'}" tabindex="0" aria-describedby="round-list"><span>Округления и без сдачи</span><b>${rub(report.rnd || 0)}</b>
+      <div class="round-list" id="round-list" role="tooltip"><strong>Клиенты, оставившие переплату</strong>
+      ${rows || '<p class="muted small">За этот месяц переплат нет.</p>'}
+      ${deductions ? `<div class="rl"><span>Округления в минус</span><b>${rub(deductions)}</b></div>` : ''}
+      ${report.closed && Math.abs(sum - report.rnd) >= 0.005 ? '<p class="muted small">Список по текущим записям. Итог строки сохранён при закрытии месяца.</p>' : ''}</div></div>`;
+  }
   function viewReport() {
     const m = ui.month, isNow = m === NOW_M();
     const r = S.monthReport(D, X, m);
@@ -6093,7 +6121,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (r.closed) h += `<p class="muted small">Месяц закрыт ${dshort(r.closed.date)}. Прибыль с запчастей и расходы СТО показаны как на момент закрытия.${r.diff ? ` Сейчас «Итого» было бы ${rub(r.liveItogo)} (разница ${rub(r.diff)}).` : ''}</p>`;
     blk('rev', 'Выручка и прибыль', 'итого ' + rub(r.itogo), `
       ${line('Работы', r.works)}${line('Подрядчик', -r.sub, 'minus')}${line('Никита', -r.nik, 'minus')}${line('Прибыль СТО', r.stoProfit, 'sub')}
-      ${line('Прибыль с продаж запчастей', r.partsProfit)}${line('Округления и без сдачи', r.rnd || 0, '', 1)}${line('Расходы СТО', -r.stoExp, 'minus')}${line('Итого', r.itogo, 'total')}
+      ${line('Прибыль с продаж запчастей', r.partsProfit)}${roundingRow(m, r)}${line('Расходы СТО', -r.stoExp, 'minus')}${line('Итого', r.itogo, 'total')}
       ${line(r.taxMode ? 'Общая выручка (все оплаты клиентов)' : 'Выручка (работы + запчасти)', r.revenue)}
       ${r.taxMode ? line('Оплаты без чека', r.withoutReceipt) + (r.refunds ? line('Возвраты клиентам по чеку', -r.refunds, 'minus') : '') + line('Выручка с чеком', r.withReceipt, 'sub') : ''}
       ${r.noMark ? `<p class="note bad small">${r.noMark} оплат по нарядам без отметки чека — они не попали в выручку.</p>` : ''}`);
