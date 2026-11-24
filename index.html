@@ -2082,7 +2082,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
   const idb = (() => {
     let dbp = null;
     const open = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('sto-uchet', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
-    const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('kv', mode); const st = t.objectStore('kv'); const q = fn(st); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }); };
+    const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('kv', mode); const st = t.objectStore('kv'); const q = fn(st); t.oncomplete = () => res(q && q.result); t.onerror = t.onabort = () => rej(t.error); }); };
     return { get: k => tx('readonly', s => s.get(k)).catch(() => null), set: (k, v) => tx('readwrite', s => s.put(v, k)).catch(() => null) };
   })();
 
@@ -2889,7 +2889,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     if (!D) { t = 'База не открыта'; c = 'wait'; }
     else if (cloud) {
       if (cl.needLogin) { t = 'Войди в Яндекс'; c = 'bad'; }
-      else if (cl.busy) { t = 'Отправляю на Диск…'; c = 'wait'; }
+      else if (cl.busy) { t = cl.busy; c = 'wait'; }
       else if (cl.offline) { t = cl.pending ? 'Нет связи — ждёт отправки' : 'Нет связи с Диском'; c = 'wait'; }
       else if (cl.err) { t = 'Ошибка Диска'; c = 'bad'; }
       else if (cl.pending) { t = 'Ждёт отправки'; c = 'wait'; }
@@ -7537,11 +7537,20 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   function yaLogout() { lsSet('ag.token', null); lsSet('ag.tokenExp', null); cl.needLogin = true; paintStatus(); render(); }
   /* запрос с ограничением по времени: при «полуживом» интернете не висим бесконечно */
   async function fetchT(url, opt, ms, read) {
-    const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
-    try {
-      const r = await fetch(url, Object.assign({}, opt, { signal: ac.signal }));
+    const ac = new AbortController();
+    let timer;
+    const timeout = new Promise((resolve, reject) => {
+      timer = setTimeout(() => { ac.abort(); reject(ac.signal.reason); }, ms);
+    });
+    const request = async () => {
+      const options = typeof opt === 'function' ? await opt() : opt;
+      if (ac.signal.aborted) throw ac.signal.reason;
+      const r = await fetch(url, Object.assign({}, options, { signal: ac.signal }));
       return { r, body: read && await read(r) };
-    } finally { clearTimeout(t); }
+    };
+    try {
+      return await Promise.race([request(), timeout]);
+    } finally { clearTimeout(timer); }
   }
   async function yaApi(path, opt) {
     let r, body;
@@ -7573,7 +7582,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   async function yaPut(path, text) {
     const up = await yaApi('/resources/upload?path=' + encodeURIComponent(path) + '&overwrite=true');
     let r;
-    try { ({ r } = await fetchT(up.href, { method: 'PUT', body: await gzipBlob(text) }, 120000)); }
+    try { ({ r } = await fetchT(up.href, async () => ({ method: 'PUT', body: await gzipBlob(text) }), 120000)); }
     catch (e) { const er = new Error('нет связи с Яндексом'); er.offline = true; throw er; }
     if (!r.ok && r.status !== 201 && r.status !== 202) throw new Error('Яндекс не принял файл: HTTP ' + r.status);
   }
@@ -7692,8 +7701,8 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (!cloud) return;
     if (cl.busy) { cl.again = true; return; }
     if (!yaToken()) { cl.needLogin = true; paintStatus(); render(); return; }
-    cl.busy = true; cl.err = ''; paintStatus();
     try {
+      cl.busy = 'Проверяю базу на Диске…'; cl.err = ''; paintStatus();
       const meta = await yaMeta(CLOUD_FILE);
       cl.offline = false; cl.needLogin = false;
       if (!meta) {
@@ -7705,6 +7714,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         /* на Диске другая версия: её сохранили с другого устройства */
         if (cl.pending && D && (ui.editor || ui.sale)) { cl.deferred = true; }
         else {
+          cl.busy = 'Скачиваю базу с Диска…'; paintStatus();
           const theirsJson = await yaGet(CLOUD_FILE), theirs = JSON.parse(theirsJson);
           if (cl.pending && D) {
             const baseObj = cl.baseJson ? JSON.parse(cl.baseJson) : {}, mineObj = JSON.parse(JSON.stringify(D));
@@ -7721,6 +7731,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
             const first = !D;
             D = normalize(theirs); reindex(); histReset();
             cl.baseMd5 = meta.md5; cl.baseJson = theirsJson; cl.pending = false; cl.last = new Date(); dirty = false;
+            cl.busy = 'Сохраняю копию на устройстве…'; paintStatus();
             await idb.set('cl.base', theirsJson); await cloudStateSave();
             if (ui.cdraft) { const c = ui.cdraft.id && D.clients.find(x => x.id === ui.cdraft.id); ui.cdraft = c ? clone(c) : null; }
             render(); mirrorQueue();
@@ -7732,16 +7743,21 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     } catch (e) {
       if (e.offline) cl.offline = true; else cl.err = e.message || String(e);
       clearTimeout(cl.timer); cl.timer = setTimeout(cloudSync, 30000);
+    } finally {
+      cl.busy = false;
     }
-    cl.busy = false; paintStatus();
+    paintStatus();
     if (cl.needLogin) render();
     if (cl.again) { cl.again = false; setTimeout(cloudSync, 300); }
   }
   async function cloudUpload() {
     const json = JSON.stringify(D);
+    if (cl.busy) { cl.busy = 'Отправляю на Диск…'; paintStatus(); }
     await yaPut(CLOUD_FILE, json);
+    if (cl.busy) { cl.busy = 'Проверяю отправку на Диск…'; paintStatus(); }
     const m = await yaMeta(CLOUD_FILE);
     cl.baseMd5 = m && m.md5; cl.baseJson = json; cl.pending = false; cl.last = new Date(); dirty = false; ui.savedAt = cl.last;
+    if (cl.busy) { cl.busy = 'Сохраняю копию на устройстве…'; paintStatus(); }
     await idb.set('cl.base', json); await cloudStateSave();
   }
   async function cloudDailyCopy(force) {
