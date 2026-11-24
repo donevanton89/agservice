@@ -3562,6 +3562,43 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (!f) { f = document.createElement('iframe'); f.id = 'rk-launch'; f.style.display = 'none'; document.body.appendChild(f); }
     f.src = 'rossko://update?t=' + Date.now();
   }
+  async function rkRefreshWait() {
+    const started = Date.now();
+    ui.rkFail = false;
+    ui.rkBusy = true;
+    try {
+      rkLaunch();
+      render();
+      const handle = hasFS && await idb.get('rosskoFile');
+      if (!handle || await handle.queryPermission({mode: 'read'}) !== 'granted') {
+        ui.rkFail = true;
+        return;
+      }
+      const first = await handle.getFile();
+      const before = rkParse(await first.text()).updated;
+      let file = first;
+      while (true) {
+        const text = await file.text();
+        const data = rkParse(text);
+        if (file.lastModified >= started || file.lastModified !== first.lastModified || data.updated !== before) {
+          ui.rk = {data, name: file.name};
+          ui.rkCheck = true;
+          rkPushCloud(data, text);
+          toast('Заказы Rossko загружены');
+          return;
+        }
+        if (Date.now() - started >= 90000) break;
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        file = await handle.getFile();
+      }
+      ui.rkFail = true;
+    } catch (e) {
+      ui.rkFail = true;
+    } finally {
+      ui.rkBusy = false;
+      render();
+    }
+  }
   async function rkRefresh(kind) {
     if (ui.rkBusy) return;
     if (cloud && !hasFS) {
@@ -3569,6 +3606,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       if (d) { if (kind === 'wait') ui.rkCheck = true; toast('Заказы Rossko с Диска, данные от ' + rkUpdated(d) + '. Свежее — после обновления на компьютере с помощником.', 7000); render(); if (ui.editor) paintEditor(); if (ui.sale) paintSale(); }
       return;
     }
+    if (kind === 'wait') return rkRefreshWait();
     rkLaunch();
     if (!hasFS) { toast('Запускаю помощника Rossko… Когда его окно закроется, выбери файл rossko-заказы.json.', 8000); const d = await rkRead(false); if (d) { if (kind === 'wait') ui.rkCheck = true; render(); } return; }
     const cur = await rkRead(false, true); if (!cur) return;
@@ -5436,7 +5474,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     let h = `<div class="toolbar"><input id="wq" class="search" type="search" placeholder="Поиск по артикулу, названию, клиенту" value="${esc(ui.waitQ || '')}" data-act="wait-search" autocomplete="off">
       <button class="btn" data-act="rk-refresh" data-k="wait" ${ui.rkBusy ? 'disabled' : ''}>${ui.rkBusy ? 'Обновляю…' : 'Обновить из Rossko'}</button>
       <span class="muted small cst-wrap">Ждём ${all.length} ${plural(all.length, 'запчасть', 'запчасти', 'запчастей')} на ${rub(all.reduce((a, p) => a + (p.cost || 0) * (p.qty || 0), 0))} по закупке</span></div>`;
-    if (ui.rkFail) h += `<div class="note"><span><b>Помощник Rossko не ответил.</b> Если кнопка «Обновить из Rossko» ещё не подключена — один раз запусти файл «Rossko — подключить кнопку.bat» в папке с помощником. Если подключена — проверь, что браузер не заблокировал запуск (значок в адресной строке), и запусти Rossko.bat вручную.</span><div class="actions"><button class="btn small ghost" data-act="rk-fail-close">Скрыть</button></div></div>`;
+    if (ui.rkFail) h += `<div class="note"><span><b>Нужен файл заказов Rossko.</b> Когда помощник напишет «Готово», выбери обновлённый rossko-заказы.json из его папки.</span><div class="actions"><button class="btn small" data-act="rk-check-pick">Выбрать файл заказов</button><button class="btn small ghost" data-act="rk-fail-close">Скрыть</button></div></div>`;
     const rkOn = ui.rkCheck && ui.rk;
     const rn = rkOn ? rkNew() : [];
     const allIds = new Set(all.map(p => String(p.id)));
@@ -6702,7 +6740,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'rk-refresh': rkRefresh(b.dataset.k); break;
       case 'rk-fail-close': ui.rkFail = false; render(); break;
       case 'rk-check': rkRead(false).then(d => { if (d) { ui.rkCheck = true; render(); } }); break;
-      case 'rk-check-pick': rkRead(true).then(d => { if (d) { ui.rkCheck = true; render(); } }); break;
+      case 'rk-check-pick': rkRead(true).then(d => { if (d) { ui.rkFail = false; ui.rkCheck = true; render(); } }); break;
       case 'wait-ok': { const ids = b.dataset.ids.split(','); if (ui.waitSel) ids.forEach(id => ui.waitSel.delete(id)); markArrived(ids); break; }
       case 'rep-fold': { if (repDragged) { repDragged = false; break; } ui.repFold = ui.repFold || {}; const k = b.dataset.k, f = ui.repFold; f[k] = !(k in f ? f[k] : b.dataset.def !== '1'); repSave(); render(); break; }
       case 'rep-reset': ui.repLayout = null; ui.repFold = {}; ui.repZ = {}; repSave(); render(); break;
