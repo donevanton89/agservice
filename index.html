@@ -7536,16 +7536,19 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   }
   function yaLogout() { lsSet('ag.token', null); lsSet('ag.tokenExp', null); cl.needLogin = true; paintStatus(); render(); }
   /* запрос с ограничением по времени: при «полуживом» интернете не висим бесконечно */
-  function fetchT(url, opt, ms) {
+  async function fetchT(url, opt, ms, read) {
     const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms);
-    return fetch(url, Object.assign({}, opt, { signal: ac.signal })).finally(() => clearTimeout(t));
+    try {
+      const r = await fetch(url, Object.assign({}, opt, { signal: ac.signal }));
+      return { r, body: read && await read(r) };
+    } finally { clearTimeout(t); }
   }
   async function yaApi(path, opt) {
-    let r;
-    try { r = await fetchT(YA_API + path, Object.assign({ headers: { Authorization: 'OAuth ' + yaToken(), Accept: 'application/json' }, cache: 'no-store' }, opt || {}), 20000); }
+    let r, body;
+    try { ({ r, body } = await fetchT(YA_API + path, Object.assign({ headers: { Authorization: 'OAuth ' + yaToken(), Accept: 'application/json' }, cache: 'no-store' }, opt || {}), 20000, res => res.status === 401 ? null : res.text())); }
     catch (e) { const er = new Error('нет связи с Яндексом'); er.offline = true; throw er; }
     if (r.status === 401) { cl.needLogin = true; const er = new Error('Яндекс просит войти заново'); er.status = 401; throw er; }
-    const t = await r.text(); let j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
+    let j = null; try { j = body ? JSON.parse(body) : null; } catch (e) {}
     if (!r.ok) { const er = new Error((j && (j.message || j.description)) || 'HTTP ' + r.status); er.status = r.status; throw er; }
     return j;
   }
@@ -7561,16 +7564,16 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   }
   async function yaGet(path) {
     const dl = await yaApi('/resources/download?path=' + encodeURIComponent(path));
-    let r;
-    try { r = await fetchT(dl.href, { referrerPolicy: 'no-referrer', credentials: 'omit', cache: 'no-store' }, 90000); }
+    let r, body;
+    try { ({ r, body } = await fetchT(dl.href, { referrerPolicy: 'no-referrer', credentials: 'omit', cache: 'no-store' }, 90000, res => res.ok ? res.blob() : null)); }
     catch (e) { const er = new Error('нет связи с Яндексом'); er.offline = true; throw er; }
     if (!r.ok) throw new Error('Яндекс не отдал файл: HTTP ' + r.status);
-    return await gunzipText(await r.blob());
+    return await gunzipText(body);
   }
   async function yaPut(path, text) {
     const up = await yaApi('/resources/upload?path=' + encodeURIComponent(path) + '&overwrite=true');
     let r;
-    try { r = await fetchT(up.href, { method: 'PUT', body: await gzipBlob(text) }, 120000); }
+    try { ({ r } = await fetchT(up.href, { method: 'PUT', body: await gzipBlob(text) }, 120000)); }
     catch (e) { const er = new Error('нет связи с Яндексом'); er.offline = true; throw er; }
     if (!r.ok && r.status !== 201 && r.status !== 202) throw new Error('Яндекс не принял файл: HTTP ' + r.status);
   }
