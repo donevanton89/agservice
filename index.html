@@ -903,6 +903,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
 .round-detail { position:relative; cursor:help; }
 .round-list { display:none; position:absolute; z-index:20; top:100%; left:0; right:0; max-height: min(16rem, 40vh); overflow:auto; padding:12px; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 6px 18px #0002; }
 .round-detail:hover .round-list, .round-detail:focus-within .round-list { display:block; }
+#saleEd .cr-p.editing > span > :is(input,select) { width:100%; min-width:0; }
 </style>
 
 <header class="top">
@@ -3267,7 +3268,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
               <label class="f grow">Название<input id="p-name-${i}" value="${esc(p.name)}" data-p="${i}" data-k="name"></label>
               <label class="f">Бренд<input id="p-br-${i}" value="${esc(p.brand)}" data-p="${i}" data-k="brand"></label>
               ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="p-cost-${i}" value="${esc(nv(p.cost))}" data-p="${i}" data-k="cost" inputmode="decimal" placeholder="${p.sup === 'Склад' ? 'со склада' : ''}" title="${esc(stockCostTip(p))}"></label>`}
-${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stockByArt[p.art]?.fundRate != null && !X.stockByArt[p.art]?.preFundRows?.[p.id]) ? `<label class="f num ro">В кассу с единицы<b>${rub(p.fundArt === p.art && p.fundUnit != null ? p.fundUnit : X.stockByArt[p.art].fundRate)}</b></label>` : oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="p-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-p="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
+${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stockByArt[p.art]?.fundRate != null && !X.stockByArt[p.art]?.preFundRows?.[p.id]) ? `<label class="f num ro" title="${esc(stockCostTip(p))}">В кассу с единицы<b>${rub(p.fundArt === p.art && p.fundUnit != null ? p.fundUnit : X.stockByArt[p.art].fundRate)}</b></label>` : oilSt(p) ? `<label class="f num" title="${esc(stockCostTip(p))}">Закупка, ₽/л<input id="p-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-p="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
               <label class="f num">Кол-во<input id="p-qty-${i}" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-p="${i}" data-k="qty" inputmode="decimal" placeholder="1"></label>
               <label class="f num">Цена<input id="p-pr-${i}" value="${esc(nv(p.price))}" data-p="${i}" data-k="price" inputmode="decimal"></label>
               <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
@@ -3480,16 +3481,18 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
   }
 
   function stockCostTip(p) {
-    if (p.sup !== 'Склад') return 'Закупка';
-    const k = String(p.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase();
-    const st = X.stockByArt[p.art] || D.stock.find(x => String(x.art || '').replace(/[^0-9A-Za-zА-Яа-яЁё]/g, '').toUpperCase() === k && k);
-    if (p.fundArt === p.art && p.fundUnit != null) return 'В кассу «Масло/антифриз» с единицы: ' + rub(p.fundUnit);
-    if (!st) return 'Со склада — такой позиции на складе не нашёл';
-    if (st.oil && p.oilCost != null && p.oilArt === p.art) return `Закупка в этой продаже: ${rub(p.oilCost)} за л` + (p.oilBase != null ? ` = бочка ${rub(p.oilBase)} + ${p.oilAdd != null ? 'надбавка ' + rub(p.oilAdd) : p.oilPct + '% запас'}${p.oilFrom ? ' (бочка от ' + p.oilFrom.split(',').map(dshort).join(' и ') + ')' : ''}` : ' (по карточке склада на момент продажи)') + `${p.qty ? ` · на ${fmt(p.qty, p.qty % 1 ? 2 : 0)} л: ${rub(p.oilCost * p.qty)}` : ''}. Можно поправить руками.`;
-    if (st.oil && !(p.oilCost != null && p.oilArt === p.art)) { const r = barrelAvg(oilBuys(st), Math.max(0, S.stockQty(st, D)), +p.qty || 1, st.cost); return `При сохранении закупка возьмётся из бочки: ${rub(r.avg)} + надбавка ${rub(oilAddOf(st))} = ${rub(r.avg + oilAddOf(st))} за л`; }
-    const sc = stockUnitCost(st);
-    if (sc == null || sc === '') return 'Со склада — у позиции не указана закупка';
-    return `Закупка на складе: ${rub(sc)} за ${st.oil ? 'л' : 'шт.'}${p.qty ? ` · на ${fmt(p.qty, p.qty % 1 ? 2 : 0)} ${st.oil ? 'л' : 'шт.'}: ${rub(sc * p.qty)}` : ''}`;
+    const unitPrice = (cost, unit) => cost == null || cost === '' ? '' : rub(cost) + '/' + unit;
+    if (p.sup !== 'Склад') return unitPrice(p.cost, 'шт');
+    const st = X.stockByArt[p.art] || D.stock.find(x => p.art && artN(x.art) === artN(p.art));
+    if (p.oilArt === p.art && p.oilBase != null) return unitPrice(p.oilBase, 'л');
+    if (!st) return unitPrice(p.cost, 'шт');
+    if (st.oil) {
+      const buys = oilBuys(st);
+      if (!buys.length && st.cost == null) return '';
+      const base = barrelAvg(buys, Math.max(0, S.stockQty(st, D)), +p.qty || 1, st.cost).avg;
+      return unitPrice(base, 'л');
+    }
+    return unitPrice(p.cost ?? stockUnitCost(st) ?? st.cost, st.pourByLitre ? 'л' : 'шт');
   }
   const oilSt = p => { if (low(p.sup) !== 'склад') return null; const st = X.stockByArt[p.art]; return st && st.oil ? st : null; };
   function isFromSale(p) { return !!(p.fromSale || p.link || p.saleWas); }
@@ -4754,21 +4757,21 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
         </div><div id="sale-client-link">${clientLink(X.clientById[Sx.cid] || personOf(Sx.client,Sx.note), 'Открыть карточку клиента')}</div>${own ? `<p class="small">Покупка для себя: цена = закупка, без наценки.</p>` : ''}</section>
         <section class="block"><div class="block-head"><h3>${fromStock ? 'Со склада' : 'Запчасти'}</h3><span class="muted">${rub(t.sum)}</span></div>
           <div class="lines">${Sx.rows.map((p, i) => p.kind ? '' : `
-            <div class="line part${p.no ? ' is-no' : ''}${p.ret ? ' is-ret' : ''}">
-              <label class="f">Откуда<select id="sp-sup-${i}" data-sp="${i}" data-k="sup">${opt(sups.includes(p.sup) ? sups : [...sups, p.sup], p.sup)}</select></label>
-              <label class="f">Артикул<input id="sp-art-${i}" class="mono" value="${esc(p.art)}" data-sp="${i}" data-k="art" ${p.sup === 'Склад' ? 'list="dl-stock"' : ''} autocomplete="off"></label>
-              <label class="f grow">Название<input id="sp-name-${i}" value="${esc(p.name)}" data-sp="${i}" data-k="name"></label>
-              <label class="f">Бренд<input id="sp-br-${i}" value="${esc(p.brand)}" data-sp="${i}" data-k="brand"></label>
-              ${oilSt(p) && p.cost == null ? '' : `<label class="f num cst" title="${esc(stockCostTip(p))}">Закупка<input id="sp-cost-${i}" value="${esc(nv(p.cost))}" data-sp="${i}" data-k="cost" inputmode="decimal" title="${esc(stockCostTip(p))}"></label>`}${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stockByArt[p.art]?.fundRate != null && !X.stockByArt[p.art]?.preFundRows?.[p.id]) ? `<label class="f num">В кассу с единицы<input readonly value="${rub(p.fundArt === p.art && p.fundUnit != null ? p.fundUnit : X.stockByArt[p.art].fundRate)}"></label>` : oilSt(p) ? `<label class="f num" title="Закупка масла, которая считается в прибыли для этой продажи. Запоминается при продаже; смена цены в карточке склада её не меняет.">Закупка, ₽/л<input id="sp-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-sp="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></label>` : ''}
-              <label class="f num">Кол-во<input id="sp-qty-${i}" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-sp="${i}" data-k="qty" inputmode="decimal" placeholder="1"></label>
-              <label class="f num">Цена<input id="sp-pr-${i}" value="${esc(nv(p.price))}" data-sp="${i}" data-k="price" inputmode="decimal"></label>
-              <div class="f num ro">Сумма<b>${rub(p.sum)}</b></div>
-              <div class="toggles">
+            <div class="cr cr-p editing${p.no ? ' is-no' : ''}${p.ret ? ' is-ret' : ''}">
+              <span><select aria-label="Откуда" title="Откуда" id="sp-sup-${i}" data-sp="${i}" data-k="sup">${opt(sups.includes(p.sup) ? sups : [...sups, p.sup], p.sup)}</select></span>
+              <span><input aria-label="Артикул" title="Артикул" placeholder="Артикул" id="sp-art-${i}" class="mono" value="${esc(p.art)}" data-sp="${i}" data-k="art" ${p.sup === 'Склад' ? 'list="dl-stock"' : ''} autocomplete="off"></span>
+              <span><input aria-label="Название" title="Название" placeholder="Название" id="sp-name-${i}" value="${esc(p.name)}" data-sp="${i}" data-k="name"></span>
+              <span><input aria-label="Бренд" title="Бренд" placeholder="Бренд" id="sp-br-${i}" value="${esc(p.brand)}" data-sp="${i}" data-k="brand"></span>
+              ${oilSt(p) && p.cost == null ? '' : `<span class="cst"><input aria-label="Закупка" placeholder="Закупка" id="sp-cost-${i}" value="${esc(nv(p.cost))}" data-sp="${i}" data-k="cost" inputmode="decimal" title="${esc(stockCostTip(p))}"></span>`}${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stockByArt[p.art]?.fundRate != null && !X.stockByArt[p.art]?.preFundRows?.[p.id]) ? `<span><input aria-label="В кассу с единицы" title="${esc(stockCostTip(p))}" placeholder="склад" readonly value=""></span>` : oilSt(p) ? `<span><input aria-label="Закупка, ₽/л" title="${esc(stockCostTip(p))}" id="sp-oc-${i}" value="${esc(nv(p.oilArt === p.art ? p.oilCost : null))}" data-sp="${i}" data-k="oilCost" inputmode="decimal" placeholder="${esc(nv(r2(barrelAvg(oilBuys(oilSt(p)), Math.max(0, S.stockQty(oilSt(p), D)), +p.qty || 1, oilSt(p).cost).avg + oilAddOf(oilSt(p)))))}"></span>` : ''}
+              <span><input aria-label="Кол-во" title="Кол-во" id="sp-qty-${i}" value="${p.qtyNew ? '' : esc(nv(p.qty))}" data-sp="${i}" data-k="qty" inputmode="decimal" placeholder="1"></span>
+              <span><input aria-label="Цена" title="Цена" placeholder="Цена" id="sp-pr-${i}" value="${esc(nv(p.price))}" data-sp="${i}" data-k="price" inputmode="decimal"></span>
+              <div class="cr-sum"><b>${rub(p.sum)}</b></div>
+              <div class="cr-tg">
                 <button class="tg${p.no ? ' on warn' : ''}" data-act="sp-no" data-i="${i}" aria-pressed="${p.no}">${p.no ? 'НЕТ' : 'Есть'}</button>
-                <button class="tg${p.ret ? ' on' : ''}" data-act="sp-ret" data-i="${i}" aria-pressed="${p.ret}">Возврат</button>
+                <button class="tg${p.ret ? ' on' : ''}" data-act="sp-ret" data-i="${i}" aria-pressed="${p.ret}" title="Возврат" aria-label="Возврат">↩</button>
                 ${p.ret ? `<button class="tg${p.retDone ? ' on' : ''}" data-act="sp-retdone" data-i="${i}">${p.retDone ? 'Деньги вернули' : 'Ждём деньги'}</button>` : ''}
-                <button class="x" data-act="sp-del" data-i="${i}" aria-label="Удалить запчасть">×</button>
-              </div></div>`).join('')}</div>
+              </div><button class="x sm" data-act="sp-del" data-i="${i}" aria-label="Удалить запчасть">×</button>
+              </div>`).join('')}</div>
           ${Sx.paste ? salePastePanel() : ''}
           <div class="actions"><button class="btn small" data-act="sp-add">+ Запчасть</button><button class="btn small primary-t" data-act="sp-paste">Загрузить запчасти</button></div>
           ${!Sx.id && Sx.rows.some(p => (p.name || '').trim() || p.art) ? `<div class="stk-bar flat"><span>Это для машины? Перенеси в наряд:</span><span class="rk-to"><select id="sa-ord" aria-label="Наряд"><option value="">наряд…</option>${D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num).map(o => `<option value="${o.num}">№ ${o.num} · ${esc(orderWho(o))}</option>`).join('')}</select><button class="btn small" data-act="sale-to-order">В наряд</button><button class="btn small" data-act="sale-to-new">+ Новый наряд</button></span></div>` : ''}
