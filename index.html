@@ -3167,6 +3167,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     ui.editor.origPays = clone(ui.editor.pays);
     if (isNew) addWork();
     paintEditor(true);
+    if (!isNew) ui.editor.openedState = editorState(ui.editor);
     if (ui.editor.picking) setTimeout(() => { const f = $('#e-pick'); if (f) f.focus(); }, 30);
   }
   function addWork() { ui.editor.order.works.push({ id: uid('w'), name: '', sum: null, base: null, pct: wPctCfg(), sub: 0, nik: 0, done: null }); }
@@ -4069,7 +4070,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (X0.rc == null && !kk.sup) { toast('Вписано «Клиент дал» — отметь: чек пробит или нет'); return false; }
     calcCommit(where, 'all'); return true;
   }
-  function saveOrder() {
+  function saveOrder(clientToOpen) {
     if (ui.editor && !calcAutoCommit('ed')) return;
     if (ui.editor) ui.editor.parts.forEach(p => { delete p.qtyNew; });
     ui.stash = { editor: ui.editor };
@@ -4149,6 +4150,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     toast('Наряд ' + (o.num != null ? '№ ' + o.num + ' ' : '') + 'сохранён');
     /* после «Сохранить» остаёмся в наряде — выйти можно кнопкой «Закрыть» */
     if (changed() !== false && D.orders.some(x => x.id === o.id)) {
+      if (clientToOpen) { goClient(clientToOpen); return; }
       openOrder(o.id);
       const b = $('#editor .sheet-body'); if (b) b.scrollTop = scr;
     }
@@ -4943,7 +4945,11 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       return `<li><div class="cl-notes-h">${plain ? `<b class="small">${o.num != null ? '№ ' + o.num : 'б/н'}</b>` : `<button class="link small" data-act="open-order" data-id="${esc(o.id)}">${o.num != null ? '№ ' + o.num : 'б/н'}</button>`} <span class="muted small">${dshort(o.start || o.doneDate)} · ${esc((car && car.car) || o.car || '')}</span></div>
         ${(o.advice || '').trim() ? `<div><span class="muted small">Рекомендации:</span> ${esc(o.advice)}</div>` : ''}${(o.memo || '').trim() ? `<div><span class="muted small">Примечание:</span> ${esc(o.memo)}</div>` : ''}</li>`; }).join('')}</ul>`;
   }
+  function editorState(E) {
+    return JSON.stringify([E.order, E.parts, E.pays, E.rc], (k, v) => k === 'fromSale' ? undefined : v);
+  }
   function editorDirty(E) {
+    if (E.openedState != null) return editorState(E) !== E.openedState;
     const strip = a => JSON.stringify(a, (k, v) => (k === 'fromSale' ? undefined : v));
     return strip(E.order) !== strip(E.orig) || strip(E.parts) !== strip(E.origParts) || strip(E.pays) !== strip(E.origPays);
   }
@@ -6978,7 +6984,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'go-client': { const E = ui.editor; if (!E) break; if (editorDirty(E)) { E.goClient = b.dataset.id; paintEditor(); break; } goClient(b.dataset.id); break; }
       case 'go-client-cancel': if (ui.editor) { ui.editor.goClient = null; paintEditor(); } break;
       case 'go-client-nosave': { const id = ui.editor && ui.editor.goClient; if (id) goClient(id); break; }
-      case 'go-client-save': { const id = ui.editor && ui.editor.goClient; if (!id) break; ui.editor.goClient = null; saveOrder(); if (!ui.editor) goClient(id); break; }
+      case 'go-client-save': { const id = ui.editor && ui.editor.goClient; if (!id) break; ui.editor.goClient = null; saveOrder(id); break; }
       case 'save-order': saveOrder(); break;
       case 'rnd-disc': roundApply('disc', b.dataset.w); break;
       case 'rnd-tip': roundApply('tip', b.dataset.w); break;
