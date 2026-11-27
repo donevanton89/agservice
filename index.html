@@ -486,9 +486,6 @@ html, body { margin: 0; }
 .cr-w.editing { grid-template-columns: minmax(0, 1fr) minmax(100px, auto) 100px 100px 28px; }
 .wsum { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .wsum input { width: 100px !important; flex: none; }
-.wpct { border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
-.wpct.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
-.line.work > .wpct { align-self: flex-end; margin-bottom: 6px; }
 .cr-p { grid-template-columns: 18px minmax(0, 1fr) 110px 100px auto 28px; }
 .cr-p.editing { grid-template-columns: 92px 118px minmax(120px, 1fr) 96px 78px 52px 86px 96px auto 28px; }
 .cr.editing { border-color: var(--accent); background: var(--surface) !important; }
@@ -876,7 +873,6 @@ tr[data-stock-editable]:focus-visible {outline:2px solid var(--accent);outline-o
 .chk-tot{display:flex;gap:12px;align-items:baseline;justify-content:flex-end;border-top:2px solid var(--line);padding-top:8px;margin-top:2px}
 select.wp-node{font-size:12px;padding:3px 6px;max-width:260px}select.wp-node.auto{color:var(--muted)}
 @media (max-width:600px){.chk-w>div{grid-template-columns:1fr auto}.chk-w select{grid-column:1/-1}}
-.wpct-row{display:flex;gap:16px;align-items:end;flex-wrap:wrap;max-width:520px}.wpct-row .chk{display:flex;gap:8px;align-items:center;padding-bottom:10px;cursor:pointer;white-space:nowrap}.wpct-row .f{flex:1;min-width:140px}
 #wp-nf{min-width:0;max-width:100%;flex:1 1 160px;text-overflow:ellipsis;padding:10px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font-size:15px}
 .nodes-list{display:grid;gap:6px;max-width:620px}.nd-row{display:grid;grid-template-columns:62px 1fr 32px;gap:8px;align-items:center}.nd-row input{min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--ink);font-size:15px}
 #login{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}#login[hidden]{display:none}
@@ -887,7 +883,6 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
 .chk-line{display:flex;gap:8px;align-items:center;margin:4px 0 10px;cursor:pointer}
 .d-actions{flex-wrap:wrap}.d-actions .merge{display:flex;flex-wrap:nowrap;gap:8px;flex:1 1 260px;min-width:0;max-width:100%}.d-actions .merge select{min-width:0;flex:1 1 auto;max-width:100%}
 .crl{display:block;min-width:0}.crl>span,.crl-t{display:none}
-.wpct{flex:none;white-space:nowrap}
 @media (max-width: 600px) {
   .cr-w.editing { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 28px; grid-template-areas: "n n n" "s s x" "o p ."; row-gap: 8px; padding: 8px; }
   .cr-w.editing > .wsug-host { grid-area: n; }
@@ -904,6 +899,9 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
 .round-list { display:none; position:absolute; z-index:20; top:100%; left:0; right:0; max-height: min(16rem, 40vh); overflow:auto; padding:12px; background:var(--surface); color:var(--ink); border:1px solid var(--line); border-radius:10px; box-shadow:0 6px 18px #0002; }
 .round-detail:hover .round-list, .round-detail:focus-within .round-list { display:block; }
 #saleEd .cr-p.editing > span > :is(input,select) { width:100%; min-width:0; }
+.close-draft { max-width: calc(100% - 24px); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); padding: 18px; }
+.close-draft h3 { margin: 0 0 14px; }
+.close-draft::backdrop { background: #0006; }
 </style>
 
 <header class="top">
@@ -1249,7 +1247,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
         const d = dt(IR[91][col]);
         const m = monthFromText(IR[4][col]);
         if (!d || !m) return;
-        D.cfg.closed[m] = { date: d, works: num(IR[92]?.[col]) || 0, stoProfit: num(IR[93]?.[col]) || 0, partsProfit: num(IR[94]?.[col]) || 0, stoExp: num(IR[95]?.[col]) || 0, itogo: num(IR[96]?.[col]) || 0 };
+        D.cfg.closed[m] = { piggyRate: S.piggyRate(D.cfg, m), date: d, works: num(IR[92]?.[col]) || 0, stoProfit: num(IR[93]?.[col]) || 0, partsProfit: num(IR[94]?.[col]) || 0, stoExp: num(IR[95]?.[col]) || 0, itogo: num(IR[96]?.[col]) || 0 };
       });
     }
     D.cfg.importedAt = new Date().toISOString();
@@ -1800,6 +1798,17 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
   STO.workers = workers;
 
   /* «На сегодня»: поставщики, возвраты, запчасти в машинах, «Наше», сверка (строки 48–49, 58–88) */
+  function piggyRates(cfg) {
+    return { '2026-12': 0, ...cfg.piggyRates };
+  }
+  function piggyRate(cfg, month) {
+    if (cfg.closed?.[month]) return cfg.closed[month].piggyRate ?? 10;
+    const rates = piggyRates(cfg);
+    const start = Object.keys(rates).sort().reverse().find(m => m <= month);
+    return start ? rates[start] : 10;
+  }
+  STO.piggyRate = piggyRate;
+  STO.piggyRates = piggyRates;
   function today(D, X, asOfDay) {
     const month = monthOf(asOfDay || todayISO());
     const rep = monthReport(D, X, month);
@@ -1833,7 +1842,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     D.parts.forEach(p => { if (!p.blk && !p.ret && p.order != null) debts += p.sum || 0; });
     D.orders.forEach(o => { debts += worksDebt(o, X); });
     const oilFund = D.pays.reduce((s, p) => (p.type === 'безнал' && low(p.name) === 'масло/антифриз' ? s + p.amount : s), 0) + rep.oilSoldCost;
-    const ten = 0.1 * Math.max(0, rep.rest ?? 0);
+    const ten = (piggyRate(D.cfg, month) / 100) * Math.max(0, rep.rest ?? 0);
     const paidOut = (who, zpOnly) => {
       const n = low(who);
       return D.pays.reduce((s, p) => {
@@ -1875,7 +1884,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     const mon = money(D, X, month);
     const own = D.pays.filter(p => p.close === month);
     const ownZp = who => own.reduce((s, p) => (low(p.name) === low(who) && low(p.note) === 'зп' && p.type === 'безнал' ? s + p.amount : s), 0);
-    const rest = r2(r.rest), kop = r2(0.1 * Math.max(0, rest)), pot = r2(rest - kop - mon.personal), half = r2(pot / 2), halfG = r2(pot - half);
+    const rest = r2(r.rest), kop = r2((piggyRate(D.cfg, month) / 100) * Math.max(0, rest)), pot = r2(rest - kop - mon.personal), half = r2(pot / 2), halfG = r2(pot - half);
     const takenA = r2(mon.zpAnton - ownZp('Антон')), takenG = r2(mon.zpGleb - ownZp('Глеб'));
     const last = month + '-' + String(new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate()).padStart(2, '0');
     const rows = [
@@ -2065,6 +2074,17 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     return d[a.length][b.length];
   }
   /* «Где искать ошибку»: подозрительные записи за прошлый и текущий месяц */
+  function duplicateKey(kind, row) {
+    const fields = kind === 'pays' ? ['date','type','name','amount','note','order','receipt','to']
+      : kind === 'parts' ? ['date','order','client','sup','art','name','qty','sum','cost','ret']
+      : ['start','client','car','plate','vin'];
+    return JSON.stringify(fields.map(k => typeof row[k] === 'string' ? low(row[k].trim()) : row[k] ?? null));
+  }
+  function duplicateLabel(kind, r) {
+    if (kind === 'orders') return 'Наряд № ' + r.num + ' · ' + [r.client,r.car].filter(Boolean).join(' ');
+    if (kind === 'parts') return [r.client,r.name,r.art,r.sup].filter(Boolean).join(' · ');
+    return ['Платёж',r.name,r.note,r.type].filter(Boolean).join(' · ');
+  }
   function findIssues() {
     const out = [];
     const from = S.addMonths(NOW_M(), -1) + '-01', today = S.todayISO(), tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.getFullYear() + '-' + S.pad(d.getMonth() + 1) + '-' + S.pad(d.getDate()); })();
@@ -2091,6 +2111,20 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
       if (d < from || p.ret) return;
       if (!sups.has(low(p.sup))) add('Неизвестный поставщик', d, '«' + p.sup + '» — ' + (p.name || p.art), p.sum, p.order != null ? 'go-order-num' : 'go-exps', p.order != null ? p.order : d);
     });
+    for (const kind of ['orders','parts','pays']) {
+      const seen = new Map();
+      for (const row of D[kind]) {
+        const date = row.date || row.start;
+        if (!date || date < from) continue;
+        const key = duplicateKey(kind, row);
+        if (seen.has(key)) {
+          const act = kind === 'orders' || row.order != null && kind === 'parts' ? 'go-order-num' : kind === 'pays' ? 'go-pay' : 'go-exps';
+          add('Возможные дубли', date, duplicateLabel(kind,row), row.amount ?? row.sum, act,
+            kind === 'orders' ? row.num : kind === 'pays' ? row.id : row.order ?? date);
+        }
+        seen.set(key,row.id);
+      }
+    }
     out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     return out;
   }
@@ -2110,7 +2144,10 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     let dbp = null;
     const open = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('sto-uchet', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
     const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('kv', mode); const st = t.objectStore('kv'); const q = fn(st); t.oncomplete = () => res(q && q.result); t.onerror = t.onabort = () => rej(t.error); }); };
-    return { get: k => tx('readonly', s => s.get(k)).catch(() => null), set: (k, v) => tx('readwrite', s => s.put(v, k)).catch(() => null) };
+    const putAll = entries => tx('readwrite', store => {
+      for (const [key, value] of entries) store.put(value, key);
+    });
+    return { putAll, get: k => tx('readonly', s => s.get(k)).catch(() => null), set: (k, v) => tx('readwrite', s => s.put(v, k)).catch(() => null) };
   })();
 
   function normalize(data) {
@@ -2683,7 +2720,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
       else for (let i = L.length - 1; i >= j; i--) if (L[i].rev && jGroups(L[i]).includes(g)) revFiltered(L[i].rev, g, false);
       if (relPlan.length) jRelApply(relPlan);
       /* восстановленный наряд, а его номер уже занят другим — даём новый номер */
-      if (gKind(g) === 'o') { const oid = g.slice(2), o = D.orders.find(x => x.id === oid); if (o && o.num != null && D.orders.some(x => x !== o && x.num === o.num)) { const old = o.num, nn = Math.max(0, ...D.orders.map(x => +x.num || 0)) + 1; D.parts.forEach(p => { if (p.order === old && groupOf('parts', Object.assign({}, p)) === g) p.order = nn; }); o.num = nn; renum = [old, nn]; } }
+      if (gKind(g) === 'o') { const oid = g.slice(2), o = D.orders.find(x => x.id === oid); if (o && o.num != null && D.orders.some(x => x !== o && x.num === o.num)) { const old = o.num, nn = nextNum(); D.parts.forEach(p => { if (p.order === old && groupOf('parts', Object.assign({}, p)) === g) p.order = nn; }); o.num = nn; renum = [old, nn]; } }
     } catch (er) { toast('Не получилось: ' + er.message); return; }
     D = normalize(D); D.log = L;
     const hides = steps.filter(e => jGroups(e).every(x => x === g || rel.includes(x) || x.startsWith('cfg:'))).map(e => e.id);
@@ -2879,7 +2916,22 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {}
   }
   function numIn(v) { if (v === '' || v == null) return null; const n = parseFloat(String(v).replace(/\s| /g, '').replace(',', '.')); return isNaN(n) ? null : n; }
-  function nextNum() { return Math.max(0, ...D.orders.map(o => o.num || 0)) + 1; }
+  function freeNumber(values) {
+    const used = new Set(values.map(Number));
+    let n = 1;
+    while (used.has(n)) n++;
+    return n;
+  }
+  function orderKeys(data) {
+    return [...data.orders.map(o => o.num), ...data.parts.map(p => p.order), ...data.pays.map(p => p.order)];
+  }
+  function nextNum() { return freeNumber(orderKeys(D)); }
+  function freeDoc(data, yy) {
+    const prefix = yy + '/';
+    const values = [...orderKeys(data), ...data.orders.map(o => o.docNum)];
+    const n = freeNumber(values.filter(v => String(v).startsWith(prefix)).map(v => v.slice(prefix.length)));
+    return { n, num: prefix + String(n).padStart(4, '0') };
+  }
   function monthNav(key, act) {
     return `<div class="mnav"><button class="btn ghost" data-act="${act}" data-d="-1" aria-label="Предыдущий месяц">‹</button><b>${S.monthLabel(key)}</b><button class="btn ghost" data-act="${act}" data-d="1" aria-label="Следующий месяц">›</button>${key !== NOW_M() ? `<button class="link small" data-act="${act}" data-d="0">к текущему</button>` : ''}</div>`;
   }
@@ -3094,8 +3146,8 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     });
     const sk = o => o.start || o.doneDate || '9999';
     /* по убыванию номера наряда */
-    const nk = o => o.num != null ? o.num : o.doneDate ? -1 : Infinity;   /* б/н в работе — сверху, старые сданные б/н — в конце */
-    list.sort((a, b) => (nk(b.o) - nk(a.o)) || sk(b.o).localeCompare(sk(a.o)));
+    const nk = o => o.num != null ? String(o.num) : o.doneDate ? '' : '~';   /* б/н в работе — сверху, старые сданные б/н — в конце */
+    list.sort((a, b) => nk(b.o).localeCompare(nk(a.o), 'ru', { numeric: true }) || sk(b.o).localeCompare(sk(a.o)));
     const shown = list.slice(0, ui.limit);
     const chip = (k, l, n) => `<button class="chip${ui.filter === k ? ' on' : ''}" data-act="filter" data-k="${k}">${l}${n != null ? ` <b>${n}</b>` : ''}</button>`;
     return `
@@ -3113,7 +3165,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     const open = ui.openRows.has(o.id);
     return `<li class="${open ? 'is-open' : ''}"><div class="order" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}">
       <span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span>
-      <span class="o-num">${o.num != null ? '№ ' + o.num : 'б/н'}${o.docNum ? `<small class="doc-num" title="Официальный номер (оплата с чеком)">${esc(o.docNum)}</small>` : ''}</span>
+      <span class="o-num">${esc(numTxt(o))}</span>
       <span class="o-main"><b>${clientLink(X.clientById[o.cid] || personOf(o.client,o.note), orderWho(o) || 'Без имени')}</b><span class="muted">${esc(o.car)}</span>${hp && hp.length ? `<span class="hit small">${hp.slice(0, 3).map(p => esc([p.art, p.name, p.brand].filter(Boolean).join(' · '))).join('; ')}${hp.length > 3 ? ' и ещё ' + (hp.length - 3) : ''}</span>` : ''}</span>
       <span class="o-plate">${plate(o.plate)}</span>
       <span class="o-meta"><span class="order-statuses"><span class="pill ${st[0]}">${st[1]}</span>${t.waiting ? `<span class="pill st-wait">нет запчастей: ${t.waiting}</span>` : ''}</span><span class="muted small o-date">${date || ''}</span></span>
@@ -3167,25 +3219,10 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     ui.editor.origPays = clone(ui.editor.pays);
     if (isNew) addWork();
     paintEditor(true);
-    if (!isNew) ui.editor.openedState = editorState(ui.editor);
+    ui.editor.openedState = editorState(ui.editor);
     if (ui.editor.picking) setTimeout(() => { const f = $('#e-pick'); if (f) f.focus(); }, 30);
   }
-  function addWork() { ui.editor.order.works.push({ id: uid('w'), name: '', sum: null, base: null, pct: wPctCfg(), sub: 0, nik: 0, done: null }); }
-  /* наценка на работы: вводишь свою цену (base), клиенту идёт base + % (округление из настроек). % запоминается в работе — смена настройки старые работы не трогает */
-  const wPctCfg = () => (D.cfg.workPctOff ? 0 : +D.cfg.workPct || 0);
-  const wRoundCfg = () => 100; /* цена работы с наценкой всегда до 100 ₽ */
-  const wHasPct = w => w && w.pct != null && !w.kind;
-  function wMark(v, w) {
-    if (v == null) return null;
-    if (!wHasPct(w) || w.noPct || !(w.pct > 0)) return r2(v);
-    const R = wRoundCfg(), x = v * (1 + w.pct / 100);
-    return R > 1 ? Math.round(x / R) * R : r2(x);
-  }
-  const wInVal = w => (wHasPct(w) ? w.base ?? w.sum : w.sum);
-  function wPctBtn(w, i) {
-    if (!wHasPct(w) || !(w.pct > 0)) return '';
-    return `<button type="button" class="wpct${w.noPct ? '' : ' on'}" data-act="w-pct" data-i="${i}" title="${w.noPct ? 'Без наценки. Нажми, чтобы добавить +' + w.pct + '%' : 'Наценка +' + w.pct + '%: клиенту ' + rub(w.sum || 0) + '. Нажми, чтобы убрать'}">${w.noPct ? 'без %' : '+' + fmt(w.pct, w.pct % 1 ? 1 : 0) + '%' + (w.base != null ? ' = ' + fmt(w.sum || 0) : '')}</button>`;
-  }
+  function addWork() { ui.editor.order.works.push({ id: uid('w'), name: '', sum: null, sub: 0, nik: 0, done: null }); }
   function newPart(extra) {
     return Object.assign({ id: uid('p'), date: S.todayISO(), sup: (D.cfg.suppliers || [])[0] || '', order: ui.editor.order.num, art: '', name: '', brand: '', cost: null, qty: 1, qtyNew: true, price: null, sum: 0, client: '', no: true, ret: false, retDone: false, month: null, paid: null, app: true }, extra || {});
   }
@@ -3199,7 +3236,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     const ids = new Set(parts.map(p => p.blk).filter(Boolean));
     E.origParts.forEach(p => p.blk && ids.add(p.blk));
     ids.forEach(b => {
-      blocks[b] = (X.blocks[b] || []).filter(p => p.order !== E.order.num || E.order.num == null).map(p => (touched.has(b) ? Object.assign({}, p, { edited: true }) : p))
+      blocks[b] = (X.blocks[b] || []).filter(p => p.order !== E.orig.num || E.isNew || E.orig.num == null).map(p => (touched.has(b) ? Object.assign({}, p, { edited: true }) : p))
         .concat(parts.filter(p => p.blk === b).map(p => (touched.has(b) ? Object.assign({}, p, { edited: true }) : p)));
     });
     const X2 = Object.assign({}, X, { blocks, partsByOrder: Object.assign({}, X.partsByOrder, { [num]: parts }), paysByOrder: Object.assign({}, X.paysByOrder, { [num]: pays }) });
@@ -3231,7 +3268,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
     <div class="sheet" role="dialog" aria-modal="true" aria-label="Заказ-наряд">
       <header class="sheet-head">
         <button class="btn ghost hb" data-act="close-editor" aria-label="Закрыть"><span class="hl">Закрыть</span><span class="hi" aria-hidden="true">✕</span></button>
-        <h2>Заказ-наряд <span class="o-num big">${o.num != null ? '№ ' + o.num : 'б/н'}</span>${o.docNum ? ` <span class="doc-num big" title="Официальный номер (оплата с чеком)">${esc(o.docNum)}</span>` : ''}</h2>
+        <h2>Заказ-наряд <span class="o-num big">${esc(numTxt(o))}</span></h2>
         <button class="btn ghost small dens-t" data-act="dense-toggle" title="Вид строк работ и запчастей">${ui.dense ? 'Подробно' : 'Компактно'}</button>
         ${eyeBtn()}
         <button class="btn hb" data-act="print-draft" title="Печать заказ-наряда" aria-label="Печать"><span class="hl">Печать</span><svg class="hi" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/></svg></button>
@@ -3250,7 +3287,7 @@ body.ro [data-act=new-order],body.ro [data-act=sale-new],body.ro #editor [data-a
           ${ui.dense ? o.works.map((w, i) => w.kind ? '' : workRowC(E, w, i)).join('') : o.works.map((w, i) => w.kind ? '' : `
             <div class="line work">
               <label class="f grow wsug-host">Работа<input id="w-n-${i}" value="${esc(w.name)}" data-w="${i}" data-k="name" autocomplete="off" role="combobox" aria-expanded="${E.wsug && E.wsug.i === i ? 'true' : 'false'}">${E.wsug && E.wsug.i === i ? workSuggHTML(i) : ''}</label>
-              <label class="f num">Сумма, ₽<input id="w-s-${i}" value="${esc(nv(wInVal(w)))}" data-w="${i}" data-k="sum" inputmode="decimal"></label>${wPctBtn(w, i)}
+              <label class="f num">Сумма, ₽<input id="w-s-${i}" value="${esc(nv(w.sum))}" data-w="${i}" data-k="sum" inputmode="decimal"></label>
               <label class="f num">Подрядчик<input id="w-o-${i}" value="${esc(nv(w.sub || null))}" data-w="${i}" data-k="sub" inputmode="decimal"></label>
               <label class="f num">Никита<input id="w-p-${i}" value="${esc(nv(w.nik || null))}" data-w="${i}" data-k="nik" inputmode="decimal"></label>
               <button class="x" data-act="del-work" data-i="${i}" aria-label="Удалить работу">×</button>
@@ -3431,14 +3468,14 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const empty = !(w.name || '').trim() && !w.sum;
     if (isEd(E, 'w', i) || empty) return `<div class="cr cr-w editing">
       <span class="wsug-host"><input id="w-n-${i}" value="${esc(w.name)}" data-w="${i}" data-k="name" autocomplete="off" role="combobox" placeholder="Работа" aria-label="Работа" aria-expanded="${E.wsug && E.wsug.i === i ? 'true' : 'false'}">${E.wsug && E.wsug.i === i ? workSuggHTML(i) : ''}</span>
-      <span class="wsum"><span class="crl-t">Цена</span><input id="w-s-${i}" class="r" value="${esc(nv(wInVal(w)))}" data-w="${i}" data-k="sum" inputmode="decimal" placeholder="Сумма" aria-label="Сумма" title="${wHasPct(w) && w.pct > 0 ? 'Твоя цена — клиенту пойдёт с наценкой' : 'Сумма'}">${wPctBtn(w, i)}</span>
+      <span class="wsum"><span class="crl-t">Цена</span><input id="w-s-${i}" class="r" value="${esc(nv(w.sum))}" data-w="${i}" data-k="sum" inputmode="decimal" placeholder="Сумма" aria-label="Сумма" title="Сумма"></span>
       <label class="crl crl-o"><span>Подрядчик</span><input id="w-o-${i}" class="r" value="${esc(nv(w.sub || null))}" data-w="${i}" data-k="sub" inputmode="decimal" placeholder="Подрядчик" aria-label="Подрядчик" title="Подрядчику"></label>
       <label class="crl crl-p"><span>Никита</span><input id="w-p-${i}" class="r" value="${esc(nv(w.nik || null))}" data-w="${i}" data-k="nik" inputmode="decimal" placeholder="Никита" aria-label="Никита" title="Никите"></label>
       <button class="x sm" data-act="del-work" data-i="${i}" aria-label="Удалить работу">×</button></div>`;
     const extra = [w.sub ? 'подрядчик ' + rub(w.sub) : '', w.nik ? 'Никита ' + rub(w.nik) : ''].filter(Boolean).join(' · ');
     return `<div class="cr cr-w" data-act="row-edit" data-t="w" data-i="${i}" title="Нажми, чтобы изменить"><span class="cr-pen" aria-hidden="true">✎</span>
       <span class="cr-name" title="${esc(w.name || '')}"><b>${esc(w.name || '—')}</b>${extra ? ` <span class="muted">· ${esc(extra)}</span>` : ''}</span>
-      <b class="cr-sum"${wHasPct(w) && w.pct > 0 && !w.noPct && w.base != null ? ` title="${esc('Твоя цена ' + rub(w.base) + ' + ' + w.pct + '%')}"` : ''}>${rub(w.sum || 0)}</b>
+      <b class="cr-sum">${rub(w.sum || 0)}</b>
       <button class="x sm" data-act="del-work" data-i="${i}" aria-label="Удалить работу">×</button></div>`;
   }
   function partTogglesC(E, p, i) {
@@ -3766,7 +3803,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
   function rkLineKey(o, k) { return String(o.id) + ':' + k; }
   function rkDest(o, k) { ui.rkDest = ui.rkDest || {}; const key = rkLineKey(o, k); if (ui.rkDest[key] == null) { const g = rkGuessOrder(o); ui.rkDest[key] = g ? 'o' + g : ''; } return ui.rkDest[key]; }
   function rkNewBlock(rn) {
-    const open = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num), m = rkMatchAll();
+    const open = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => String(b.num).localeCompare(String(a.num), 'ru', { numeric: true })), m = rkMatchAll();
     const opts = v => `<option value=""${v === '' ? ' selected' : ''}>—</option><option value="new"${v === 'new' ? ' selected' : ''}>+ Новый наряд</option>${open.map(x => `<option value="o${x.num}"${v === 'o' + x.num ? ' selected' : ''}>Наряд № ${x.num} · ${esc(orderWho(x))}</option>`).join('')}<option value="sale"${v === 'sale' ? ' selected' : ''}>Продажа без наряда</option><option value="xp"${v === 'xp' ? ' selected' : ''}>Расходы СТО</option>`;
     return `<section class="block"><div class="block-head"><h3>Не внесено из Rossko <span class="muted small">${rn.length}</span></h3></div>
       <p class="muted small">У каждой запчасти выбери, куда её внести, и нажми «Внести». Строки с одинаковым «куда» откроются вместе — проверишь и сохранишь. Остальное останется здесь до следующего раза.</p>
@@ -3788,7 +3825,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     /* сначала существующие наряды, потом новый наряд, продажа, расходы */
     keys.sort((a, b) => (a[0] === 'o' ? 0 : a === 'new' ? 1 : a === 'sale' ? 2 : 3) - (b[0] === 'o' ? 0 : b === 'new' ? 1 : b === 'sale' ? 2 : 3));
     const d = keys[0], only = groups[d], left = keys.length - 1;
-    if (d[0] === 'o') { const ord = X.ordersByNum[+d.slice(1)]; if (!ord) return; openOrder(ord.id); rkOpenPanel('ed'); rkTake('ed', id, only); }
+    if (d[0] === 'o') { const ord = X.ordersByNum[d.slice(1)]; if (!ord) return; openOrder(ord.id); rkOpenPanel('ed'); rkTake('ed', id, only); }
     else if (d === 'new') { openOrder(null); ui.editor.picking = true; rkOpenPanel('ed'); rkTake('ed', id, only); }
     else if (d === 'sale') { openSale(null); rkOpenPanel('sale'); rkTake('sale', id, only); }
     else { ui.tab = 'exps'; ui.expMonth = NOW_M(); if (!ui.expForm) render(); ui.expForm.kind = 'sto'; ui.expForm.what = ''; rkOpenPanel('xp'); rkTake('xp', id, only); render(); window.scrollTo(0, 0); }
@@ -3813,7 +3850,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
   function rkFlatHTML(ctx) {
     const d = ui.rk && ui.rk.data; if (!d) return '';
     const lines = rkLines(), sel = rkSelSet(), on = lines.filter(L => sel.has(L.key));
-    const open = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num);
+    const open = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => String(b.num).localeCompare(String(a.num), 'ru', { numeric: true }));
     const destOpts = (v, first) => `<option value=""${v === '' ? ' selected' : ''}>${first || '— куда?'}</option>${open.map(x => `<option value="o${x.num}"${v === 'o' + x.num ? ' selected' : ''}>Наряд № ${x.num} · ${esc(orderWho(x))}</option>`).join('')}<option value="new"${v === 'new' ? ' selected' : ''}>+ Новый наряд</option><option value="sale"${v === 'sale' ? ' selected' : ''}>Продажа без наряда</option><option value="sto"${v === 'sto' ? ' selected' : ''}>Расходы СТО</option>`;
     const head = `<div class="block-head"><h3>Не внесено из Rossko <span class="muted small">${lines.length} ${plural(lines.length, 'запчасть', 'запчасти', 'запчастей')}</span></h3>
       <span class="muted small">данные от ${esc(rkUpdated(d))}${ctx !== 'wait' ? ` · <button class="btn small" data-act="rk-refresh" data-k="${ctx}" ${ui.rkBusy ? 'disabled' : ''}>${ui.rkBusy ? 'Обновляю…' : 'Обновить'}</button>` : ''}</span></div>`;
@@ -3857,7 +3894,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (by['']) { toast('Выбери «куда» у отмеченных: ' + by[''].length + ' без «куда»'); return; }
     const done = [];
     Object.keys(by).filter(k => k[0] === 'o').forEach(k => {
-      const o = X.ordersByNum[+k.slice(1)]; if (!o) return;
+      const o = X.ordersByNum[k.slice(1)]; if (!o) return;
       by[k].forEach(L => D.parts.push(rkPartForOrder(o, rkItem(L))));
       done.push(`${by[k].length} в <button class="link" data-act="open-order" data-id="${esc(o.id)}">наряд № ${o.num}</button>`);
       by[k].forEach(L => sel.delete(L.key));
@@ -3996,10 +4033,9 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
         w.name = el.value;
         E.wsug = el.value.trim() ? { i: +el.dataset.w, q: el.value, sel: 0 } : null; paintEditor();
         const wt = D.workTypes.find(x => x.name === el.value) || D.workTypes.find(x => wk(x.name) === wk(el.value) || (x.aliases || []).some(a => wk(a) === wk(el.value)));
-        if (wt && wt.price && !w.sum) { if (wHasPct(w)) { w.base = wt.price; w.sum = wMark(wt.price, w); } else w.sum = wt.price; paintEditor(); }
+        if (wt && wt.price && !w.sum) { w.sum = wt.price; paintEditor(); }
         return;
       }
-      if (k === 'sum' && wHasPct(w)) { w.base = numIn(el.value); w.sum = wMark(w.base, w); later(); return; }
       w[k] = numIn(el.value); later();
       return;
     }
@@ -4044,24 +4080,23 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
   }
   function later() { clearTimeout(later.t); later.t = setTimeout(() => paintEditor(), 400); }
 
-  /* Официальный номер наряда «26/0001»: выдаётся, когда в наряде сохранена первая оплата с чеком. Год — по дате этой оплаты.
-     Номер остаётся за нарядом навсегда; внутренний номер (482…) тоже остаётся — по нему связаны оплаты и запчасти. */
+  /* При смене серии связи запчастей и оплат переносятся при сохранении. */
   const hasReceipt = pays => (pays || []).some(p => p.receipt === true && (+p.amount || 0) > 0 && !p.refund);
-  function docNext(yy) {
-    const used = D.orders.map(o => o.docNum).filter(x => x && x.startsWith(yy + '/')).map(x => +x.split('/')[1] || 0);
-    const n = Math.max(+((D.cfg.docSeq || {})[yy]) || 0, 0, ...used) + 1;
-    return { n, num: yy + '/' + String(n).padStart(4, '0') };
-  }
+  function docNext(yy) { return freeDoc(D, yy); }
   function docYearOf(pays) { const d = (pays || []).filter(p => p.receipt === true && (+p.amount || 0) > 0 && !p.refund).map(p => p.date || S.todayISO()).sort()[0] || S.todayISO(); return d.slice(2, 4); }
   function docAssign(o, pays) {
-    if (o.docNum) { const [yy, n] = o.docNum.split('/'); if (+n > (+((D.cfg.docSeq || {})[yy]) || 0)) D.cfg.docSeq = Object.assign({}, D.cfg.docSeq || {}, { [yy]: +n }); return null; }
-    const byRc = !hasReceipt(pays) && o.rc === true && !!o.doneDate;   /* «Чек: Да» и машину выдали (в т.ч. в долг) */
-    if (!hasReceipt(pays) && !byRc) return null;
-    const yy = byRc ? o.doneDate.slice(2, 4) : docYearOf(pays), x = docNext(yy);
-    o.docNum = x.num; D.cfg.docSeq = Object.assign({}, D.cfg.docSeq || {}, { [yy]: x.n });
-    return x.num;
+    if (!o.docNum && !hasReceipt(pays) && o.rc !== true) {
+      if (o.num != null && D.orders.some(x => x.id !== o.id && x.num === o.num)) o.num = nextNum();
+      return null;
+    }
+    const former = o.docNum;
+    if (!former || D.orders.some(x => x.id !== o.id && (x.docNum === former || x.num === former))) {
+      o.docNum = docNext(former?.slice(0, 2) || (hasReceipt(pays) ? docYearOf(pays) : S.todayISO().slice(2,4))).num;
+    }
+    o.num = o.docNum;
+    return former === o.docNum ? null : o.docNum;
   }
-  const numTxt = o => (o.num != null ? '№ ' + o.num : 'б/н') + (o.docNum ? ' · ' + o.docNum : '');
+  const numTxt = o => o.docNum || (o.num != null ? '№ ' + o.num : 'б/н');
   /* «Клиент дал» вписано, но кнопку не нажали — при сохранении записываем всю сумму (переплата остаётся за клиентом) */
   function calcAutoCommit(where) {
     const X0 = where === 'ed' ? ui.editor : ui.sale, C = X0 && X0.calc;
@@ -4070,7 +4105,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (X0.rc == null && !kk.sup) { toast('Вписано «Клиент дал» — отметь: чек пробит или нет'); return false; }
     calcCommit(where, 'all'); return true;
   }
-  function saveOrder(clientToOpen) {
+  function saveOrder(clientToOpen, closeAfterSave = false) {
     if (ui.editor && !calcAutoCommit('ed')) return;
     if (ui.editor) ui.editor.parts.forEach(p => { delete p.qtyNew; });
     ui.stash = { editor: ui.editor };
@@ -4134,7 +4169,8 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       D.parts.push(p);
     });
     E.pays.forEach(p => {
-      if (p.app) Object.assign(p, { order: o.num, name: p.to || (o.client + ' ' + o.car).trim(), note: p.to ? (o.client + ' ' + o.car).trim() : p.note || '' });
+      p.order = o.num;
+      if (p.app) Object.assign(p, { name: p.to || (o.client + ' ' + o.car).trim(), note: p.to ? (o.client + ' ' + o.car).trim() : p.note || '' });
       D.pays.push(p);
     });
     /* новые виды работ в прайс — только после вопроса «Добавить / Нет» */
@@ -4142,7 +4178,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       const n = (w.name || '').trim();
       if (!n || w.kind || D.workTypes.some(x => wk(x.name) === wk(n) || (x.aliases || []).some(a => wk(a) === wk(n)))) return;
       if ((D.cfg.wtSkip || []).some(x => wk(x) === wk(n))) return;
-      ui.wtAsk = (ui.wtAsk || []).filter(x => wk(x.name) !== wk(n)).concat([{ name: n, price: w.base != null ? w.base : w.sum || null }]);
+      ui.wtAsk = (ui.wtAsk || []).filter(x => wk(x.name) !== wk(n)).concat([{ name: n, price: w.sum ?? null }]);
     });
     const scr = (() => { const b = $('#editor .sheet-body'); return b ? b.scrollTop : 0; })();
     ui.editor = null;
@@ -4151,6 +4187,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     /* после «Сохранить» остаёмся в наряде — выйти можно кнопкой «Закрыть» */
     if (changed() !== false && D.orders.some(x => x.id === o.id)) {
       if (clientToOpen) { goClient(clientToOpen); return; }
+      if (closeAfterSave) { paintEditor(); return; }
       openOrder(o.id);
       const b = $('#editor .sheet-body'); if (b) b.scrollTop = scr;
     }
@@ -4482,7 +4519,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
   function linkControl(g) {
     const mine = o => (g.person && o.cid === g.person.id) || (low(o.client) === low(g.client) && low(o.note || '') === low(g.note || ''));
     const cands = D.orders.filter(o => o.num != null && (mine(o) || !o.doneDate || (o.start || '') >= S.addMonths(NOW_M(), -1) + '-01'))
-      .sort((a, b) => (mine(b) - mine(a)) || (!a.doneDate - !b.doneDate) * -1 || b.num - a.num).slice(0, 40);
+      .sort((a, b) => (mine(b) - mine(a)) || (!a.doneDate - !b.doneDate) * -1 || String(b.num).localeCompare(String(a.num), 'ru', { numeric: true })).slice(0, 40);
     if (!cands.length) return '';
     const A = ui.linkAsk && ui.linkAsk.id === g.id ? ui.linkAsk : null;
     if (A) { const ml = S.monthLabel(A.month).toLowerCase(); return `<div class="note" style="flex:1 1 100%"><span><b>Покупка из закрытого месяца — ${esc(ml)}.</b> Оставить её прибыль за ${esc(ml)}? Запчасть всё равно будет в наряде № ${A.num}, в печати и в долге.</span>
@@ -4524,6 +4561,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (!rows.length) ui.sale.rows.push(saleRowNew());
     ui.sale.rc = rcOf(ui.sale.pays);
     paintSale(true);
+    ui.sale.openedState = saleState(ui.sale);
   }
   /* Скидка / Без сдачи: закрыть разницу между суммой и оплатой отдельной строкой */
   /* телефон: итоги свёрнуты в одну строку, по нажатию раскрываются */
@@ -4686,8 +4724,17 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     if (ed) ui.editor.order.rc = v; /* запоминаем в наряде, даже если оплат ещё нет */
     /* «Чек: Да» — сразу даём наряду официальный номер (закрепится при сохранении; передумал до сохранения — номер не тратится) */
     if (ed) { const o = ui.editor.order;
-      if (v && !o.docNum) { o.docNum = docNext(S.todayISO().slice(2, 4)).num; ui.editor.docTmp = true; toast('Наряду присвоен номер ' + o.docNum); }
-      else if (!v && ui.editor.docTmp) { delete o.docNum; ui.editor.docTmp = false; } }
+      if (v && !o.docNum) {
+        o.docNum = docNext(S.todayISO().slice(2, 4)).num;
+        o.num = o.docNum;
+      } else if (!v && o.docNum && !X0.pays.some(p => +p.amount) && !o.paid) {
+        const original = X0.orig.num;
+        const otherOrders = D.orders.filter(x => x.id !== o.id);
+        const ownKey = row => !X0.isNew && row.order === original;
+        o.num = freeNumber(orderKeys({orders: otherOrders, parts: D.parts.filter(p => !ownKey(p)), pays: D.pays.filter(p => !ownKey(p))}));
+        delete o.docNum;
+      }
+    }
     X0.pays.forEach(p => { if (!kindIsSup(p)) p.receipt = v; });
     /* последняя оплата закрывала наряд — подгоняем её под новую сумму (ровную или точную) */
     const lines0 = ed ? ui.editor.order.works : ui.sale.rows, nl = lines0.find(x => x.kind === 'noch');
@@ -4776,7 +4823,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
               </div>`).join('')}</div>
           ${Sx.paste ? salePastePanel() : ''}
           <div class="actions"><button class="btn small" data-act="sp-add">+ Запчасть</button><button class="btn small primary-t" data-act="sp-paste">Загрузить запчасти</button></div>
-          ${!Sx.id && Sx.rows.some(p => (p.name || '').trim() || p.art) ? `<div class="stk-bar flat"><span>Это для машины? Перенеси в наряд:</span><span class="rk-to"><select id="sa-ord" aria-label="Наряд"><option value="">наряд…</option>${D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num).map(o => `<option value="${o.num}">№ ${o.num} · ${esc(orderWho(o))}</option>`).join('')}</select><button class="btn small" data-act="sale-to-order">В наряд</button><button class="btn small" data-act="sale-to-new">+ Новый наряд</button></span></div>` : ''}
+          ${!Sx.id && Sx.rows.some(p => (p.name || '').trim() || p.art) ? `<div class="stk-bar flat"><span>Это для машины? Перенеси в наряд:</span><span class="rk-to"><select id="sa-ord" aria-label="Наряд"><option value="">наряд…</option>${D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => String(b.num).localeCompare(String(a.num), 'ru', { numeric: true })).map(o => `<option value="${o.num}">№ ${o.num} · ${esc(orderWho(o))}</option>`).join('')}</select><button class="btn small" data-act="sale-to-order">В наряд</button><button class="btn small" data-act="sale-to-new">+ Новый наряд</button></span></div>` : ''}
         </section>
         <section class="block"><div class="block-head"><h3>Оплата</h3><span class="muted">оплачено ${rub(t.paid)}</span></div>${own ? '' : rcSegHTML('sa')}
           ${own ? `<label class="f chk"><input type="checkbox" id="sa-personal" data-sa="personal" ${Sx.personal ? 'checked' : ''}> Списать ${rub(t.sum)} с доли ${esc(Sx.client)} (как в Excel: минус, безнал, «${esc(Sx.client)}»)</label>
@@ -4930,7 +4977,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       <div class="d-col"><h4>Машины</h4>${p.cars.length ? `<table class="dt"><tbody>${p.cars.map(c => `<tr><td>${esc(c.car || 'без названия')}</td><td>${c.plate ? plate(c.plate) : ''}</td><td class="mono small">${esc(c.vin)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted small">Машин нет.</p>'}
         ${p.phone ? `<p class="small">Телефон: <b>${esc(p.phone)}</b></p>` : ''}</div>
       <div class="d-col"><h4>Последние наряды${st.count > 6 ? ` <span class="muted">(6 из ${st.count})</span>` : ''}</h4>${orders.length ? `<table class="dt"><tbody>${orders.map(o => { const t = S.orderTotals(o, X); const car = p.cars.find(c => c.id === o.carId);
-        return `<tr><td class="nowrap">${o.num != null ? '№\u00a0' + o.num : 'б/н'}${o.docNum ? '<br><small class="muted">' + esc(o.docNum) + '</small>' : ''}</td><td class="nowrap">${dshort(o.start || o.doneDate)}</td><td>${esc(car ? car.car : o.car)}</td><td class="r nowrap muted">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</td><td class="r nowrap"><b>${rub(t.total)}</b>${o.doneDate && t.debt > 5 ? ` <span class="neg small">долг ${rub(t.debt)}</span>` : !o.doneDate ? ' ' + (inSched(o) ? '<span class="pill st-sched">запись</span>' : '<span class="pill st-work">в работе</span>') : ''}</td></tr>`; }).join('')}</tbody></table>` : '<p class="muted small">Нарядов нет.</p>'}</div>
+        return `<tr><td class="nowrap">${esc(numTxt(o))}</td><td class="nowrap">${dshort(o.start || o.doneDate)}</td><td>${esc(car ? car.car : o.car)}</td><td class="r nowrap muted">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</td><td class="r nowrap"><b>${rub(t.total)}</b>${o.doneDate && t.debt > 5 ? ` <span class="neg small">долг ${rub(t.debt)}</span>` : !o.doneDate ? ' ' + (inSched(o) ? '<span class="pill st-sched">запись</span>' : '<span class="pill st-work">в работе</span>') : ''}</td></tr>`; }).join('')}</tbody></table>` : '<p class="muted small">Нарядов нет.</p>'}</div>
       <div class="d-actions"><button class="btn small primary" data-act="cl-open" data-id="${esc(p.id)}">Открыть карточку</button></div>
     </div>`;
   }
@@ -4944,6 +4991,36 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     return `<ul class="cl-notes">${list.map(o => { const car = p && p.cars.find(c => c.id === o.carId);
       return `<li><div class="cl-notes-h">${plain ? `<b class="small">${o.num != null ? '№ ' + o.num : 'б/н'}</b>` : `<button class="link small" data-act="open-order" data-id="${esc(o.id)}">${o.num != null ? '№ ' + o.num : 'б/н'}</button>`} <span class="muted small">${dshort(o.start || o.doneDate)} · ${esc((car && car.car) || o.car || '')}</span></div>
         ${(o.advice || '').trim() ? `<div><span class="muted small">Рекомендации:</span> ${esc(o.advice)}</div>` : ''}${(o.memo || '').trim() ? `<div><span class="muted small">Примечание:</span> ${esc(o.memo)}</div>` : ''}</li>`; }).join('')}</ul>`;
+  }
+  function saleState(sale) {
+    return JSON.stringify([sale.client, sale.note, sale.cid || null, sale.car, sale.date,
+      sale.rows, sale.pays, sale.rc, sale.personal, sale.supHow, sale.legacyPaid]);
+  }
+  function requestFormClose(kind) {
+    const order = kind === 'editor';
+    const draft = ui[kind];
+    if (!draft) return;
+    const discard = () => {
+      ui[kind] = null;
+      if (order) paintEditor(); else paintSale();
+    };
+    const modified = order ? editorDirty(draft) : saleState(draft) !== draft.openedState;
+    if (!modified && !(numIn(String(draft.calc?.given || '')) > 0)) { discard(); return; }
+    const dialog = document.createElement('dialog');
+    dialog.className = 'close-draft';
+    dialog.setAttribute('aria-label', 'Сохранить изменения?');
+    dialog.innerHTML = '<h3>Сохранить изменения?</h3><form method="dialog" class="actions"><button value="save" class="btn primary">Сохранить</button><button value="discard" class="btn">Выйти без сохранения</button><button value="cancel" class="btn ghost">Отмена</button></form>';
+    dialog.addEventListener('keydown', e => e.stopPropagation());
+    dialog.addEventListener('close', () => {
+      dialog.remove();
+      if (ui[kind] !== draft) return;
+      if (dialog.returnValue === 'discard') discard();
+      if (dialog.returnValue === 'save') {
+        if (order) saveOrder(null, true); else saveSale();
+      }
+    }, { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
   }
   function editorState(E) {
     return JSON.stringify([E.order, E.parts, E.pays, E.rc], (k, v) => k === 'fromSale' ? undefined : v);
@@ -4982,7 +5059,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     let total = 0, debt = 0;
     const rows = orders.map(o => { const t = S.orderTotals(o, X); total += t.total; if (o.doneDate && t.debt > 5) debt += t.debt; const car = d.cars.find(c => c.id === o.carId);
       const open = ui.openRows.has(o.id), hh = hits[o.id];
-      return `<li class="${open ? 'is-open' : ''}${hh ? ' clq-hit' : ''}"><div class="hist" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="o-num">${o.num != null ? '№\u00a0' + o.num : 'б/н'}${o.docNum ? '<small class="doc-num">' + esc(o.docNum) + '</small>' : ''}</span><span>${dshort(o.start || o.doneDate)}</span><span>${esc(car ? car.car : o.car)}</span><span class="mil">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</span><span class="r"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 && o.doneDate ? ` <span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : !o.doneDate ? ' ' + (inSched(o) ? '<span class="pill st-sched">запись</span>' : '<span class="pill st-work">в работе</span>') : ''}</span></div>${hh ? `<ul class="clq-found">${hh.ps.map(p => clqLine(p)).join('')}${hh.ws.map(w => clqLine(w, true)).join('')}</ul>` : ''}${open ? orderDetail(o, t) : ''}</li>`; }).join('');
+      return `<li class="${open ? 'is-open' : ''}${hh ? ' clq-hit' : ''}"><div class="hist" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle-row" data-id="${esc(o.id)}"><span class="arr" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="o-num">${esc(numTxt(o))}</span><span>${dshort(o.start || o.doneDate)}</span><span>${esc(car ? car.car : o.car)}</span><span class="mil">${o.mileage ? fmt(o.mileage) + '\u00a0км' : ''}</span><span class="r"><b>${rub(t.total)}</b>${Math.abs(t.debt) > 5 && o.doneDate ? ` <span class="${t.debt > 0 ? 'neg' : 'pos'} small">${t.debt > 0 ? 'долг ' + rub(t.debt) : 'переплата ' + rub(-t.debt)}</span>` : !o.doneDate ? ' ' + (inSched(o) ? '<span class="pill st-sched">запись</span>' : '<span class="pill st-work">в работе</span>') : ''}</span></div>${hh ? `<ul class="clq-found">${hh.ps.map(p => clqLine(p)).join('')}${hh.ws.map(w => clqLine(w, true)).join('')}</ul>` : ''}${open ? orderDetail(o, t) : ''}</li>`; }).join('');
     const used = new Set(orders.map(o => o.carId));
     return `<div class="toolbar">${ui.returnSale ? '<button class="btn ghost" data-act="resume-client-sale">‹ Вернуться в продажу</button>' : '<button class="btn ghost" data-act="cl-back">‹ Все клиенты</button>'}</div>
       ${ui.cerr ? `<div class="note bad">${esc(ui.cerr)}</div>` : ''}
@@ -5673,7 +5750,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     const head = `<thead><tr><th class="chkc"></th><th>Артикул</th><th>Название</th><th class="r">Остаток</th><th class="r cst">Закупка</th><th class="r">Цена</th><th></th></tr></thead>`;
     const tbl = (rows, group) => `<div class="scroll" data-stock-group="${group}"><table class="tbl stk"><colgroup><col style="width:52px"><col style="width:13%"><col><col style="width:7%"><col style="width:13%"><col style="width:8%"><col style="width:calc(3 * var(--stock-action-size) + 15px)"></colgroup>${head}<tbody>${rows.map(row).join('') || '<tr><td colspan="7" class="muted">Нет позиций</td></tr>'}</tbody></table></div>`;
     const selItems = D.stock.filter(x => SEL.has(x.id));
-    const openOrders = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => b.num - a.num);
+    const openOrders = D.orders.filter(o => !o.doneDate && o.num != null).sort((a, b) => String(b.num).localeCompare(String(a.num), 'ru', { numeric: true }));
     const bar = selItems.length ? `<div class="stk-bar"><b>Выбрано: ${selItems.length}</b><span class="muted small">${esc(selItems.map(x => x.name).join(', ').slice(0, 120))}</span>
       <span class="rk-to"><button class="btn small primary" data-act="stock-sel-sale">Продать без наряда</button>
       <select id="ss-ord" aria-label="Наряд"><option value="">наряд…</option>${openOrders.map(o => `<option value="${o.num}">№ ${o.num} · ${esc(orderWho(o))}</option>`).join('')}</select><button class="btn small" data-act="stock-sel-order">В наряд</button>
@@ -6185,7 +6262,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     }
     blk('mon', 'Деньги на конец месяца', 'касса ' + rub(mon.cash), `
       ${line('Касса (наличные)', mon.cash)}${line('Антон (счёт)', mon.anton)}${line('Глеб (счёт)', mon.gleb)}${line('Копилка', mon.piggy)}
-      ${T ? line('Текущие 10% от остатка месяца', T.ten) + line('Масло/антифриз', T.oilFund) : ''}${line('ИП карта (Антон)', mon.ip, '', 1)}
+      ${T ? line('Отчисление в копилку (' + S.piggyRate(D.cfg, T.month) + '%)', T.ten) + line('Масло/антифриз', T.oilFund) : ''}${line('ИП карта (Антон)', mon.ip, '', 1)}
       <h4>За месяц</h4>${line('Личные расходы', mon.personal, '', 1)}${line('Зарплата Глеба', mon.zpGleb, '', 1)}${line('Зарплата Антона', mon.zpAnton, '', 1)}
       ${line('Покупки из копилки', r.piggy, '', 1)}${line('Покупки в кассу «Масло/антифриз»', r.oilBuy, '', 1)}`);
     if (T) {
@@ -6198,12 +6275,12 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       blk('nashe', '«Наше» — чистые деньги (на сегодня)', rub(T.nasheSum), `
         ${line('Касса (наличные)', n.cash)}${line('Заплатить за непришедший товар', n.notArrived)}${line('Долги клиентов (+) и переплаты (−)', n.debts)}
         ${line('Доли Антона и Глеба (карты)', n.shares)}${line('Баланс с поставщиками (переплата +)', n.suppliers)}${line('Наценка на непришедшем товаре', n.markupNotArrived)}
-        ${line('Копилка', n.piggy)}${line('Масло/антифриз', n.oil)}${line('Текущие 10%', n.ten)}${line('Подрядчик и Никита (не выплачено)', n.workers)}
+        ${line('Копилка', n.piggy)}${line('Масло/антифриз', n.oil)}${line('Отчисление в копилку (' + S.piggyRate(D.cfg, T.month) + '%)', n.ten)}${line('Подрядчик и Никита (не выплачено)', n.workers)}
         ${line('ИП карта (Антон)', n.ip, '', 1)}${line('Запчасти в машинах', n.inCars)}${line('Налог и постоянные (не уплачено)', n.taxUnpaid)}
         ${line('Наше — чистые деньги', T.nasheSum, 'total')}`);
       blk('chk', 'Сверка месяца', Math.abs(T.check) < 1 ? '0 — сходится' : fmt(T.check, 2) + ' ₽', `
         ${line('Остаток месяца к распределению', T.rep.rest)}${line('Личные расходы и ЗП Глеба и Антона', -(T.mon.personal + T.mon.zpGleb + T.mon.zpAnton))}
-        ${line('Наше', -T.nasheSum)}${line('Текущие 10%', n.ten)}${line('Ожидается возврат', -T.retWait, '', 1)}
+        ${line('Наше', -T.nasheSum)}${line('Отчисление в копилку (' + S.piggyRate(D.cfg, T.month) + '%)', n.ten)}${line('Ожидается возврат', -T.retWait, '', 1)}
         ${line('Сверка (должна быть 0)', ckHTML(T.check), 'total' + (Math.abs(T.check) > 1 ? ' neg' : ''))}
         ${Math.abs(T.check) > 1 && S.monthReport(D, X, S.addMonths(m, -1)).status === 'Не закрыт' && S.closePlan(D, X, S.addMonths(m, -1)) ? `<p class="small"><b>${esc(S.monthLabel(S.addMonths(m, -1)))} не закрыт</b> — остаток не роздан, поэтому сверка не 0. Перейди на прошлый месяц и нажми «Закрыть месяц».</p>` : ''}
         ${Math.abs(T.check) > 1 ? '<p class="muted small">Если не 0 — ищи платёж без типа, оплату клиента без отметки чека или опечатку в названии поставщика.</p>' : ''}`, Math.abs(T.check) < 1);
@@ -6290,7 +6367,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
       <b>Раздать остаток месяца</b> <span class="muted small">— запишу в «Деньги» датой ${dshort(P.date)}, безнал</span>
       <div class="cp-box">
         ${row('Остаток месяца', P.rest)}${P.personal ? row('Личные расходы', -P.personal) : ''}
-        ${row('Копилка', P.kop, '10%')}
+        ${row('Копилка', P.kop, S.piggyRate(D.cfg, m) + '%')}
         ${row('ЗП Антон', P.rows[1].amount, tk(P.takenA))}
         ${row('ЗП Глеб', P.rows[2].amount, tk(P.takenG))}
         ${row('Масло/антифриз', P.oil, 'продано масла за месяц')}
@@ -6308,7 +6385,7 @@ ${(p.fundArt === p.art && p.fundUnit != null || p.sup === 'Склад' && X.stoc
     }
     const r = S.monthReport(D, X, m, { live: true });
     D.cfg.closed = D.cfg.closed || {};
-    D.cfg.closed[m] = { date: S.todayISO(), works: r.works, stoProfit: r.stoProfit, partsProfit: r.partsProfit, rnd: r.rnd || 0, stoExp: r.stoExp, itogo: r.itogo };
+    D.cfg.closed[m] = { piggyRate: S.piggyRate(D.cfg, m), date: S.todayISO(), works: r.works, stoProfit: r.stoProfit, partsProfit: r.partsProfit, rnd: r.rnd || 0, stoExp: r.stoExp, itogo: r.itogo };
     ui.confirmClose = false;
     lockSkip = true; try { changed('Закрыт месяц: ' + S.monthLabel(m)); } finally { lockSkip = false; }
     toast(S.monthLabel(m) + ' закрыт' + (P ? ', остаток раздан' : ''));
@@ -6488,7 +6565,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const E = ui.editor, w = E.order.works[i]; if (!w) return;
     w.name = name; E.wsug = null;
     const wt = D.workTypes.find(x => x.name === name);
-    if (wt && wt.price && !w.sum) { if (wHasPct(w)) { w.base = wt.price; w.sum = wMark(wt.price, w); } else w.sum = wt.price; }
+    if (wt && wt.price && !w.sum) { w.sum = wt.price; }
     paintEditor(); setTimeout(() => { const t = $('#w-s-' + i); if (t) t.focus(); }, 0);
   }
   function wpTouch(wt) { wt.own = true; delete wt.isNew; }
@@ -6571,6 +6648,12 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const R = ui.copyRestore; if (!R) return '';
     return `<div class="note bad"><span>Восстановить базу из копии <b>«${esc(R.name)}»</b>? Всё, что внесено после неё, пропадёт из базы (этот шаг можно отменить ↶).</span><div class="actions"><button class="btn small danger" data-act="copy-restore-yes">Да, восстановить</button><button class="btn small" data-act="copy-restore-no">Отмена</button></div></div>`;
   }
+  document.addEventListener('change', e => {
+    if (e.target.id === 'piggy-month' && e.target.value) {
+      ui.piggyMonth = e.target.value;
+      $('#piggy-rate').value = S.piggyRate(D.cfg, ui.piggyMonth);
+    }
+  });
   function viewSettings() {
     const ps = (D.cfg.params || []).slice().sort((a, b) => (a.from < b.from ? -1 : 1));
     const cell = (i, k, v, mode) => k === 'from'
@@ -6579,7 +6662,14 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     const fxE = D.cfg.fixedExtra || [];
     const xcell = (i, e, p) => `<td><input id="pp-${i}-x-${e.k}" value="${esc(nv((p.x || {})[e.k]))}" data-pp="${i}" data-k="x" data-x="${e.k}" inputmode="decimal"></td>`;
     const mk = D.cfg.markup || S.DEFAULT_MARKUP;
+    const piggyMonth = ui.piggyMonth || (NOW_M() < '2026-12' ? '2026-12' : NOW_M());
     return `${usersHTML()}${restoreNoteHTML()}
+      <section class="block"><div class="block-head"><h3>Копилка</h3></div>
+        <p class="muted small">Процент от положительного остатка месяца. Ставка действует до следующего изменения.</p>
+        <div class="actions" style="align-items:flex-end"><label class="f">Начиная с месяца<input id="piggy-month" type="month" value="${esc(piggyMonth)}"></label>
+        <label class="f">Процент в копилку<input id="piggy-rate" type="number" required min="0" max="100" step="0.01" value="${S.piggyRate(D.cfg, piggyMonth)}"></label>
+        <button class="btn" data-act="piggy-save">Сохранить ставку</button></div>
+      </section>
       <section class="block"><div class="block-head"><h3>Оформление</h3></div>
         <div class="seg">${THEMES.map(([k, l]) => `<button class="${(ui.theme || '') === k ? 'on' : ''}" data-act="theme" data-k="${k}">${l}</button>`).join('')}</div>
         <p class="muted small">Запоминается на этом компьютере.</p>
@@ -6618,13 +6708,6 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         <tbody>${ps.map((p, i) => `<tr>${cell(i, 'from', p.from)}${cell(i, 'usn', p.usn, 'pct')}${cell(i, 'rent', p.rent)}${cell(i, 'acc', p.acc)}${cell(i, 'elec', p.elec)}${cell(i, 'vznosYear', p.vznosYear)}${cell(i, 'acqCard', p.acqCard, 'pct')}${cell(i, 'acqQr', p.acqQr, 'pct')}${cell(i, 'term', p.term)}${fxE.map(e => xcell(i, e, p)).join('')}<td><button class="x" data-act="pp-del" data-i="${i}" aria-label="Удалить строку">×</button></td></tr>`).join('') || '<tr><td colspan="10" class="muted">Добавь первую строку — с неё начнётся налоговый учёт.</td></tr>'}</tbody></table></div>
         <p class="muted small">Взнос 1% с дохода сверх 300 000 ₽ за год программа считает сама и прибавляет к налогу. Доход — оплаты с чеком с января.</p>
         ${(() => { const st = (D.cfg.params || []).map(p => p.from).sort()[0]; return st ? `<div class="grid g2" style="max-width:520px"><label class="f">Доход ИП в ${st.slice(0, 4)} до начала учёта в программе, ₽<input id="cfg-ipbefore" class="r" value="${esc(nv(D.cfg.ipIncomeBefore || 0))}" data-cfgip="ipIncomeBefore" inputmode="decimal"></label><label class="f">Взносы за дни ИП до начала учёта, ₽<input id="cfg-vzbefore" class="r" value="${esc(nv(D.cfg.vznosBefore || 0))}" data-cfgip="vznosBefore" inputmode="decimal"></label></div><p class="muted small">Учёт в программе начат с месяца «${esc(S.monthLabel(st))}». Если раньше в этом году у ИП уже был доход — впиши его, он засчитается в 300 000. Не было — оставь 0. Взносы за дни до начала учёта (у тебя 30–31 октября) прибавятся к взносам первого месяца.</p>` : ''; })()}
-      </section>
-      <section class="block"><div class="block-head"><h3>Наценка на работы</h3></div>
-        <div class="wpct-row">
-          <label class="chk" title="Выключил — новые работы идут по твоей цене, без наценки. Уже введённые работы не меняются"><input type="checkbox" id="cfg-wpct-on" data-cfgwon="1"${D.cfg.workPctOff ? '' : ' checked'}> Наценка включена</label>
-          <label class="f">Наценка, %<input id="cfg-wpct" class="r" value="${esc(String(+D.cfg.workPct || 0).replace('.', ','))}" data-cfgw="workPct" inputmode="decimal"${D.cfg.workPctOff ? ' disabled' : ''}></label>
-        </div>
-        <p class="muted small">В наряде вводишь свою цену работы — клиенту идёт с наценкой, цена округляется до 100 ₽. ${wPctCfg() > 0 ? 'Пример: 10 000 → ' + rub(wMark(10000, { pct: wPctCfg() })) + '. ' : ''}У каждой работы кнопкой «+%» наценку можно снять. Новый % касается только новых работ.</p>
       </section>
       <section class="block"><div class="block-head"><h3>Наценка на запчасти</h3></div>
         <div class="scroll"><table class="tbl"><thead><tr><th>Закупка до, ₽</th><th class="r">Наценка, %</th></tr></thead><tbody>
@@ -6769,6 +6852,16 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'oilres-open': ui.oilResOpen = !ui.oilResOpen; ui.oilResVal = null; render(); if (ui.oilResOpen) setTimeout(() => { const t = $('#oilres'); if (t) { t.focus(); t.select(); } }, 30); break;
       case 'oilres-close': ui.oilResOpen = false; ui.oilResVal = null; render(); break;
       case 'oilres-save': { const v = numIn(String(ui.oilResVal ?? oilPct())); if (v == null || v < 0 || v > 200) { toast('Укажи процент от 0 до 200'); break; } ui.oilResOpen = false; ui.oilResVal = null; if (v !== oilPct()) { D.cfg.oilReserve = v; toast('Запас ' + v + '% — для новых продаж масла'); changed(); } else render(); break; }
+      case 'piggy-save': {
+        const month = $('#piggy-month').value, field = $('#piggy-rate');
+        if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) { toast('Выбери месяц'); break; }
+        if (D.cfg.closed?.[month] || isRO()) { toast('Изменение ставки недоступно'); break; }
+        if (!field.reportValidity()) break;
+        D.cfg.piggyRates = { ...D.cfg.piggyRates, [month]: field.valueAsNumber };
+        ui.piggyMonth = month;
+        changed('Ставка отчислений в копилку');
+        break;
+      }
       case 'theme': ui.theme = b.dataset.k; applyTheme(ui.theme); try { localStorage.setItem('sto.theme', ui.theme); } catch (er) {} render(); break;
       case 'tab': ui.tab = b.dataset.k; try { localStorage.setItem('sto.tab', ui.tab); } catch (er) {} render(); window.scrollTo(0, 0); break;
       case 'filter': ui.filter = b.dataset.k; ui.limit = 40; render(); break;
@@ -6835,7 +6928,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'renum-ok': ui.renumNote = null; render(); break;
       case 'rk-hide-line': { D.cfg.rkHiddenLines = (D.cfg.rkHiddenLines || []).concat(b.dataset.id); rkSelSet().delete(b.dataset.id); toast('Строка убрана из «Не внесено»'); changed(); if (ui.editor) paintEditor(); if (ui.sale) paintSale(); break; }
       case 'rk-to-order': {
-        const sel = $('#rko-' + b.dataset.id), num = sel && +sel.value; if (!num) { toast('Выбери наряд'); break; }
+        const sel = $('#rko-' + b.dataset.id), num = sel && X.ordersByNum[sel.value]?.num; if (!num) { toast('Выбери наряд'); break; }
         const o = X.ordersByNum[num]; if (!o) break;
         openOrder(o.id); rkOpenPanel('ed'); rkTake('ed', b.dataset.id); break;
       }
@@ -6889,7 +6982,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'go-check': ui.tab = 'report'; ui.month = NOW_M(); render(); setTimeout(() => { const el = $('#sverka'); if (el) el.scrollIntoView({ block: 'start' }); }, 30); break;
       case 'iss-more': ui.issLimit = 1000; render(); break;
       case 'go-pay': { const p = D.pays.find(x => x.id === b.dataset.id); if (!p) break; ui.tab = 'money'; ui.payMonth = S.monthOf(p.date); ui.payForm = payFormEdit(p); render(); window.scrollTo(0, 0); break; }
-      case 'go-order-num': { const o = X.ordersByNum[+b.dataset.id]; if (o) openOrder(o.id); break; }
+      case 'go-order-num': { const o = X.ordersByNum[b.dataset.id]; if (o) openOrder(o.id); break; }
       case 'go-exps': ui.tab = 'exps'; ui.expMonth = S.monthOf(b.dataset.id) || NOW_M(); ui.expForm = null; render(); window.scrollTo(0, 0); break;
       case 'print-order': printSaved(b.dataset.id); break;
       case 'print-draft': printDraft(); break;
@@ -6897,7 +6990,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'share-order': { const o = D.orders.find(x => x.id === b.dataset.id); if (!o) break; const t = S.orderTotals(o, X); sharePdf(printOrderData(o, t.partsList, o.works, t, o.num != null ? X.paysByOrder[o.num] || [] : []), 'Заказ-наряд ' + (o.num != null ? o.num : 'бн') + ' ' + orderWho(o)); break; }
       case 'prn-ip': { D.cfg.print = Object.assign({}, D.cfg.print || {}, { ipMode: b.dataset.k }); toast(b.dataset.k === 'always' ? 'Наряды: всегда с ИП' : 'Наряды: ИП только при оплате с чеком'); changed(); break; }
       case 'prn-logo-reset': { D.cfg.print = Object.assign({}, D.cfg.print || {}, { logo: null }); toast('Логотип по умолчанию'); changed(); break; }
-      case 'prn-test': { const o = D.orders.filter(x => x.num != null).sort((a, c) => c.num - a.num)[0]; if (o) printSaved(o.id); break; }
+      case 'prn-test': { const o = D.orders.filter(x => x.num != null).sort((a, c) => String(c.num).localeCompare(String(a.num), 'ru', { numeric: true }))[0]; if (o) printSaved(o.id); break; }
       case 'attach-open': E.attach = true; E.attachQ = ''; paintEditor(); break;
       case 'attach-close': E.attach = false; E.attachAsk = null; paintEditor(); break;
       case 'attach-ask-no': if (E.attachAsk && E.attachAsk.only) E.attach = false; E.attachAsk = null; paintEditor(); break;
@@ -6925,7 +7018,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
         paintEditor(); break;
       }
       case 'sale-link': {
-        const sel = $('#sl-' + b.dataset.id), num = +b.dataset.num || (sel && +sel.value); if (!num) { toast('Выбери наряд'); break; }
+        const sel = $('#sl-' + b.dataset.id), num = X.ordersByNum[b.dataset.num]?.num || (sel && X.ordersByNum[sel.value]?.num); if (!num) { toast('Выбери наряд'); break; }
         const g = X.sales.find(x => x.id === b.dataset.id), o = X.ordersByNum[num]; if (!g || !o) break;
         const cm = saleClosedMonth(g);
         if (cm && b.dataset.keep == null) { ui.linkAsk = { id: g.id, num, month: cm }; render(); break; }
@@ -6942,7 +7035,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'link-ask-no': ui.linkAsk = null; render(); break;
       case 'sale-new': openSale(null); break;
       case 'sale-open': openSale(b.dataset.id); break;
-      case 'sale-close': ui.sale = null; paintSale(); break;
+      case 'sale-close': requestFormClose('sale'); break;
       case 'sale-save': saveSale(); break;
       case 'sale-del-ask': ui.sale.confirmDelete = true; paintSale(); break;
       case 'sale-del-no': ui.sale.confirmDelete = false; paintSale(); break;
@@ -6980,7 +7073,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'sfilter': ui.sfilter = b.dataset.k; ui.slimit = 40; render(); break;
       case 's-more': ui.slimit = (ui.slimit || 40) + 60; render(); break;
       case 'toggle-row': { const id = b.dataset.id; if (ui.openRows.has(id)) ui.openRows.delete(id); else ui.openRows.add(id); render(); break; }
-      case 'close-editor': ui.editor = null; paintEditor(); break;
+      case 'close-editor': requestFormClose('editor'); break;
       case 'go-client': { const E = ui.editor; if (!E) break; if (editorDirty(E)) { E.goClient = b.dataset.id; paintEditor(); break; } goClient(b.dataset.id); break; }
       case 'go-client-cancel': if (ui.editor) { ui.editor.goClient = null; paintEditor(); } break;
       case 'go-client-nosave': { const id = ui.editor && ui.editor.goClient; if (id) goClient(id); break; }
@@ -6988,7 +7081,6 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'save-order': saveOrder(); break;
       case 'rnd-disc': roundApply('disc', b.dataset.w); break;
       case 'rnd-tip': roundApply('tip', b.dataset.w); break;
-      case 'w-pct': { const w = E.order.works[+b.dataset.i]; if (!w) break; w.noPct = !w.noPct; if (w.base == null) w.base = w.sum; w.sum = wMark(w.base, w); paintEditor(); break; }
       case 'add-work': addWork(); E.edRow = { t: 'w', i: E.order.works.length - 1 }; paintEditor(); focusLast('[data-w][data-k="name"]'); break;
       case 'del-work': E.order.works.splice(+b.dataset.i, 1); E.edRow = null; paintEditor(); break;
       case 'add-part': E.parts.push(newPart()); E.edRow = { t: 'p', i: E.parts.length - 1 }; paintEditor(); focusLast('[data-p][data-k="art"]'); break;
@@ -7144,13 +7236,13 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       case 'stock-sel-clear': ui.stockSel = new Set(); render(); break;
       case 'stock-sel-sale': { const items = D.stock.filter(x => ui.stockSel.has(x.id)); if (!items.length) break; ui.stockSel = new Set(); stockToSale(stockRowsFor(items)); render(); toast('Продажа со склада: укажи количество и клиента'); break; }
       case 'stock-sel-order': {
-        const sel = $('#ss-ord'), num = sel && +sel.value; if (!num) { toast('Выбери наряд'); break; }
+        const sel = $('#ss-ord'), num = sel && X.ordersByNum[sel.value]?.num; if (!num) { toast('Выбери наряд'); break; }
         const o = X.ordersByNum[num], items = D.stock.filter(x => ui.stockSel.has(x.id)); if (!o || !items.length) break;
         ui.stockSel = new Set(); render(); stockToOrder(stockRowsFor(items), o.id); break;
       }
       case 'stock-sel-new': { const items = D.stock.filter(x => ui.stockSel.has(x.id)); if (!items.length) break; ui.stockSel = new Set(); render(); stockToOrder(stockRowsFor(items), null); break; }
       case 'sale-to-order': {
-        const Sx = ui.sale, sel = $('#sa-ord'), num = sel && +sel.value; if (!num) { toast('Выбери наряд'); break; }
+        const Sx = ui.sale, sel = $('#sa-ord'), num = sel && X.ordersByNum[sel.value]?.num; if (!num) { toast('Выбери наряд'); break; }
         const o = X.ordersByNum[num], rows = Sx.rows.filter(p => (p.name || '').trim() || p.art || p.sum).map(p => ({ sup: p.sup, art: p.art, name: p.name, brand: p.brand, price: p.price, qty: p.qty, sum: p.sum, cost: p.cost, no: p.no }));
         if (!o) break; ui.sale = null; paintSale(); stockToOrder(rows, o.id); break;
       }
@@ -7415,13 +7507,6 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       if (nodesList().some(x => x !== n && low(x.name) === low(v))) { toast('Такой узел уже есть'); render(); return; }
       n.name = v; toast('Узел переименован'); changed(); return;
     }
-    if (el.dataset.cfgwon) { D.cfg.workPctOff = !el.checked; toast(el.checked ? 'Наценка на работы включена' : 'Наценка на работы выключена'); changed(); return; }
-    if (el.dataset.cfgw) {
-      const k = el.dataset.cfgw, n = numIn(el.value);
-      if (k === 'workPct' && (n == null || n < 0 || n > 500)) { toast('Наценка — число от 0 до 500'); render(); return; }
-      D.cfg[k] = r2(n);
-      toast('Наценка на работы сохранена'); changed(); return;
-    }
     if (el.dataset.mk != null) {
       const mk = (D.cfg.markup = clone(D.cfg.markup || S.DEFAULT_MARKUP));
       const t = mk[+el.dataset.mk], n = numIn(el.value);
@@ -7455,8 +7540,8 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (ui.editor && ui.dense && ui.editor.edRow && (e.key === 'Enter' || e.key === 'Escape') && e.target && e.target.closest && e.target.closest('.cr.editing')) {
       e.preventDefault(); ui.editor.edRow = null; ui.editor.wsug = null; e.target.blur(); paintEditor(); return;
     }
-    if (e.key === 'Escape' && ui.sale) { ui.sale = null; paintSale(); return; }
-    if (e.key === 'Escape' && ui.editor) { ui.editor = null; paintEditor(); }
+    if (e.key === 'Escape' && ui.sale) { e.preventDefault(); requestFormClose('sale'); return; }
+    if (e.key === 'Escape' && ui.editor) { e.preventDefault(); requestFormClose('editor'); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (ui.editor) saveOrder(); else if (cloud) cloudSync(); else if (handle) writeFile(false); }
   });
 
@@ -7635,21 +7720,27 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   /* после объединения: одинаковые номера нарядов (оба ПК без интернета завели наряд) —
      наряду с ЭТОГО компьютера даём следующий свободный номер, вместе с его запчастями и оплатами */
   function mergeRenum(base, mine, theirs, data) {
-    const ids = (x, k) => new Set(((x && x[k]) || []).map(r => r.id));
-    const bO = ids(base, 'orders'), tO = ids(theirs, 'orders'), bP = ids(base, 'parts'), tP = ids(theirs, 'parts'), bY = ids(base, 'pays'), tY = ids(theirs, 'pays');
-    const mineNew = new Set(((mine && mine.orders) || []).filter(o => !bO.has(o.id) && !tO.has(o.id)).map(o => o.id));
+    const mineOrders = new Map((mine.orders || []).map(o => [o.id, o]));
+    const theirsOrders = new Map((theirs.orders || []).map(o => [o.id, o]));
+    function moveRows(o, old, next) {
+      for (const kind of ['parts', 'pays']) {
+        const source = mineOrders.get(o.id)?.num === old ? mine : theirs;
+        const owned = new Set((source[kind] || []).filter(row => row.order === old).map(row => row.id));
+        (data[kind] || []).forEach(row => { if (row.order === old && owned.has(row.id)) row.order = next; });
+      }
+    }
     const byNum = {};
     (data.orders || []).forEach(o => { if (o.num != null) (byNum[o.num] = byNum[o.num] || []).push(o); });
-    let next = Math.max(0, ...(data.orders || []).map(o => +o.num || 0));
+    
     const out = [], today = new Date().toLocaleDateString('ru-RU');
     Object.keys(byNum).forEach(n => {
       const os = byNum[n]; if (os.length < 2) return;
-      const keep = os.find(o => !mineNew.has(o.id)) || os[0];
+      const keep = os.find(o => theirsOrders.get(o.id)?.num === o.num) || os[0];
       os.forEach(o => {
-        if (o === keep || !mineNew.has(o.id)) return;
-        const old = o.num, nn = ++next;
-        (data.parts || []).forEach(p => { if (p.order === old && !bP.has(p.id) && !tP.has(p.id)) p.order = nn; });
-        (data.pays || []).forEach(p => { if (p.order === old && !bY.has(p.id) && !tY.has(p.id)) p.order = nn; });
+        if (o === keep) return;
+        const old = o.num, nn = o.docNum === old ? freeDoc(data, old.slice(0,2)).num : freeNumber(orderKeys(data));
+        if (o.docNum === old) o.docNum = nn;
+        moveRows(o, old, nn);
         o.num = nn;
         o.memo = ((o.memo ? o.memo + '\n' : '') + `Номер изменён с № ${old} на № ${nn} при объединении с другим компьютером ${today} (оба наряда завели без интернета).`).trim();
         out.push([old, nn, [o.client, o.car].filter(Boolean).join(', ')]);
@@ -7664,14 +7755,57 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       const keep = os.find(o => tDoc.get(o.id) === dn) || os[0];
       os.forEach(o => {
         if (o === keep) return;
-        const yy = dn.split('/')[0], used = (data.orders || []).map(x => x.docNum).filter(x => x && x.startsWith(yy + '/')).map(x => +x.split('/')[1] || 0);
-        const n = Math.max(0, ...used, +(((data.cfg || {}).docSeq || {})[yy]) || 0) + 1, nd = yy + '/' + String(n).padStart(4, '0');
+        const yy = dn.split('/')[0];
+        const { n, num: nd } = freeDoc(data, yy);
+        if (o.num === dn) {
+          o.num = nd;
+          moveRows(o, dn, nd);
+        }
         o.docNum = nd; data.cfg = data.cfg || {}; data.cfg.docSeq = Object.assign({}, data.cfg.docSeq || {}, { [yy]: n });
         o.memo = ((o.memo ? o.memo + '\n' : '') + `Официальный номер изменён с ${dn} на ${nd} при объединении с другим компьютером ${today}.`).trim();
         out.push([dn, nd, [o.client, o.car].filter(Boolean).join(', ')]);
       });
     });
     return out;
+  }
+  function reconcileRepeats(base, mine, theirs) {
+    const aliases = new Map();
+    const collisions = new Set();
+    for (const kind of ['orders','parts','pays']) {
+      const known = new Set((base[kind] || []).map(r => r.id));
+      const remoteIds = new Set((theirs[kind] || []).map(r => r.id));
+      const localIds = new Set((mine[kind] || []).map(r => r.id));
+      const candidates = new Map();
+      for (const row of theirs[kind] || []) {
+        if (known.has(row.id) || localIds.has(row.id)) continue;
+        const key = duplicateKey(kind,row);
+        if (!candidates.has(key)) candidates.set(key, []);
+        candidates.get(key).push(row);
+      }
+      for (const row of mine[kind] || []) {
+        if (known.has(row.id) || remoteIds.has(row.id)) continue;
+        const group = candidates.get(duplicateKey(kind,row));
+        if (!group?.length) {
+          if (kind === 'orders' && (theirs.orders || []).some(o => o.num === row.num && o.id !== row.id)) collisions.add(row.num);
+          continue;
+        }
+        const other = group[group.length - 1];
+        if (kind === 'orders' && row.num !== other.num) continue;
+        if (kind !== 'orders' && collisions.has(row.order)) continue;
+        const msg = duplicateLabel(kind,row) + ' · ' + (row.date || row.start || '') + (kind === 'orders' ? '' : ' · ' + rub(row.amount ?? row.sum));
+        if (!confirm('На двух устройствах появились похожие записи: ' + msg + '. Это повторный ввод одной операции? ОК — использовать запись с Диска. Отмена — сохранить обе.')) {
+          if (kind === 'orders') collisions.add(row.num);
+          continue;
+        }
+        group.pop();
+        for (const k of ['id','link','blk']) if (row[k] && other[k]) aliases.set(row[k], other[k]);
+        for (const key of Object.keys(row)) delete row[key];
+        Object.assign(row, clone(other));
+      }
+    }
+    if (!aliases.size) return mine;
+    return JSON.parse(JSON.stringify(mine, (k,v) =>
+      ['id','blk','link','partId','orderId','payId'].includes(k) && aliases.has(v) ? aliases.get(v) : v));
   }
   function merge3(base, mine, theirs) {
     let disputes = 0;
@@ -7715,9 +7849,13 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     return { data: out, disputes };
   }
 
-  async function cloudStateSave() {
-    await idb.set('cl.cur', JSON.stringify(D));
-    await idb.set('cl.meta', { baseMd5: cl.baseMd5, pending: cl.pending, last: cl.last ? cl.last.toISOString() : null });
+  function cloudStateSave(base) {
+    const entries = [
+      ['cl.cur', JSON.stringify(D)],
+      ['cl.meta', { baseMd5: cl.baseMd5, pending: cl.pending, last: cl.last?.toISOString() || null }]
+    ];
+    if (base !== undefined) entries.push(['cl.base', base]);
+    return idb.putAll(entries);
   }
   /* открыть базу с Диска (сначала мгновенно показываем копию с устройства) */
   async function cloudOpen() {
@@ -7736,7 +7874,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
   }
   function cloudQueue() {
     cl.pending = true; dirty = true; paintStatus(); mirrorQueue();
-    idb.set('cl.cur', JSON.stringify(D)); idb.set('cl.meta', { baseMd5: cl.baseMd5, pending: true, last: cl.last ? cl.last.toISOString() : null });
+    cloudStateSave().catch(() => { cl.err = 'Не удалось сохранить очередь на устройстве'; paintStatus(); });
     clearTimeout(cl.timer); cl.timer = setTimeout(cloudSync, 2000);
   }
   async function cloudSync() {
@@ -7748,10 +7886,10 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
       const meta = await yaMeta(CLOUD_FILE);
       cl.offline = false; cl.needLogin = false;
       if (!meta) {
-        if (D) await cloudUpload();
+        if (D) await cloudUpload(meta?.md5 || null);
         else { cl.empty = true; render(); }
       } else if (cl.baseMd5 && meta.md5 === cl.baseMd5) {
-        if (cl.pending) await cloudUpload();
+        if (cl.pending) await cloudUpload(meta?.md5 || null);
       } else {
         /* на Диске другая версия: её сохранили с другого устройства */
         if (cl.pending && D && (ui.editor || ui.sale)) { cl.deferred = true; }
@@ -7760,13 +7898,14 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
           const theirsJson = await yaGet(CLOUD_FILE), theirs = JSON.parse(theirsJson);
           if (cl.pending && D) {
             const baseJson = cl.baseJson || await idb.get('cl.base');
-            const baseObj = baseJson ? JSON.parse(baseJson) : {}, mineObj = JSON.parse(JSON.stringify(D));
+            const baseObj = baseJson ? JSON.parse(baseJson) : {}, mineObj = reconcileRepeats(baseObj, clone(D), theirs);
             const { data, disputes } = merge3(baseObj, mineObj, theirs);
             const renum = mergeRenum(baseObj, mineObj, theirs, data);
             D = normalize(data); reindex(); histReset();
             if (renum.length) ui.renumNote = renum;
             cl.baseMd5 = meta.md5; cl.baseJson = theirsJson;
-            await cloudUpload();
+            await cloudStateSave(theirsJson);
+            await cloudUpload(meta?.md5 || null);
             toast('Объединил с изменениями с другого устройства' + (disputes ? ` (спорных записей: ${disputes} — оставил вариант с этого устройства)` : '') + (renum.length ? '. Номера нарядов: ' + renum.map(r => '№ ' + r[0] + ' → № ' + r[1]).join(', ') : ''), 9000);
             if (renum.length) render();
           } else if (ui.editor || ui.sale) { cl.deferred = true; }
@@ -7775,7 +7914,7 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
             D = normalize(theirs); reindex(); histReset();
             cl.baseMd5 = meta.md5; cl.baseJson = theirsJson; cl.pending = false; cl.last = new Date(); dirty = false;
             cl.busy = 'Сохраняю копию на устройстве…'; paintStatus();
-            await idb.set('cl.base', theirsJson); await cloudStateSave();
+            await cloudStateSave(theirsJson);
             if (ui.cdraft) { const c = ui.cdraft.id && D.clients.find(x => x.id === ui.cdraft.id); ui.cdraft = c ? clone(c) : null; }
             render(); mirrorQueue();
             if (!first) toast('Загружены изменения с другого устройства');
@@ -7793,15 +7932,19 @@ const NODES = ['Ремонт двигателя','Ремонт выхлопно�
     if (cl.needLogin) render();
     if (cl.again) { cl.again = false; setTimeout(cloudSync, 300); }
   }
-  async function cloudUpload() {
+  async function cloudUpload(expectedMd5) {
     const json = JSON.stringify(D);
     if (cl.busy) { cl.busy = 'Отправляю на Диск…'; paintStatus(); }
+    if (expectedMd5 !== undefined && ((await yaMeta(CLOUD_FILE))?.md5 || null) !== expectedMd5)
+      throw new Error('База обновлена на другом устройстве. Повторю объединение.');
     await yaPut(CLOUD_FILE, json);
     if (cl.busy) { cl.busy = 'Проверяю отправку на Диск…'; paintStatus(); }
     const m = await yaMeta(CLOUD_FILE);
-    cl.baseMd5 = m && m.md5; cl.baseJson = json; cl.pending = false; cl.last = new Date(); dirty = false; ui.savedAt = cl.last;
+    if (!m?.md5 || await yaGet(CLOUD_FILE) !== json) throw new Error('Версия на Диске изменилась. Повторю сверку.');
+    cl.baseMd5 = m.md5; cl.baseJson = json; cl.pending = JSON.stringify(D) !== json;
+    if (cl.pending) cl.again = true; cl.last = new Date(); dirty = cl.pending; ui.savedAt = cl.last;
     if (cl.busy) { cl.busy = 'Сохраняю копию на устройстве…'; paintStatus(); }
-    await idb.set('cl.base', json); await cloudStateSave();
+    await cloudStateSave(json);
   }
   async function cloudDailyCopy(force) {
     const day = S.todayISO();
